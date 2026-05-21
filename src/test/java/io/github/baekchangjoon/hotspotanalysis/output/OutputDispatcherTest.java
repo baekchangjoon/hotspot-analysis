@@ -20,11 +20,13 @@ class OutputDispatcherTest {
         OutputDispatcher dispatcher = new OutputDispatcher(List.of(
                 new CsvOutputWriter(),
                 new YamlOutputWriter(),
-                new MarkdownOutputWriter()));
+                new MarkdownOutputWriter(),
+                new HtmlOutputWriter()));
         OutputConfig output = new OutputConfig(
                 List.of(OutputConfig.OutputFormat.CSV,
                         OutputConfig.OutputFormat.YAML,
-                        OutputConfig.OutputFormat.MD),
+                        OutputConfig.OutputFormat.MD,
+                        OutputConfig.OutputFormat.HTML),
                 tempDir.toString(), 0);
 
         dispatcher.dispatch(OutputWriterTestFixtures.sampleResult(), output);
@@ -33,6 +35,7 @@ class OutputDispatcherTest {
         assertThat(Files.exists(tempDir.resolve("method_hotspots.csv"))).isTrue();
         assertThat(Files.exists(tempDir.resolve("hotspots.yml"))).isTrue();
         assertThat(Files.exists(tempDir.resolve("hotspots.md"))).isTrue();
+        assertThat(Files.exists(tempDir.resolve("hotspots.html"))).isTrue();
     }
 
     @Test

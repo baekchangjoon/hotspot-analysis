@@ -1,0 +1,371 @@
+package io.github.baekchangjoon.hotspotanalysis.output;
+
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
+import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
+import org.springframework.stereotype.Component;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+/**
+ * Writes the analysis result as a single, self-contained {@code hotspots.html}
+ * file: inline CSS, inline vanilla JavaScript, no remote assets.
+ *
+ * <p>The page renders the same metadata + file + method tables as the
+ * Markdown writer, plus client-side click-to-sort columns and a free-text
+ * filter box per table. Every user-controlled string (paths, FQCNs, method
+ * names, parameter types) is HTML-escaped before being injected into the
+ * document to prevent XSS when a malicious source file or commit author
+ * leaks into the report.</p>
+ *
+ * <p>Numeric columns embed a {@code data-sort-value} attribute so the
+ * client-side sorter can order by the raw integer/double rather than the
+ * formatted string.</p>
+ */
+@Component
+public class HtmlOutputWriter implements OutputWriter {
+
+    @Override
+    public OutputConfig.OutputFormat format() {
+        return OutputConfig.OutputFormat.HTML;
+    }
+
+    @Override
+    public void write(AnalysisResult result, Path outputDir) {
+        try {
+            Files.createDirectories(outputDir);
+            String body = render(result);
+            Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new OutputException("Failed to write HTML output to " + outputDir, e);
+        }
+    }
+
+    private static String render(AnalysisResult result) {
+        StringBuilder html = new StringBuilder(16_384);
+        html.append("<!DOCTYPE html>\n");
+        html.append("<html lang=\"en\">\n");
+        appendHead(html);
+        html.append("<body>\n");
+        appendHeader(html, result.meta());
+        appendMetadata(html, result.meta());
+        appendFileSection(html, result.fileHotspots());
+        appendMethodSection(html, result.methodHotspots());
+        appendScript(html);
+        html.append("</body>\n</html>\n");
+        return html.toString();
+    }
+
+    private static void appendHead(StringBuilder html) {
+        html.append("""
+                <head>
+                  <meta charset="utf-8">
+                  <meta name="viewport" content="width=device-width, initial-scale=1">
+                  <title>Hotspot Analysis Report</title>
+                  <style>
+                    :root {
+                      --bg: #ffffff;
+                      --fg: #1f2328;
+                      --muted: #57606a;
+                      --border: #d0d7de;
+                      --accent: #0969da;
+                      --accent-bg: #ddf4ff;
+                      --row-hover: #f6f8fa;
+                      --code-bg: #f6f8fa;
+                    }
+                    * { box-sizing: border-box; }
+                    body {
+                      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                                   "Helvetica Neue", Arial, sans-serif;
+                      color: var(--fg);
+                      background: var(--bg);
+                      margin: 0;
+                      padding: 24px;
+                      line-height: 1.55;
+                    }
+                    h1, h2 { margin-top: 0; }
+                    h1 { font-size: 1.75rem; border-bottom: 1px solid var(--border);
+                         padding-bottom: 8px; }
+                    h2 { font-size: 1.25rem; margin-top: 32px; }
+                    p.subtitle { color: var(--muted); margin-top: -4px; }
+                    code { background: var(--code-bg); border-radius: 4px;
+                           padding: 1px 6px; font-size: 0.9em;
+                           font-family: ui-monospace, SFMono-Regular, Menlo,
+                                        Consolas, monospace; }
+                    .meta-table { border-collapse: collapse; margin-bottom: 8px; }
+                    .meta-table th, .meta-table td { text-align: left; padding: 4px 12px;
+                                                     border-bottom: 1px dashed var(--border); }
+                    .meta-table th { color: var(--muted); font-weight: 600; }
+                    .toolbar { display: flex; gap: 12px; align-items: center;
+                               margin: 12px 0; }
+                    .toolbar input[type="search"] {
+                      flex: 1; max-width: 420px;
+                      padding: 6px 10px;
+                      border: 1px solid var(--border);
+                      border-radius: 6px;
+                      font-size: 0.95rem;
+                    }
+                    .toolbar .count {
+                      color: var(--muted); font-size: 0.9rem;
+                    }
+                    table.sortable {
+                      border-collapse: collapse;
+                      width: 100%;
+                      font-size: 0.92rem;
+                    }
+                    table.sortable thead th {
+                      background: var(--code-bg);
+                      border-bottom: 2px solid var(--border);
+                      cursor: pointer;
+                      user-select: none;
+                      padding: 8px 12px;
+                      text-align: left;
+                      position: sticky; top: 0;
+                    }
+                    table.sortable thead th:hover { background: var(--accent-bg); }
+                    table.sortable thead th[aria-sort="ascending"]::after  { content: " \\25B2"; }
+                    table.sortable thead th[aria-sort="descending"]::after { content: " \\25BC"; }
+                    table.sortable tbody td {
+                      padding: 6px 12px;
+                      border-bottom: 1px solid var(--border);
+                      vertical-align: top;
+                    }
+                    table.sortable tbody tr:hover { background: var(--row-hover); }
+                    .num { text-align: right; font-variant-numeric: tabular-nums; }
+                    .rank { color: var(--muted); width: 48px; }
+                    .params { color: var(--muted); font-size: 0.85em; }
+                    footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem;
+                             border-top: 1px solid var(--border); padding-top: 12px; }
+                    @media (prefers-color-scheme: dark) {
+                      :root {
+                        --bg: #0d1117; --fg: #c9d1d9; --muted: #8b949e;
+                        --border: #30363d; --accent: #58a6ff; --accent-bg: #1f6feb33;
+                        --row-hover: #161b22; --code-bg: #161b22;
+                      }
+                    }
+                  </style>
+                </head>
+                """);
+    }
+
+    private static void appendHeader(StringBuilder html, AnalysisMeta meta) {
+        html.append("  <h1>Hotspot Analysis Report</h1>\n");
+        html.append("  <p class=\"subtitle\">Generated ")
+                .append(escape(meta.analyzedAt().toString()))
+                .append(" &middot; ")
+                .append(meta.totalFiles()).append(" files &middot; ")
+                .append(meta.totalMethods()).append(" methods &middot; ")
+                .append(meta.totalCommits()).append(" commits</p>\n");
+    }
+
+    private static void appendMetadata(StringBuilder html, AnalysisMeta meta) {
+        html.append("  <table class=\"meta-table\">\n");
+        appendMetaRow(html, "Generated at", meta.analyzedAt().toString());
+        appendMetaRow(html, "Target",       meta.targetDescription());
+        appendMetaRow(html, "Scoring formula", meta.scoringFormula().name());
+        appendMetaRow(html, "Total commits", Integer.toString(meta.totalCommits()));
+        appendMetaRow(html, "Total files",   Integer.toString(meta.totalFiles()));
+        appendMetaRow(html, "Total methods", Integer.toString(meta.totalMethods()));
+        html.append("  </table>\n");
+    }
+
+    private static void appendMetaRow(StringBuilder html, String key, String value) {
+        html.append("    <tr><th>").append(escape(key)).append("</th><td><code>")
+                .append(escape(value)).append("</code></td></tr>\n");
+    }
+
+    private static void appendFileSection(StringBuilder html, List<FileHotspot> files) {
+        html.append("  <section>\n");
+        html.append("    <h2>File Hotspots (").append(files.size()).append(" rows)</h2>\n");
+        html.append("    <div class=\"toolbar\">\n");
+        html.append("      <input type=\"search\" data-filter-target=\"#file-hotspots\" "
+                + "placeholder=\"Filter by path…\" aria-label=\"Filter file hotspots\">\n");
+        html.append("      <span class=\"count\" data-count-target=\"#file-hotspots\">")
+                .append(files.size()).append(" / ").append(files.size()).append("</span>\n");
+        html.append("    </div>\n");
+        html.append("    <table id=\"file-hotspots\" class=\"sortable\">\n");
+        html.append("      <thead><tr>");
+        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"string\">Path</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("</tr></thead>\n");
+        html.append("      <tbody>\n");
+        int rank = 1;
+        for (FileHotspot file : files) {
+            html.append("        <tr>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
+                    .append(rank).append("</td>");
+            html.append("<td><code>").append(escape(file.path())).append("</code></td>");
+            appendNumericCell(html, file.revisions(), file.revisions());
+            appendNumericCell(html, file.loc(), file.loc());
+            appendScoreCell(html, file.score());
+            html.append("</tr>\n");
+            rank++;
+        }
+        html.append("      </tbody>\n");
+        html.append("    </table>\n");
+        html.append("  </section>\n");
+    }
+
+    private static void appendMethodSection(StringBuilder html, List<MethodHotspot> methods) {
+        html.append("  <section>\n");
+        html.append("    <h2>Method Hotspots (").append(methods.size()).append(" rows)</h2>\n");
+        html.append("    <div class=\"toolbar\">\n");
+        html.append("      <input type=\"search\" data-filter-target=\"#method-hotspots\" "
+                + "placeholder=\"Filter by class, method, or file…\" "
+                + "aria-label=\"Filter method hotspots\">\n");
+        html.append("      <span class=\"count\" data-count-target=\"#method-hotspots\">")
+                .append(methods.size()).append(" / ").append(methods.size()).append("</span>\n");
+        html.append("    </div>\n");
+        html.append("    <table id=\"method-hotspots\" class=\"sortable\">\n");
+        html.append("      <thead><tr>");
+        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"string\">Class</th>");
+        html.append("<th data-sort-type=\"string\">Method</th>");
+        html.append("<th data-sort-type=\"string\">Parameters</th>");
+        html.append("<th data-sort-type=\"string\">File</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Lines</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("</tr></thead>\n");
+        html.append("      <tbody>\n");
+        int rank = 1;
+        for (MethodHotspot method : methods) {
+            String fqcn = method.signature().fullyQualifiedClassName();
+            String name = method.signature().methodName();
+            String params = String.join(", ", method.signature().parameterTypes());
+            html.append("        <tr data-path=\"").append(escape(method.filePath()))
+                    .append("\" data-start-line=\"").append(method.startLine())
+                    .append("\" data-end-line=\"").append(method.endLine()).append("\">");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
+                    .append(rank).append("</td>");
+            html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
+            html.append("<td><code>").append(escape(name)).append("</code></td>");
+            html.append("<td class=\"params\">").append(escape(params)).append("</td>");
+            html.append("<td><code>").append(escape(method.filePath())).append("</code></td>");
+            String lineRange = method.startLine() + "&ndash;" + method.endLine();
+            html.append("<td class=\"num\" data-sort-value=\"").append(method.startLine())
+                    .append("\">").append(lineRange).append("</td>");
+            appendNumericCell(html, method.revisions(), method.revisions());
+            appendNumericCell(html, method.loc(), method.loc());
+            appendScoreCell(html, method.score());
+            html.append("</tr>\n");
+            rank++;
+        }
+        html.append("      </tbody>\n");
+        html.append("    </table>\n");
+        html.append("  </section>\n");
+    }
+
+    private static void appendNumericCell(StringBuilder html, int displayValue, int sortValue) {
+        html.append("<td class=\"num\" data-sort-value=\"").append(sortValue).append("\">")
+                .append(displayValue).append("</td>");
+    }
+
+    private static void appendScoreCell(StringBuilder html, double score) {
+        long rounded = Math.round(score);
+        html.append("<td class=\"num\" data-sort-value=\"").append(rounded).append("\">")
+                .append(formatScore(score)).append("</td>");
+    }
+
+    private static String formatScore(double score) {
+        if (score == Math.floor(score) && !Double.isInfinite(score)) {
+            return Long.toString((long) score);
+        }
+        return String.format("%.2f", score);
+    }
+
+    private static void appendScript(StringBuilder html) {
+        html.append("""
+                  <footer>Sort by clicking a column header. Filter rows by typing in the search box above each table.</footer>
+                  <script>
+                  (function () {
+                    function applyFilter(input) {
+                      var sel = input.getAttribute('data-filter-target');
+                      var table = document.querySelector(sel);
+                      if (!table) return;
+                      var q = input.value.trim().toLowerCase();
+                      var rows = table.tBodies[0].rows;
+                      var shown = 0;
+                      for (var i = 0; i < rows.length; i++) {
+                        var match = !q || rows[i].textContent.toLowerCase().indexOf(q) !== -1;
+                        rows[i].style.display = match ? '' : 'none';
+                        if (match) shown++;
+                      }
+                      var countEl = document.querySelector('[data-count-target="' + sel + '"]');
+                      if (countEl) countEl.textContent = shown + ' / ' + rows.length;
+                    }
+                    document.querySelectorAll('input[type="search"][data-filter-target]')
+                      .forEach(function (input) {
+                        input.addEventListener('input', function () { applyFilter(input); });
+                      });
+
+                    function compare(a, b, type, asc) {
+                      var av, bv;
+                      if (type === 'number') {
+                        av = parseFloat(a); bv = parseFloat(b);
+                        if (isNaN(av)) av = -Infinity;
+                        if (isNaN(bv)) bv = -Infinity;
+                      } else {
+                        av = a.toLowerCase(); bv = b.toLowerCase();
+                      }
+                      if (av < bv) return asc ? -1 : 1;
+                      if (av > bv) return asc ? 1 : -1;
+                      return 0;
+                    }
+                    document.querySelectorAll('table.sortable thead th').forEach(function (th, idx) {
+                      th.addEventListener('click', function () {
+                        var table = th.closest('table');
+                        var type = th.getAttribute('data-sort-type') || 'string';
+                        var asc = th.getAttribute('aria-sort') !== 'ascending';
+                        table.querySelectorAll('thead th').forEach(function (h) {
+                          h.removeAttribute('aria-sort');
+                        });
+                        th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+                        var rows = Array.prototype.slice.call(table.tBodies[0].rows);
+                        rows.sort(function (r1, r2) {
+                          var c1 = r1.cells[idx];
+                          var c2 = r2.cells[idx];
+                          var v1 = c1.getAttribute('data-sort-value');
+                          var v2 = c2.getAttribute('data-sort-value');
+                          if (v1 === null) v1 = c1.textContent;
+                          if (v2 === null) v2 = c2.textContent;
+                          return compare(v1, v2, type, asc);
+                        });
+                        var tbody = table.tBodies[0];
+                        rows.forEach(function (r) { tbody.appendChild(r); });
+                      });
+                    });
+                  })();
+                  </script>
+                """);
+    }
+
+    private static String escape(String raw) {
+        if (raw == null || raw.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(raw.length() + 16);
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            switch (c) {
+                case '&' -> out.append("&amp;");
+                case '<' -> out.append("&lt;");
+                case '>' -> out.append("&gt;");
+                case '"' -> out.append("&quot;");
+                case '\'' -> out.append("&#39;");
+                default -> out.append(c);
+            }
+        }
+        return out.toString();
+    }
+}
