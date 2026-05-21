@@ -1,5 +1,6 @@
 package io.github.baekchangjoon.hotspotanalysis.parser;
 
+import io.github.baekchangjoon.hotspotanalysis.parser.model.ApiMappingInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodInfo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -196,5 +197,42 @@ class JavaSourceParserTest {
         assertThatThrownBy(() -> parser.parse(missing))
                 .isInstanceOf(SourceParseException.class)
                 .hasMessageContaining("nope.java");
+    }
+
+    @Test
+    @DisplayName("extracts API mapping info for Spring controllers")
+    void shouldExtractApiMappingInfoForSpringControllers() {
+        String source = """
+                package com.example.controller;
+                
+                import org.springframework.web.bind.annotation.*;
+                import java.util.List;
+                
+                @RestController
+                @RequestMapping("/api/v1/users")
+                public class UserController {
+                
+                    @GetMapping
+                    public List<String> list() { return List.of(); }
+                    
+                    @PostMapping("/{id}")
+                    public String create(@PathVariable String id) { return null; }
+                    
+                    @RequestMapping(value = "/delete", method = RequestMethod.DELETE)
+                    public void delete() {}
+                }
+                """;
+                
+        List<MethodInfo> methods = parser.parse(source);
+        assertThat(methods).hasSize(3);
+        
+        MethodInfo listMethod = methods.stream().filter(m -> m.signature().methodName().equals("list")).findFirst().orElseThrow();
+        assertThat(listMethod.apiMappings()).containsExactly(new ApiMappingInfo("GET", "/api/v1/users"));
+        
+        MethodInfo createMethod = methods.stream().filter(m -> m.signature().methodName().equals("create")).findFirst().orElseThrow();
+        assertThat(createMethod.apiMappings()).containsExactly(new ApiMappingInfo("POST", "/api/v1/users/{id}"));
+        
+        MethodInfo deleteMethod = methods.stream().filter(m -> m.signature().methodName().equals("delete")).findFirst().orElseThrow();
+        assertThat(deleteMethod.apiMappings()).containsExactly(new ApiMappingInfo("DELETE", "/api/v1/users/delete"));
     }
 }

@@ -14,7 +14,8 @@ public record MethodInfo(
         MethodSignature signature,
         int startLine,
         int endLine,
-        List<ParameterInfo> parameters
+        List<ParameterInfo> parameters,
+        List<ApiMappingInfo> apiMappings
 ) {
 
     public MethodInfo {
@@ -29,6 +30,15 @@ public record MethodInfo(
                     "endLine must be >= startLine (was " + endLine + " < " + startLine + ")");
         }
         parameters = List.copyOf(parameters);
+        if (apiMappings == null) {
+            apiMappings = List.of();
+        } else {
+            apiMappings = List.copyOf(apiMappings);
+        }
+    }
+
+    public MethodInfo(MethodSignature signature, int startLine, int endLine, List<ParameterInfo> parameters) {
+        this(signature, startLine, endLine, parameters, List.of());
     }
 
     public int lineCount() {

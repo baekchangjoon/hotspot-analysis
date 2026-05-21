@@ -11,6 +11,7 @@ import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
 import com.github.javaparser.ast.body.EnumDeclaration;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.RecordDeclaration;
+import io.github.baekchangjoon.hotspotanalysis.parser.model.ApiMappingInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.ParameterInfo;
@@ -93,7 +94,139 @@ public class JavaSourceParser {
 
         MethodSignature signature = new MethodSignature(
                 fqcn, md.getNameAsString(), parameterTypes);
-        return new MethodInfo(signature, range.begin.line, range.end.line, parameters);
+        List<ApiMappingInfo> apiMappings = resolveApiMappings(md);
+        return new MethodInfo(signature, range.begin.line, range.end.line, parameters, apiMappings);
+    }
+
+    private List<ApiMappingInfo> resolveApiMappings(MethodDeclaration md) {
+        ClassOrInterfaceDeclaration parentClass = null;
+        Node parent = md.getParentNode().orElse(null);
+        while (parent != null) {
+            if (parent instanceof ClassOrInterfaceDeclaration classDecl) {
+                parentClass = classDecl;
+                break;
+            }
+            parent = parent.getParentNode().orElse(null);
+        }
+
+        if (parentClass == null) {
+            return List.of();
+        }
+
+        boolean isController = parentClass.isAnnotationPresent("RestController") ||
+                               parentClass.isAnnotationPresent("Controller");
+        if (!isController) {
+            return List.of();
+        }
+
+        List<String> rawClassPaths = getMappingPaths(parentClass.getAnnotationByName("RequestMapping").orElse(null));
+        final List<String> classPaths = rawClassPaths.isEmpty() ? List.of("") : rawClassPaths;
+
+        List<ApiMappingInfo> mappings = new ArrayList<>();
+        
+        md.getAnnotationByName("GetMapping").ifPresent(annotation -> {
+            addMappings(mappings, classPaths, "GET", getMappingPaths(annotation));
+        });
+        md.getAnnotationByName("PostMapping").ifPresent(annotation -> {
+            addMappings(mappings, classPaths, "POST", getMappingPaths(annotation));
+        });
+        md.getAnnotationByName("PutMapping").ifPresent(annotation -> {
+            addMappings(mappings, classPaths, "PUT", getMappingPaths(annotation));
+        });
+        md.getAnnotationByName("DeleteMapping").ifPresent(annotation -> {
+            addMappings(mappings, classPaths, "DELETE", getMappingPaths(annotation));
+        });
+        md.getAnnotationByName("PatchMapping").ifPresent(annotation -> {
+            addMappings(mappings, classPaths, "PATCH", getMappingPaths(annotation));
+        });
+        md.getAnnotationByName("RequestMapping").ifPresent(annotation -> {
+            List<String> httpMethods = getRequestMappingMethods(annotation);
+            List<String> methodPaths = getMappingPaths(annotation);
+            if (httpMethods.isEmpty()) {
+                httpMethods = List.of("GET");
+            }
+            for (String method : httpMethods) {
+                addMappings(mappings, classPaths, method, methodPaths);
+            }
+        });
+
+        return mappings;
+    }
+
+    private List<String> getMappingPaths(com.github.javaparser.ast.expr.AnnotationExpr annotation) {
+        if (annotation == null) {
+            return List.of();
+        }
+        List<String> paths = new ArrayList<>();
+        if (annotation.isMarkerAnnotationExpr()) {
+            paths.add("");
+        } else if (annotation.isSingleMemberAnnotationExpr()) {
+            com.github.javaparser.ast.expr.Expression memberValue = annotation.asSingleMemberAnnotationExpr().getMemberValue();
+            extractPathsFromExpr(memberValue, paths);
+        } else if (annotation.isNormalAnnotationExpr()) {
+            for (com.github.javaparser.ast.expr.MemberValuePair pair : annotation.asNormalAnnotationExpr().getPairs()) {
+                String name = pair.getNameAsString();
+                if ("value".equals(name) || "path".equals(name)) {
+                    extractPathsFromExpr(pair.getValue(), paths);
+                }
+            }
+        }
+        if (paths.isEmpty()) {
+            paths.add("");
+        }
+        return paths;
+    }
+
+    private void extractPathsFromExpr(com.github.javaparser.ast.expr.Expression expr, List<String> paths) {
+        if (expr.isStringLiteralExpr()) {
+            paths.add(expr.asStringLiteralExpr().getValue());
+        } else if (expr.isArrayInitializerExpr()) {
+            for (com.github.javaparser.ast.expr.Expression val : expr.asArrayInitializerExpr().getValues()) {
+                if (val.isStringLiteralExpr()) {
+                    paths.add(val.asStringLiteralExpr().getValue());
+                }
+            }
+        }
+    }
+
+    private List<String> getRequestMappingMethods(com.github.javaparser.ast.expr.AnnotationExpr annotation) {
+        List<String> methods = new ArrayList<>();
+        if (annotation.isNormalAnnotationExpr()) {
+            for (com.github.javaparser.ast.expr.MemberValuePair pair : annotation.asNormalAnnotationExpr().getPairs()) {
+                if ("method".equals(pair.getNameAsString())) {
+                    com.github.javaparser.ast.expr.Expression val = pair.getValue();
+                    extractMethodsFromExpr(val, methods);
+                }
+            }
+        }
+        return methods;
+    }
+
+    private void extractMethodsFromExpr(com.github.javaparser.ast.expr.Expression expr, List<String> methods) {
+        if (expr.isFieldAccessExpr()) {
+            methods.add(expr.asFieldAccessExpr().getNameAsString());
+        } else if (expr.isArrayInitializerExpr()) {
+            for (com.github.javaparser.ast.expr.Expression val : expr.asArrayInitializerExpr().getValues()) {
+                if (val.isFieldAccessExpr()) {
+                    methods.add(val.asFieldAccessExpr().getNameAsString());
+                }
+            }
+        }
+    }
+
+    private void addMappings(List<ApiMappingInfo> mappings, List<String> classPaths, String method, List<String> methodPaths) {
+        for (String classPath : classPaths) {
+            for (String methodPath : methodPaths) {
+                String fullPath = classPath;
+                if (!methodPath.isEmpty()) {
+                    if (!fullPath.endsWith("/") && !methodPath.startsWith("/")) {
+                        fullPath += "/";
+                    }
+                    fullPath += methodPath;
+                }
+                mappings.add(new ApiMappingInfo(method, fullPath));
+            }
+        }
     }
 
     private String resolveTypeChain(MethodDeclaration md) {

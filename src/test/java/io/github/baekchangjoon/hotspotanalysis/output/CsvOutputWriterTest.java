@@ -85,4 +85,30 @@ class CsvOutputWriterTest {
         assertThat(Files.readString(tempDir.resolve("file_hotspots.csv")))
                 .contains("1,A.java,3,7,21.5000\n");
     }
+
+    @Test
+    @DisplayName("writes api_hotspots.csv and shared_components.csv when API analysis is enabled")
+    void shouldWriteApiAndSharedComponentsCsv(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.CSV),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true);
+
+        Path apiCsv = tempDir.resolve("api_hotspots.csv");
+        Path sharedCsv = tempDir.resolve("shared_components.csv");
+
+        assertThat(apiCsv).exists();
+        assertThat(sharedCsv).exists();
+
+        String apiContent = Files.readString(apiCsv);
+        assertThat(apiContent).startsWith("rank,http_method,route,controller_method,revisions,loc,score,call_graph\n");
+        assertThat(apiContent).contains("1,GET,/api/a,com.example.MyController#apiA(),5,120,600,com.example.MyService#commonMethod()");
+
+        String sharedContent = Files.readString(sharedCsv);
+        assertThat(sharedContent).startsWith("rank,method,revisions,loc,score,calling_apis\n");
+        assertThat(sharedContent).contains("1,com.example.MyService#commonMethod(),1,30,30,GET /api/a");
+    }
 }

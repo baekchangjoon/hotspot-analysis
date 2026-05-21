@@ -127,4 +127,75 @@ class HtmlOutputWriterTest {
         assertThat(html).contains("class=\"sortable\"");
         assertThat(html).contains("data-sort-type");
     }
+
+    @Test
+    @DisplayName("writes combined HTML with API hotspots when apiEnabled is true and layout is COMBINED")
+    void shouldWriteCombinedHtmlWithApiInfo(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                10,
+                OutputConfig.ApiLayout.COMBINED
+        );
+
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+
+        Path combinedPath = tempDir.resolve("hotspots.html");
+        Path standalonePath = tempDir.resolve("api_report.html");
+
+        assertThat(combinedPath).exists();
+        assertThat(standalonePath).doesNotExist();
+
+        String html = Files.readString(combinedPath);
+        assertThat(html).contains("REST API Hotspots");
+        assertThat(html).contains("Shared Components");
+        assertThat(html).contains("GET");
+        assertThat(html).contains("/api/a");
+        assertThat(html).contains("com.example.MyController#apiA()");
+        assertThat(html).contains("com.example.MyService#commonMethod()");
+    }
+
+    @Test
+    @DisplayName("writes standalone HTML with API hotspots when apiEnabled is true and layout is STANDALONE")
+    void shouldWriteStandaloneHtmlWithOnlyApiInfo(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                10,
+                OutputConfig.ApiLayout.STANDALONE
+        );
+
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+
+        Path combinedPath = tempDir.resolve("hotspots.html");
+        Path standalonePath = tempDir.resolve("api_report.html");
+
+        assertThat(combinedPath).doesNotExist();
+        assertThat(standalonePath).exists();
+
+        String html = Files.readString(standalonePath);
+        assertThat(html).contains("REST API Hotspots");
+        assertThat(html).contains("Shared Components");
+        assertThat(html).doesNotContain("File Hotspots");
+        assertThat(html).doesNotContain("Method Hotspots");
+    }
+
+    @Test
+    @DisplayName("writes both combined and standalone HTML files when layout is BOTH")
+    void shouldWriteBothHtmlFiles(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                10,
+                OutputConfig.ApiLayout.BOTH
+        );
+
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+
+        Path combinedPath = tempDir.resolve("hotspots.html");
+        Path standalonePath = tempDir.resolve("api_report.html");
+
+        assertThat(combinedPath).exists();
+        assertThat(standalonePath).exists();
+    }
 }
