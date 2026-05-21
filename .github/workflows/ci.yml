@@ -196,7 +196,7 @@ jobs:
           analysis:
             target:
               type: local-git
-              path: repo
+              path: .
             window:
               days: 3650
             scope:
@@ -209,16 +209,16 @@ jobs:
               enabled: true
               sharedComponentMode: BOTH
               classpathDirectories:
-                - "repo/build/classes/java/main"
+                - "build/classes/java/main"
           output:
             formats: [csv, yaml, md, html]
-            path: .
+            path: ..
             topN: 30
             apiLayout: BOTH
           EOF
           
           # 6. Run analysis
-          JAR=$(ls ../../libs/hotspot-*.jar | head -1)
+          JAR=$(ls ../../../build/libs/hotspot-*.jar | head -1)
           echo "Using $JAR"
           java -jar "$JAR" analyze --config ../hotspot.yml
           echo "--- Demo report directory ---"
