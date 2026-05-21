@@ -24,6 +24,16 @@ in CSV / YAML / Markdown.
 
 ---
 
+## Prerequisites
+
+| Use case          | Requirement                                                        |
+|-------------------|--------------------------------------------------------------------|
+| Building          | Any JDK 17+ on `PATH` (Gradle auto-provisions the Java 21 toolchain) |
+| **Running the jar** | **JDK 21+ on `PATH`** — verify with `java -version` |
+| Analysis target   | A directory that contains a `.git/` folder (a real git working tree) |
+
+---
+
 ## Quick start
 
 ### 1. Build
@@ -32,8 +42,6 @@ in CSV / YAML / Markdown.
 ./gradlew clean build
 # → build/libs/hotspot-0.1.0-SNAPSHOT.jar
 ```
-
-Requires Java 21 (auto-provisioned by Gradle's `foojay-resolver-convention`).
 
 ### 2. Generate a sample config
 
@@ -47,26 +55,38 @@ java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
 analysis:
   target:
     type: local-git
+    # Must be a directory that contains a .git/ folder
     path: /path/to/your/repo
+
   window:
+    # Mode A: relative window (last N days from "now") -- safe default
     days: 365
+    # Mode B: absolute ISO-8601 date range (use INSTEAD of `days`)
+    # since: "2024-01-01"
+    # until: "2026-01-01"
+
   scope:
-    granularity:
-      - file
-      - method
+    granularity: [file, method]
     include:
+      # Single-module Spring Boot project
       - "src/main/java/**/*.java"
+      # Multi-module Gradle/Maven project -- uncomment if your repo
+      # has sub-modules (ftgo, jhipster, most real-world stacks).
+      # - "**/src/main/java/**/*.java"
     exclude:
+      - "**/generated/**"
       - "**/test/**"
+      - "**/build/**"
+      - "**/target/**"
+
   scoring:
-    formula: simple
+    formula: simple   # Phase 1: revisions x loc
+
 output:
-  formats:
-    - CSV
-    - YAML
-    - MD
+  # Case-insensitive: csv | yaml | md (multiple allowed)
+  formats: [csv, yaml, md]
   path: ./hotspot-report
-  topN: 20
+  topN: 20            # 0 = unlimited
 ```
 
 ### 4. Run analysis
@@ -79,11 +99,19 @@ Outputs:
 
 ```
 hotspot-report/
-├── file_hotspots.csv
+├── file_hotspots.csv      ← CSV is split per granularity (5- vs 10-column headers)
 ├── method_hotspots.csv
-├── hotspots.yml
+├── hotspots.yml           ← YAML/MD bundle both granularities in one document
 └── hotspots.md
 ```
+
+> **Why are CSVs split but YAML/MD combined?**
+> CSV is a single-header tabular format and the file (5 cols) and method
+> (10 cols) reports can't share a header, so they are emitted as two files
+> for Excel/Sheets ease of use. YAML and Markdown are document formats that
+> naturally hold both tables in one file — easier to attach to a PR
+> (`.md`) or feed downstream automation (`.yml`). A future `output.layout`
+> option to flip this is tracked under Phase 2.
 
 ---
 
@@ -110,12 +138,14 @@ Commands:
 |---|:---:|---|---|
 | `--config, -c <file>` | ✅ | — | Path to the YAML configuration file |
 | `--quiet, -q`         |   | off  | Suppress the summary on stdout |
+| `--strict, -s`        |   | off  | Exit with code 3 when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
 
 | Exit code | Meaning |
 |:---:|---|
 | 0 | Analysis completed; outputs were written |
 | 1 | Configuration invalid / pipeline failure / unsupported target |
 | 2 | Picocli usage error |
+| 3 | `--strict` set and the analysis produced an empty result |
 
 ### `hotspot init`
 
@@ -188,6 +218,93 @@ src/main/resources/
   application.yml             ← Spring Boot logging config
   templates/hotspot.example.yml ← bundled sample for `hotspot init`
 ```
+
+---
+
+## Troubleshooting
+
+If your first real run looks "empty", almost certainly one of these three.
+
+### `Files: 0` — no source files matched `scope.include`
+
+Most real Spring Boot projects are **multi-module** (`ftgo-order-service/`,
+`auth-service/`, …) and need a `**/` prefix in the glob.
+
+```yaml
+scope:
+  include:
+    # ❌ Only catches a single-module project at the repo root
+    # - "src/main/java/**/*.java"
+    # ✅ Catches every sub-module's main sources
+    - "**/src/main/java/**/*.java"
+```
+
+Quick sanity check (Bash):
+
+```bash
+git -C <repo> ls-files | grep -E 'src/main/java/.*\.java$' | head
+```
+
+### `Commits: 0` — window had no Java-touching commit
+
+The window is correct relative to *now*, but the repo may have been
+inactive for years (a frozen reference implementation, an archived demo,
+…). Switch to an absolute range that overlaps the actual activity:
+
+```yaml
+window:
+  since: "2017-01-01"
+  until: "2026-12-31"
+```
+
+Cross-check from the command line:
+
+```bash
+git -C <repo> log --since=<since> --until=<until> --name-only \
+    --pretty=format: -- '*.java' | sort -u | head
+```
+
+> **CI tip:** add `--strict` to your `hotspot analyze` invocation. The
+> command will exit with code **3** when commits or files come back empty,
+> so a misconfigured CI pipeline fails loudly instead of producing empty
+> reports.
+>
+> ```bash
+> java -jar hotspot.jar analyze --config hotspot.yml --strict
+> ```
+
+### `UnsupportedClassVersionError` when running the jar
+
+The bundled jar is compiled for Java 21. Even when the Gradle toolchain
+auto-provisioned 21 to *build* it, **running** still needs JDK 21+ on
+`PATH`:
+
+```bash
+java -version            # must report 21 or later
+# macOS:
+export JAVA_HOME=$(/usr/libexec/java_home -v 21)
+# Linux (sdkman):
+sdk use java 21.0.4-tem
+```
+
+### `Could not parse GitHub repository` / `Authentication required`
+
+For `target.type: github` you need a token. Either:
+
+```yaml
+target:
+  type: github
+  github:
+    owner: my-org
+    repo:  my-repo
+    branch: main
+    token: ${GITHUB_TOKEN}     # resolved from env at load time
+```
+
+…and `export GITHUB_TOKEN=…` before running. The Phase 1 CLI is wired
+**end-to-end only for `local-git`**; the GitHub provider is verified by
+WireMock contract tests. To analyse a GitHub repo today, clone it locally
+and point `target.type: local-git` at the working tree.
 
 ---
 

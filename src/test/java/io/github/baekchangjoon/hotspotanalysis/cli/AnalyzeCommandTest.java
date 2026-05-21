@@ -139,6 +139,78 @@ class AnalyzeCommandTest {
         assertThat(sw.toString()).isEmpty();
     }
 
+    @Test
+    @DisplayName("--strict returns exit 3 when no commits fall inside the window")
+    void shouldFailStrictWhenNoCommitsInWindow() throws Exception {
+        Path configFile = writeConfigWithAbsoluteWindow(
+                repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"), "**/*.java",
+                "2020-01-01", "2020-12-31");
+
+        StringWriter errWriter = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(errWriter));
+
+        int exit = cli.execute("--config", configFile.toString(), "--strict");
+
+        assertThat(exit).isEqualTo(3);
+        String stderr = errWriter.toString();
+        assertThat(stderr).contains("--strict");
+        assertThat(stderr).contains("Commits matching window: 0");
+    }
+
+    @Test
+    @DisplayName("--strict returns exit 3 when no Java files match scope.include")
+    void shouldFailStrictWhenNoFilesMatch() throws Exception {
+        Path configFile = writeConfigWithAbsoluteWindow(
+                repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"), "**/non-existent-folder/**/*.java",
+                "2020-01-01", "2026-12-31");
+
+        StringWriter errWriter = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(errWriter));
+
+        int exit = cli.execute("--config", configFile.toString(), "--strict");
+
+        assertThat(exit).isEqualTo(3);
+        String stderr = errWriter.toString();
+        assertThat(stderr).contains("Files matching scope:   0");
+        assertThat(stderr).contains("scope.include");
+    }
+
+    @Test
+    @DisplayName("--strict still exits 0 when the analysis produced non-empty results")
+    void shouldPassStrictWhenResultIsHealthy() throws Exception {
+        Path configFile = writeConfig("local-git", repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"));
+
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute("--config", configFile.toString(), "--strict");
+
+        assertThat(exit).isZero();
+    }
+
+    @Test
+    @DisplayName("without --strict, empty result still exits 0 (backward compatible)")
+    void shouldExitZeroWithoutStrictOnEmptyResult() throws Exception {
+        Path configFile = writeConfigWithAbsoluteWindow(
+                repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"), "**/*.java",
+                "2020-01-01", "2020-12-31");
+
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute("--config", configFile.toString());
+
+        assertThat(exit).isZero();
+    }
+
     private Path writeConfig(String type, String repoPath, String outPath,
                              List<String> formats) throws Exception {
         String formatsYaml = formats.stream()
@@ -165,6 +237,39 @@ class AnalyzeCommandTest {
                   path: %s
                   topN: 0
                 """.formatted(type, repoPath, formatsYaml, outPath);
+        Path config = tempDir.resolve("hotspot.yml");
+        Files.writeString(config, yaml);
+        return config;
+    }
+
+    private Path writeConfigWithAbsoluteWindow(String repoPath, String outPath,
+                                               List<String> formats, String includeGlob,
+                                               String since, String until) throws Exception {
+        String formatsYaml = formats.stream()
+                .map(f -> "    - " + f)
+                .reduce((a, b) -> a + "\n" + b).orElse("");
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    since: "%s"
+                    until: "%s"
+                  scope:
+                    granularity:
+                      - file
+                      - method
+                    include:
+                      - "%s"
+                  scoring:
+                    formula: simple
+                output:
+                  formats:
+                %s
+                  path: %s
+                  topN: 0
+                """.formatted(repoPath, since, until, includeGlob, formatsYaml, outPath);
         Path config = tempDir.resolve("hotspot.yml");
         Files.writeString(config, yaml);
         return config;

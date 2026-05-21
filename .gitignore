@@ -71,6 +71,10 @@ scratch/
 hotspot-report/
 *.csv.bak
 
+# Ad-hoc demo runs (configs reference absolute user paths and
+# the outputs are environment-specific; do not commit).
+demo/
+
 # ─────────────────────────────────────────────────────────────
 # Secrets / user-level configuration
 # Never commit a real config — only the bundled sample under

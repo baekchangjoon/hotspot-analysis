@@ -29,6 +29,8 @@ import java.util.concurrent.Callable;
  *   <li>{@code 1} — fatal error (configuration invalid, repository unreachable,
  *       parser failure, …)</li>
  *   <li>{@code 2} — unknown / unsupported configuration option (handled by Picocli)</li>
+ *   <li>{@code 3} — {@code --strict} was set and the analysis produced an
+ *       empty result (zero commits in window or zero files matching scope)</li>
  * </ul>
  */
 @Component
@@ -39,6 +41,10 @@ import java.util.concurrent.Callable;
 )
 public class AnalyzeCommand implements Callable<Integer> {
 
+    static final int EXIT_OK = 0;
+    static final int EXIT_FAILURE = 1;
+    static final int EXIT_STRICT_EMPTY = 3;
+
     @Option(names = {"-c", "--config"},
             required = true,
             description = "Path to the YAML configuration file.")
@@ -47,6 +53,12 @@ public class AnalyzeCommand implements Callable<Integer> {
     @Option(names = {"-q", "--quiet"},
             description = "Suppress the summary output on stdout.")
     private boolean quiet;
+
+    @Option(names = {"-s", "--strict"},
+            description = "Exit with code 3 when the analysis result is empty "
+                    + "(zero commits in window or zero files matching scope). "
+                    + "Useful for CI to fail loudly instead of producing empty reports.")
+    private boolean strict;
 
     @Spec
     private CommandSpec spec;
@@ -70,7 +82,7 @@ public class AnalyzeCommand implements Callable<Integer> {
 
         if (!Files.isRegularFile(configPath)) {
             err.println("ERROR: configuration file not found: " + configPath);
-            return 1;
+            return EXIT_FAILURE;
         }
 
         try {
@@ -80,17 +92,39 @@ public class AnalyzeCommand implements Callable<Integer> {
             if (!quiet) {
                 printSummary(out, result);
             }
-            return 0;
+            if (strict && isEmpty(result)) {
+                printStrictFailure(err, result);
+                return EXIT_STRICT_EMPTY;
+            }
+            return EXIT_OK;
         } catch (ConfigLoadException e) {
             err.println("ERROR: invalid configuration: " + e.getMessage());
-            return 1;
+            return EXIT_FAILURE;
         } catch (UnsupportedOperationException e) {
             err.println("ERROR: " + e.getMessage());
-            return 1;
+            return EXIT_FAILURE;
         } catch (RuntimeException e) {
             err.println("ERROR: analysis failed: " + e.getMessage());
-            return 1;
+            return EXIT_FAILURE;
         }
+    }
+
+    private static boolean isEmpty(AnalysisResult result) {
+        return result.meta().totalCommits() == 0 || result.meta().totalFiles() == 0;
+    }
+
+    private static void printStrictFailure(PrintWriter err, AnalysisResult result) {
+        err.println("ERROR: --strict was set but the analysis produced an empty result.");
+        err.println("  Commits matching window: " + result.meta().totalCommits());
+        err.println("  Files matching scope:   " + result.meta().totalFiles());
+        err.println("  Methods extracted:      " + result.meta().totalMethods());
+        err.println("Hints:");
+        err.println("  - Multi-module projects need '**/' in scope.include "
+                + "(e.g. '**/src/main/java/**/*.java').");
+        err.println("  - Widen analysis.window.days or switch to absolute "
+                + "since/until covering actual commit activity.");
+        err.println("  - Verify analysis.target.path points at a directory "
+                + "that contains a .git/ folder.");
     }
 
     private static void printSummary(PrintWriter out, AnalysisResult result) {

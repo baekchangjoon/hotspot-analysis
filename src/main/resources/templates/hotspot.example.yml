@@ -5,7 +5,7 @@ analysis:
   target:
     # local-git | github
     type: local-git
-    # Required when type=local-git
+    # Required when type=local-git -- a directory that contains a .git/ folder.
     path: ./my-spring-project
     # Required when type=github. Uncomment and switch type accordingly.
     # github:
@@ -15,17 +15,24 @@ analysis:
     #   token: ${GITHUB_TOKEN}
 
   window:
-    # Mode A: absolute date range (ISO-8601)
-    since: "2025-11-21"
-    until: "2026-05-21"
-    # Mode B: relative window (last N days). Comment out since/until above.
-    # days: 180
+    # Mode A: relative window (last N days from "now") -- safe default for
+    # actively maintained repositories.
+    days: 365
+    # Mode B: absolute ISO-8601 date range (use INSTEAD of `days`).
+    # Switch to this when the repo has been inactive for longer than `days`,
+    # otherwise the analysis will report "Commits: 0".
+    # since: "2024-01-01"
+    # until: "2026-01-01"
 
   scope:
     # file | method  (both can be combined)
     granularity: [file, method]
     include:
+      # Single-module Spring Boot project.
       - "src/main/java/**/*.java"
+      # Multi-module Gradle/Maven project -- uncomment if your repository
+      # contains sub-modules such as `service-a/`, `service-b/` ...
+      # - "**/src/main/java/**/*.java"
     exclude:
       - "**/generated/**"
       - "**/test/**"
@@ -37,8 +44,8 @@ analysis:
     formula: simple
 
 output:
-  # csv | yaml | md (multiple allowed)
-  formats: [csv, md]
+  # csv | yaml | md (multiple allowed, case-insensitive)
+  formats: [csv, yaml, md]
   path: ./hotspot-report
   # 0 = all rows
   topN: 50
