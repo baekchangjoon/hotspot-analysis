@@ -19,8 +19,9 @@ in CSV / YAML / Markdown.
 - **Two VCS sources** — local git working tree (JGit) or remote GitHub (kohsuke `github-api`, hermetic-tested with WireMock).
 - **Java 21 parsing** — JavaParser 3.26 understands records, sealed types, switch expressions, pattern matching.
 - **YAML configuration** — strongly typed, validated via Jakarta Bean Validation, env-var substitution.
-- **Three output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly).
-- **134 tests, 0 failures** — every layer is covered (contract tests + unit + Spring Boot E2E).
+- **Four output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly), **HTML (browser-ready, sortable, filterable, XSS-safe, dark-mode aware)**.
+- **Self-analysis demo in CI** — every CI run produces a fresh `hotspot-demo-report-<N>` artifact you can download and open in a browser.
+- **145 tests, 0 failures** — every layer is covered (contract tests + unit + Spring Boot E2E).
 
 ---
 
@@ -83,8 +84,8 @@ analysis:
     formula: simple   # Phase 1: revisions x loc
 
 output:
-  # Case-insensitive: csv | yaml | md (multiple allowed)
-  formats: [csv, yaml, md]
+  # Case-insensitive: csv | yaml | md | html (multiple allowed)
+  formats: [csv, yaml, md, html]
   path: ./hotspot-report
   topN: 20            # 0 = unlimited
 ```
@@ -101,17 +102,26 @@ Outputs:
 hotspot-report/
 ├── file_hotspots.csv      ← CSV is split per granularity (5- vs 10-column headers)
 ├── method_hotspots.csv
-├── hotspots.yml           ← YAML/MD bundle both granularities in one document
-└── hotspots.md
+├── hotspots.yml           ← YAML/MD/HTML bundle both granularities in one document
+├── hotspots.md
+└── hotspots.html          ← open in any browser — sortable columns + filter box
 ```
 
-> **Why are CSVs split but YAML/MD combined?**
+> **Why are CSVs split but YAML/MD/HTML combined?**
 > CSV is a single-header tabular format and the file (5 cols) and method
 > (10 cols) reports can't share a header, so they are emitted as two files
-> for Excel/Sheets ease of use. YAML and Markdown are document formats that
-> naturally hold both tables in one file — easier to attach to a PR
-> (`.md`) or feed downstream automation (`.yml`). A future `output.layout`
+> for Excel/Sheets ease of use. YAML, Markdown, and HTML are document
+> formats that naturally hold both tables in one file — easier to attach
+> to a PR (`.md`), feed downstream automation (`.yml`), or open in a browser
+> as a self-contained evidence page (`.html`). A future `output.layout`
 > option to flip this is tracked under Phase 2.
+
+> **HTML report features.** `hotspots.html` is a single self-contained file
+> (no remote CSS/JS, no CDN). Click any column header to sort
+> ascending/descending; type into the search box to filter rows by path,
+> class, method, or parameters. Light/dark mode follows your browser's
+> preference. Every user-controlled value is HTML-escaped, so a malicious
+> file path can't inject script tags.
 
 ---
 
@@ -169,7 +179,7 @@ Commands:
 | `analysis.scope.include[]` | glob[] | At least one entry required |
 | `analysis.scope.exclude[]` | glob[] | Optional |
 | `analysis.scoring.formula` | `simple` | `revisions × loc` (Phase 1) |
-| `output.formats[]` | `CSV` \| `YAML` \| `MD` | At least one |
+| `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | At least one |
 | `output.path` | string | Output directory |
 | `output.topN` | integer ≥ 0 | `0` means "all rows" |
 
@@ -227,16 +237,22 @@ If your first real run looks "empty", almost certainly one of these three.
 
 ### `Files: 0` — no source files matched `scope.include`
 
-Most real Spring Boot projects are **multi-module** (`ftgo-order-service/`,
-`auth-service/`, …) and need a `**/` prefix in the glob.
+Java NIO's `**` glob does **not** match zero path segments. That creates
+a subtle asymmetry between single-module and multi-module layouts:
+
+| Repo shape | First Java path looks like | Pattern that works |
+|---|---|---|
+| Single-module | `src/main/java/com/foo/Hot.java` | `src/main/java/**/*.java` |
+| Multi-module | `service-a/src/main/java/com/foo/Hot.java` | `**/src/main/java/**/*.java` |
+
+If you don't know upfront which shape the target has, **list both
+patterns**; the collector deduplicates matches:
 
 ```yaml
 scope:
   include:
-    # ❌ Only catches a single-module project at the repo root
-    # - "src/main/java/**/*.java"
-    # ✅ Catches every sub-module's main sources
-    - "**/src/main/java/**/*.java"
+    - "src/main/java/**/*.java"        # catches single-module repos
+    - "**/src/main/java/**/*.java"     # catches multi-module repos
 ```
 
 Quick sanity check (Bash):
@@ -338,14 +354,22 @@ alternatives.
 ## Development
 
 ```bash
-./gradlew test            # 134 tests, ~10s
+./gradlew test            # 145 tests, ~10s
 ./gradlew build           # full assembly
 ./gradlew check           # tests + static analysis
 ```
 
 Continuous Integration runs on every push and on a **daily schedule**
-(09:00 KST). Build logs and the assembled JAR are uploaded as workflow
-artifacts on every run — see the [Actions tab](https://github.com/baekchangjoon/hotspot-analysis/actions).
+(09:00 KST). Each run uploads the following artifacts (see the
+[Actions tab](https://github.com/baekchangjoon/hotspot-analysis/actions)):
+
+| Artifact | What's inside |
+|---|---|
+| `hotspot-jar-<N>` | The assembled fat jar (`hotspot-*.jar`) |
+| `test-results-<N>` | JUnit XML for every test class |
+| `test-report-<N>` | Gradle's full HTML test report |
+| `test-summary-<N>` | Markdown summary surfaced on the GitHub Step Summary panel |
+| `hotspot-demo-report-<N>` | **Self-analysis output** — `file_hotspots.csv`, `method_hotspots.csv`, `hotspots.yml`, `hotspots.md`, `hotspots.html`, plus the `hotspot.yml` used to produce them. Download and open `hotspots.html` directly in your browser. |
 
 ---
 

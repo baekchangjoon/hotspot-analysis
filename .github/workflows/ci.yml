@@ -131,6 +131,60 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Run hotspot self-analysis (demo report for artifact download)
+        if: success()
+        run: |
+          mkdir -p build/hotspot-demo
+          cat > build/hotspot-demo/hotspot.yml <<'YAML'
+          analysis:
+            target:
+              type: local-git
+              path: .
+            window:
+              # Cover the lifetime of this repo (created 2026-05-21).
+              since: "2026-05-01"
+              until: "2026-12-31"
+            scope:
+              granularity: [file, method]
+              # Two patterns to cover both single-module repos
+              # (sources under "src/main/java/...") and multi-module
+              # repos (sources under "<module>/src/main/java/..."):
+              # Java NIO's "**" does not match zero path segments, so
+              # neither pattern alone is sufficient.
+              include:
+                - "src/main/java/**/*.java"
+                - "**/src/main/java/**/*.java"
+              exclude:
+                - "**/build/**"
+                - "**/test/**"
+            scoring:
+              formula: simple
+          output:
+            formats: [csv, yaml, md, html]
+            path: build/hotspot-demo
+            topN: 30
+          YAML
+          JAR=$(ls build/libs/hotspot-*.jar | head -1)
+          echo "Using $JAR"
+          java -jar "$JAR" analyze --config build/hotspot-demo/hotspot.yml
+          echo "--- Demo report directory ---"
+          ls -la build/hotspot-demo
+
+      - name: Upload hotspot demo report (file_hotspots.csv, method_hotspots.csv, hotspots.yml, hotspots.md, hotspots.html)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotspot-demo-report-${{ github.run_number }}
+          path: |
+            build/hotspot-demo/file_hotspots.csv
+            build/hotspot-demo/method_hotspots.csv
+            build/hotspot-demo/hotspots.yml
+            build/hotspot-demo/hotspots.md
+            build/hotspot-demo/hotspots.html
+            build/hotspot-demo/hotspot.yml
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Publish test results to PR (always run)
         if: always()
         uses: mikepenz/action-junit-report@v5

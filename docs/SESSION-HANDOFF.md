@@ -38,10 +38,11 @@ phases:
 |---|---|
 | GitHub repo | https://github.com/baekchangjoon/hotspot-analysis |
 | Default branch | `main` |
-| Latest PR | **#1** "Phase 1: Hotspot 분석 CLI 및 데일리 CI 파이프라인 도입" (merged or pending — verify with `gh pr list --state all`) |
+| Recent PRs | **#1** Phase 1 CLI + CI (merged), **#2** SESSION-HANDOFF.md (merged), **#3** HTML output + CI demo artifact (verify status with `gh pr list --state all`) |
 | Latest fat jar | `build/libs/hotspot-0.1.0-SNAPSHOT.jar` (Java 21) |
-| Test suite | **138 tests**, 0 failures, ~10 s |
-| CI | `.github/workflows/ci.yml` — push / PR / daily cron (`0 0 * * *` UTC) / `workflow_dispatch` |
+| Test suite | **145 tests**, 0 failures, ~10 s |
+| Output formats | `CSV`, `YAML`, `MD`, **`HTML`** (self-contained, sortable, filterable, XSS-safe) |
+| CI | `.github/workflows/ci.yml` — push / PR / daily cron (`0 0 * * *` UTC) / `workflow_dispatch`. Uploads `hotspot-demo-report-<run>` artifact with all four output formats so reviewers can open `hotspots.html` directly. |
 
 ### Latest functional verification (run against ChrisRichardson/ftgo-application)
 
@@ -74,7 +75,10 @@ Execution time on M-series Mac: **~2.3 s** (warm), **~6 s** (cold JVM).
    directly.
 2. **`OutputWriter` interface is the only output abstraction.** New
    formats register themselves as Spring beans; `OutputDispatcher`
-   fan-outs automatically by format key.
+   fan-outs automatically by format key. Current formats: `CSV`, `YAML`,
+   `MD`, `HTML`. The HTML writer ships a self-contained page (inline
+   CSS + vanilla JS, no remote assets); every user-controlled string is
+   HTML-escaped before injection.
 3. **`AnalysisResult` is immutable.** Pipeline mutations belong inside
    `HotspotAnalyzer`; downstream code only reads.
 4. **`DiffHunk`-driven method revisions with a fallback.** `LocalGitProvider`
@@ -224,7 +228,8 @@ Verified by replaying the README walkthrough end-to-end against
 | **C4** | No coverage integration (JaCoCo / Sonar) | M | Phase 2. Combine with hotspot scores to surface "hot but uncovered". |
 | **C5** | Gradle 8.10 deprecation warnings | S | Visible during every `./gradlew build`. Validate with `./gradlew --warning-mode all build`. Confirm spring-boot plugin compatibility before bumping to Gradle 9. |
 | **C6** | Daily cron trigger | S | Active only after PR #1 is merged into `main` (GitHub Actions policy). After merge, expect a run shortly after `00:00 UTC` (= 09:00 KST). |
-| **C7** | Output layout asymmetry (CSV split, YAML/MD combined) | S | Intentional. README documents it. If users vote for per-granularity YAML/MD, add `output.layout: combined \| per-granularity` option. |
+| **C7** | Output layout asymmetry (CSV split, YAML/MD/HTML combined) | S | Intentional. README documents it. If users vote for per-granularity YAML/MD/HTML, add `output.layout: combined \| per-granularity` option. |
+| **C7b** | HTML report deep-links to source | M | Currently rows carry `data-path`/`data-start-line`/`data-end-line` attributes but no clickable hyperlinks. Adding `output.html.repoUrl` + `branch` config would let the writer emit `https://github.com/.../blob/<branch>/<path>#L<start>-L<end>` URLs as proper anchors. |
 | **C8** | No `--scope` / `--window` CLI overrides for the YAML config | M | Currently config-only. Adding CLI overrides would help one-off triage runs (`hotspot analyze --window-days 90`). |
 
 ---

@@ -19,7 +19,8 @@ public record OutputConfig(
     public enum OutputFormat {
         CSV,
         YAML,
-        MD;
+        MD,
+        HTML;
 
         @JsonCreator
         public static OutputFormat from(String raw) {

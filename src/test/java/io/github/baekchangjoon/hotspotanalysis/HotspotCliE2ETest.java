@@ -74,6 +74,7 @@ class HotspotCliE2ETest {
                     - CSV
                     - YAML
                     - MD
+                    - HTML
                   path: %s
                   topN: 0
                 """.formatted(repoRoot, outDir));
@@ -85,6 +86,7 @@ class HotspotCliE2ETest {
         assertThat(Files.exists(outDir.resolve("method_hotspots.csv"))).isTrue();
         assertThat(Files.exists(outDir.resolve("hotspots.yml"))).isTrue();
         assertThat(Files.exists(outDir.resolve("hotspots.md"))).isTrue();
+        assertThat(Files.exists(outDir.resolve("hotspots.html"))).isTrue();
 
         String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
         assertThat(csv).contains("src/main/java/com/example/Hot.java");
@@ -93,6 +95,12 @@ class HotspotCliE2ETest {
         assertThat(dataLines).hasSize(2);
         assertThat(dataLines.get(0)).contains("Hot.java");
         assertThat(dataLines.get(1)).contains("Cold.java");
+
+        String html = Files.readString(outDir.resolve("hotspots.html"));
+        assertThat(html).startsWith("<!DOCTYPE html>");
+        assertThat(html).contains("Hot.java");
+        assertThat(html).contains("Cold.java");
+        assertThat(html).contains("Hotspot Analysis Report");
     }
 
     @Test

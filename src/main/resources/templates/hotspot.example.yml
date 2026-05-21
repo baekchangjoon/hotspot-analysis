@@ -28,11 +28,12 @@ analysis:
     # file | method  (both can be combined)
     granularity: [file, method]
     include:
-      # Single-module Spring Boot project.
+      # Both patterns are listed because Java NIO's "**" does not match
+      # zero path segments. The first catches single-module repos, the
+      # second catches multi-module Gradle/Maven repos (service-a/, ...).
+      # The collector deduplicates overlapping matches.
       - "src/main/java/**/*.java"
-      # Multi-module Gradle/Maven project -- uncomment if your repository
-      # contains sub-modules such as `service-a/`, `service-b/` ...
-      # - "**/src/main/java/**/*.java"
+      - "**/src/main/java/**/*.java"
     exclude:
       - "**/generated/**"
       - "**/test/**"
@@ -44,8 +45,10 @@ analysis:
     formula: simple
 
 output:
-  # csv | yaml | md (multiple allowed, case-insensitive)
-  formats: [csv, yaml, md]
+  # csv | yaml | md | html (multiple allowed, case-insensitive)
+  # 'html' emits a self-contained hotspots.html that you can open in any
+  # browser -- columns are sortable and rows are filterable.
+  formats: [csv, yaml, md, html]
   path: ./hotspot-report
   # 0 = all rows
   topN: 50
