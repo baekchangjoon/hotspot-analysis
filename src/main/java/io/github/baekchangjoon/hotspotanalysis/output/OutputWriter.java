@@ -1,0 +1,24 @@
+package io.github.baekchangjoon.hotspotanalysis.output;
+
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
+import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
+
+import java.nio.file.Path;
+
+/**
+ * Serialises an {@link AnalysisResult} into one or more files inside the
+ * given output directory. Implementations are stateless Spring components,
+ * one per {@link OutputConfig.OutputFormat}.
+ */
+public interface OutputWriter {
+
+    /** The single format this writer handles. */
+    OutputConfig.OutputFormat format();
+
+    /**
+     * Writes the report files for this format under {@code outputDir}.
+     * Implementations may produce multiple files (e.g. CSV emits one file per
+     * granularity).
+     */
+    void write(AnalysisResult result, Path outputDir);
+}
