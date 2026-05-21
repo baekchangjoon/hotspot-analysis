@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────────────────────────
+# Build artifacts
+# ─────────────────────────────────────────────────────────────
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+.gradletasknamecache
+
+# Maven (just in case anyone imports the project elsewhere)
+target/
+*.class
+
+# ─────────────────────────────────────────────────────────────
+# IDEs
+# ─────────────────────────────────────────────────────────────
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# VS Code
+.vscode/
+
+# NetBeans
+nbproject/private/
+nbbuild/
+nbdist/
+.nb-gradle/
+
+# ─────────────────────────────────────────────────────────────
+# Spring Boot
+# ─────────────────────────────────────────────────────────────
+HELP.md
+
+# ─────────────────────────────────────────────────────────────
+# OS junk
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+
+# ─────────────────────────────────────────────────────────────
+# JVM crash dumps
+# ─────────────────────────────────────────────────────────────
+hs_err_pid*.log
+replay_pid*.log
+*.hprof
+
+# ─────────────────────────────────────────────────────────────
+# Logs / scratch
+# ─────────────────────────────────────────────────────────────
+*.log
+logs/
+tmp/
+scratch/
+
+# ─────────────────────────────────────────────────────────────
+# Generated hotspot reports (output of the CLI itself)
+# ─────────────────────────────────────────────────────────────
+hotspot-report/
+*.csv.bak
+
+# ─────────────────────────────────────────────────────────────
+# Secrets / user-level configuration
+# Never commit a real config — only the bundled sample under
+# src/main/resources/templates is allowed.
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+hotspot.yml
+hotspot.yaml
+hotspot.local.yml
+hotspot.local.yaml
+*.pem
+*.key
+credentials.json
+.secrets/

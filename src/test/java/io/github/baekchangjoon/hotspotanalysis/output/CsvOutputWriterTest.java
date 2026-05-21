@@ -1,0 +1,88 @@
+package io.github.baekchangjoon.hotspotanalysis.output;
+
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
+import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
+import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class CsvOutputWriterTest {
+
+    private final CsvOutputWriter writer = new CsvOutputWriter();
+
+    @Test
+    @DisplayName("writes file_hotspots.csv with header and ranked rows")
+    void shouldWriteFileHotspotsCsv(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+
+        Path csv = tempDir.resolve("file_hotspots.csv");
+        assertThat(csv).exists();
+        String content = Files.readString(csv);
+        assertThat(content).startsWith("rank,path,revisions,loc,score\n");
+        assertThat(content).contains(
+                "1,src/main/java/com/example/Hot.java,5,120,600\n");
+        assertThat(content).contains(
+                "2,src/main/java/com/example/Cold.java,1,30,30\n");
+    }
+
+    @Test
+    @DisplayName("writes method_hotspots.csv with full method signature columns")
+    void shouldWriteMethodHotspotsCsv(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+
+        Path csv = tempDir.resolve("method_hotspots.csv");
+        assertThat(csv).exists();
+        String content = Files.readString(csv);
+        assertThat(content).startsWith(
+                "rank,fqcn,method,parameters,file,start_line,end_line,revisions,loc,score\n");
+        assertThat(content).contains(
+                "1,com.example.Hot,doWork,int;String,"
+                        + "src/main/java/com/example/Hot.java,12,28,4,17,68\n");
+        assertThat(content).contains(
+                "2,com.example.Hot,doWork,,"
+                        + "src/main/java/com/example/Hot.java,30,32,1,3,3\n");
+    }
+
+    @Test
+    @DisplayName("escapes commas in field values with double quotes")
+    void shouldEscapeCommasInFieldValues(@TempDir Path tempDir) throws IOException {
+        AnalysisResult result = new AnalysisResult(
+                List.of(new FileHotspot("path/with,comma.java", 1, 10, 10.0)),
+                List.of(new MethodHotspot(
+                        new MethodSignature("a.B", "m", List.of("int", "String")),
+                        "path/with,comma.java", 1, 5, 1, 5, 5.0)),
+                new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
+                        "LOCAL_GIT:/tmp", 1, 1, 1, ScoringConfig.Formula.SIMPLE));
+
+        writer.write(result, tempDir);
+
+        String fileCsv = Files.readString(tempDir.resolve("file_hotspots.csv"));
+        assertThat(fileCsv).contains("\"path/with,comma.java\"");
+    }
+
+    @Test
+    @DisplayName("formats fractional scores with 4 decimal places")
+    void shouldFormatFractionalScores(@TempDir Path tempDir) throws IOException {
+        AnalysisResult result = new AnalysisResult(
+                List.of(new FileHotspot("A.java", 3, 7, 21.5)),
+                List.of(),
+                new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
+                        "LOCAL_GIT:/tmp", 1, 1, 0, ScoringConfig.Formula.SIMPLE));
+
+        writer.write(result, tempDir);
+
+        assertThat(Files.readString(tempDir.resolve("file_hotspots.csv")))
+                .contains("1,A.java,3,7,21.5000\n");
+    }
+}

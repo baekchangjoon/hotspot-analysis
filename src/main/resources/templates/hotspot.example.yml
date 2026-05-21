@@ -1,0 +1,44 @@
+# Hotspot Analysis Configuration (Phase 1)
+# Usage: hotspot analyze --config ./hotspot.yml
+
+analysis:
+  target:
+    # local-git | github
+    type: local-git
+    # Required when type=local-git
+    path: ./my-spring-project
+    # Required when type=github. Uncomment and switch type accordingly.
+    # github:
+    #   owner: myorg
+    #   repo: myrepo
+    #   branch: main
+    #   token: ${GITHUB_TOKEN}
+
+  window:
+    # Mode A: absolute date range (ISO-8601)
+    since: "2025-11-21"
+    until: "2026-05-21"
+    # Mode B: relative window (last N days). Comment out since/until above.
+    # days: 180
+
+  scope:
+    # file | method  (both can be combined)
+    granularity: [file, method]
+    include:
+      - "src/main/java/**/*.java"
+    exclude:
+      - "**/generated/**"
+      - "**/test/**"
+      - "**/build/**"
+      - "**/target/**"
+
+  scoring:
+    # Phase 1: simple = revisions * loc
+    formula: simple
+
+output:
+  # csv | yaml | md (multiple allowed)
+  formats: [csv, md]
+  path: ./hotspot-report
+  # 0 = all rows
+  topN: 50

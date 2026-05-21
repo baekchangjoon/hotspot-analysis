@@ -1,0 +1,14 @@
+spring:
+  main:
+    banner-mode: off
+    web-application-type: none
+    log-startup-info: false
+  application:
+    name: hotspot-analysis
+logging:
+  level:
+    root: WARN
+    io.github.baekchangjoon.hotspotanalysis: WARN
+    org.springframework: WARN
+  pattern:
+    console: "%-5level %logger{36} - %msg%n"
