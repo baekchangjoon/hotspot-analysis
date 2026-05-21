@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "feature/**"
+      - "fix/**"
+      - "chore/**"
+  pull_request:
+    branches:
+      - main
+  schedule:
+    # Run every day at 00:00 UTC (09:00 KST) so regressions caused by
+    # transitive dependency updates are caught early.
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  build-and-test:
+    name: Build & Test (Java 21)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history so JGit-backed tests have something to walk
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle (with build cache)
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-home-cache-cleanup: true
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Show toolchain info
+        run: |
+          java -version
+          ./gradlew --version
+
+      - name: Build (without tests)
+        run: ./gradlew assemble --no-daemon
+
+      - name: Run tests
+        run: ./gradlew test --no-daemon --info
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          mkdir -p ci-summary
+          {
+            echo "## Test summary"
+            echo
+            echo "| Suite | Tests | Failures | Errors | Skipped |"
+            echo "|---|---:|---:|---:|---:|"
+            for xml in build/test-results/test/TEST-*.xml; do
+              [ -f "$xml" ] || continue
+              awk -v fname="${xml##*/TEST-}" '
+                /<testsuite / {
+                  match($0, /name="[^"]*"/);          name=substr($0, RSTART+6, RLENGTH-7);
+                  match($0, /tests="[^"]*"/);         tests=substr($0, RSTART+7, RLENGTH-8);
+                  match($0, /failures="[^"]*"/);      failures=substr($0, RSTART+10, RLENGTH-11);
+                  match($0, /errors="[^"]*"/);        errors=substr($0, RSTART+8, RLENGTH-9);
+                  match($0, /skipped="[^"]*"/);       skipped=substr($0, RSTART+9, RLENGTH-10);
+                  printf("| `%s` | %s | %s | %s | %s |\n", name, tests, failures, errors, skipped);
+                  exit
+                }' "$xml"
+            done
+            echo
+            total=$(grep -h "<testsuite " build/test-results/test/TEST-*.xml \
+                    | grep -oE 'tests="[0-9]+"' | grep -oE '[0-9]+' \
+                    | awk '{s+=$1} END {print s}')
+            fails=$(grep -h "<testsuite " build/test-results/test/TEST-*.xml \
+                    | grep -oE 'failures="[0-9]+"' | grep -oE '[0-9]+' \
+                    | awk '{s+=$1} END {print s}')
+            echo
+            echo "**Total: ${total:-0} tests, ${fails:-0} failures.**"
+          } | tee -a "$GITHUB_STEP_SUMMARY" > ci-summary/summary.md
+
+      - name: Upload test results (JUnit XML)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.run_number }}
+          path: |
+            build/test-results/test/**/TEST-*.xml
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload HTML test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ github.run_number }}
+          path: build/reports/tests/test
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload test summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary-${{ github.run_number }}
+          path: ci-summary/summary.md
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload built jar
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotspot-jar-${{ github.run_number }}
+          path: build/libs/hotspot-*.jar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish test results to PR (always run)
+        if: always()
+        uses: mikepenz/action-junit-report@v5
+        with:
+          report_paths: "build/test-results/test/TEST-*.xml"
+          check_name: "JUnit Report"
+          fail_on_failure: true
+          include_passed: false
+          require_tests: true
