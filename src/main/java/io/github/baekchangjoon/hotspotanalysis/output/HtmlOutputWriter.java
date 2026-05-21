@@ -4,6 +4,8 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.ApiHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.SharedComponentHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
 import org.springframework.stereotype.Component;
 
@@ -14,19 +16,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Writes the analysis result as a single, self-contained {@code hotspots.html}
- * file: inline CSS, inline vanilla JavaScript, no remote assets.
- *
- * <p>The page renders the same metadata + file + method tables as the
- * Markdown writer, plus client-side click-to-sort columns and a free-text
- * filter box per table. Every user-controlled string (paths, FQCNs, method
- * names, parameter types) is HTML-escaped before being injected into the
- * document to prevent XSS when a malicious source file or commit author
- * leaks into the report.</p>
- *
- * <p>Numeric columns embed a {@code data-sort-value} attribute so the
- * client-side sorter can order by the raw integer/double rather than the
- * formatted string.</p>
+ * Writes the analysis result as a single, self-contained HTML report.
  */
 @Component
 public class HtmlOutputWriter implements OutputWriter {
@@ -38,25 +28,104 @@ public class HtmlOutputWriter implements OutputWriter {
 
     @Override
     public void write(AnalysisResult result, Path outputDir) {
+        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.HTML), outputDir.toString(), 0), false);
+    }
+
+    @Override
+    public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
         try {
             Files.createDirectories(outputDir);
-            String body = render(result);
-            Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
+
+            boolean combined = outputConfig.apiLayout() == OutputConfig.ApiLayout.COMBINED ||
+                               outputConfig.apiLayout() == OutputConfig.ApiLayout.BOTH;
+            boolean standalone = outputConfig.apiLayout() == OutputConfig.ApiLayout.STANDALONE ||
+                                 outputConfig.apiLayout() == OutputConfig.ApiLayout.BOTH;
+
+            if (!apiEnabled) {
+                String body = renderCombined(result, false);
+                Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
+                return;
+            }
+
+            if (combined) {
+                String body = renderCombined(result, true);
+                Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
+            }
+
+            if (standalone) {
+                String body = renderStandalone(result);
+                Files.writeString(outputDir.resolve("api_report.html"), body, StandardCharsets.UTF_8);
+            }
         } catch (IOException e) {
             throw new OutputException("Failed to write HTML output to " + outputDir, e);
         }
     }
 
-    private static String render(AnalysisResult result) {
-        StringBuilder html = new StringBuilder(16_384);
-        html.append("<!DOCTYPE html>\n");
-        html.append("<html lang=\"en\">\n");
+    private static String renderCombined(AnalysisResult result, boolean includeApi) {
+        StringBuilder html = new StringBuilder(32_768);
+        html.append("<!DOCTYPE html>\n<html lang=\"en\">\n");
         appendHead(html);
         html.append("<body>\n");
         appendHeader(html, result.meta());
         appendMetadata(html, result.meta());
+
+        // Tab Navigation
+        html.append("  <div class=\"tab-container\">\n");
+        html.append("    <button class=\"tab-button active\" onclick=\"switchTab(event, 'files-tab')\">File Hotspots</button>\n");
+        html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'methods-tab')\">Method Hotspots</button>\n");
+        if (includeApi) {
+            html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'apis-tab')\">REST API Hotspots</button>\n");
+            html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'shared-tab')\">Shared Components</button>\n");
+        }
+        html.append("  </div>\n\n");
+
+        // Tab Content
+        html.append("  <div id=\"files-tab\" class=\"tab-content active\">\n");
         appendFileSection(html, result.fileHotspots());
+        html.append("  </div>\n");
+
+        html.append("  <div id=\"methods-tab\" class=\"tab-content\">\n");
         appendMethodSection(html, result.methodHotspots());
+        html.append("  </div>\n");
+
+        if (includeApi) {
+            html.append("  <div id=\"apis-tab\" class=\"tab-content\">\n");
+            appendApiSection(html, result.apiHotspots());
+            html.append("  </div>\n");
+
+            html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
+            appendSharedSection(html, result.sharedComponents());
+            html.append("  </div>\n");
+        }
+
+        appendScript(html);
+        html.append("</body>\n</html>\n");
+        return html.toString();
+    }
+
+    private static String renderStandalone(AnalysisResult result) {
+        StringBuilder html = new StringBuilder(32_768);
+        html.append("<!DOCTYPE html>\n<html lang=\"en\">\n");
+        appendHead(html);
+        html.append("<body>\n");
+        appendHeader(html, result.meta());
+        appendMetadata(html, result.meta());
+
+        // Tab Navigation
+        html.append("  <div class=\"tab-container\">\n");
+        html.append("    <button class=\"tab-button active\" onclick=\"switchTab(event, 'apis-tab')\">REST API Hotspots</button>\n");
+        html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'shared-tab')\">Shared Components</button>\n");
+        html.append("  </div>\n\n");
+
+        // Tab Content
+        html.append("  <div id=\"apis-tab\" class=\"tab-content active\">\n");
+        appendApiSection(html, result.apiHotspots());
+        html.append("  </div>\n");
+
+        html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
+        appendSharedSection(html, result.sharedComponents());
+        html.append("  </div>\n");
+
         appendScript(html);
         html.append("</body>\n</html>\n");
         return html.toString();
@@ -142,6 +211,78 @@ public class HtmlOutputWriter implements OutputWriter {
                     .params { color: var(--muted); font-size: 0.85em; }
                     footer { margin-top: 48px; color: var(--muted); font-size: 0.85rem;
                              border-top: 1px solid var(--border); padding-top: 12px; }
+                    
+                    /* Tab Navigation Styles */
+                    .tab-container {
+                      margin-top: 24px;
+                      border-bottom: 1px solid var(--border);
+                      display: flex;
+                      gap: 8px;
+                    }
+                    .tab-button {
+                      background: none;
+                      border: none;
+                      border-bottom: 2px solid transparent;
+                      color: var(--muted);
+                      cursor: pointer;
+                      font-size: 1rem;
+                      font-weight: 600;
+                      padding: 8px 16px;
+                      transition: all 0.2s ease;
+                    }
+                    .tab-button:hover {
+                      color: var(--fg);
+                      border-bottom-color: var(--border);
+                    }
+                    .tab-button.active {
+                      color: var(--accent);
+                      border-bottom-color: var(--accent);
+                    }
+                    .tab-content {
+                      display: none;
+                    }
+                    .tab-content.active {
+                      display: block;
+                    }
+
+                    /* HTTP Method Badge Styles */
+                    .method-badge {
+                      display: inline-block;
+                      padding: 2px 8px;
+                      font-size: 0.8rem;
+                      font-weight: 700;
+                      border-radius: 4px;
+                      text-align: center;
+                      color: #fff;
+                    }
+                    .method-badge.get { background-color: #2da44e; }
+                    .method-badge.post { background-color: #0969da; }
+                    .method-badge.put { background-color: #bf8700; }
+                    .method-badge.delete { background-color: #cf222e; }
+                    .method-badge.patch { background-color: #8250df; }
+
+                    /* Details and Collapsible styles */
+                    details {
+                      cursor: pointer;
+                    }
+                    details summary {
+                      font-weight: 600;
+                      color: var(--accent);
+                      outline: none;
+                    }
+                    details ul {
+                      margin: 4px 0 0 0;
+                      padding-left: 20px;
+                      list-style-type: disc;
+                    }
+                    details li {
+                      margin-bottom: 2px;
+                    }
+                    .no-calls {
+                      color: var(--muted);
+                      font-style: italic;
+                    }
+
                     @media (prefers-color-scheme: dark) {
                       :root {
                         --bg: #0d1117; --fg: #c9d1d9; --muted: #8b949e;
@@ -289,6 +430,20 @@ public class HtmlOutputWriter implements OutputWriter {
                   <footer>Sort by clicking a column header. Filter rows by typing in the search box above each table.</footer>
                   <script>
                   (function () {
+                    function switchTab(evt, tabId) {
+                      var contents = document.querySelectorAll('.tab-content');
+                      contents.forEach(function (content) {
+                        content.classList.remove('active');
+                      });
+                      var buttons = document.querySelectorAll('.tab-button');
+                      buttons.forEach(function (button) {
+                        button.classList.remove('active');
+                      });
+                      document.getElementById(tabId).classList.add('active');
+                      evt.currentTarget.classList.add('active');
+                    }
+                    window.switchTab = switchTab;
+
                     function applyFilter(input) {
                       var sel = input.getAttribute('data-filter-target');
                       var table = document.querySelector(sel);
@@ -348,6 +503,112 @@ public class HtmlOutputWriter implements OutputWriter {
                   })();
                   </script>
                 """);
+    }
+
+    private static void appendApiSection(StringBuilder html, List<ApiHotspot> apis) {
+        html.append("  <section>\n");
+        html.append("    <h2>REST API Hotspots (").append(apis.size()).append(" rows)</h2>\n");
+        html.append("    <div class=\"toolbar\">\n");
+        html.append("      <input type=\"search\" data-filter-target=\"#api-hotspots\" "
+                + "placeholder=\"Filter by method, route, or controller…\" aria-label=\"Filter API hotspots\">\n");
+        html.append("      <span class=\"count\" data-count-target=\"#api-hotspots\">")
+                .append(apis.size()).append(" / ").append(apis.size()).append("</span>\n");
+        html.append("    </div>\n");
+        html.append("    <table id=\"api-hotspots\" class=\"sortable\">\n");
+        html.append("      <thead><tr>");
+        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"string\">HTTP Method</th>");
+        html.append("<th data-sort-type=\"string\">Route</th>");
+        html.append("<th data-sort-type=\"string\">Controller Method</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th>Call Graph</th>");
+        html.append("</tr></thead>\n");
+        html.append("      <tbody>\n");
+        int rank = 1;
+        for (ApiHotspot api : apis) {
+            html.append("        <tr>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
+                    .append(rank).append("</td>");
+            html.append("<td><span class=\"method-badge ")
+                    .append(api.httpMethod().toLowerCase()).append("\">")
+                    .append(escape(api.httpMethod())).append("</span></td>");
+            html.append("<td><code>").append(escape(api.route())).append("</code></td>");
+            html.append("<td><code>").append(escape(api.controllerMethod().toCanonicalString())).append("</code></td>");
+            appendNumericCell(html, api.revisions(), api.revisions());
+            appendNumericCell(html, api.loc(), api.loc());
+            appendScoreCell(html, api.score());
+            
+            // Call Graph cell
+            html.append("<td>");
+            if (api.callGraph().isEmpty()) {
+                html.append("<span class=\"no-calls\">None</span>");
+            } else {
+                html.append("<details><summary>").append(api.callGraph().size()).append(" calls</summary><ul>");
+                for (var sig : api.callGraph()) {
+                    html.append("<li><code>").append(escape(sig.toCanonicalString())).append("</code></li>");
+                }
+                html.append("</ul></details>");
+            }
+            html.append("</td>");
+            
+            html.append("</tr>\n");
+            rank++;
+        }
+        html.append("      </tbody>\n");
+        html.append("    </table>\n");
+        html.append("  </section>\n");
+    }
+
+    private static void appendSharedSection(StringBuilder html, List<SharedComponentHotspot> components) {
+        html.append("  <section>\n");
+        html.append("    <h2>Shared Components (").append(components.size()).append(" rows)</h2>\n");
+        html.append("    <div class=\"toolbar\">\n");
+        html.append("      <input type=\"search\" data-filter-target=\"#shared-hotspots\" "
+                + "placeholder=\"Filter by method or calling api…\" aria-label=\"Filter shared components\">\n");
+        html.append("      <span class=\"count\" data-count-target=\"#shared-hotspots\">")
+                .append(components.size()).append(" / ").append(components.size()).append("</span>\n");
+        html.append("    </div>\n");
+        html.append("    <table id=\"shared-hotspots\" class=\"sortable\">\n");
+        html.append("      <thead><tr>");
+        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"string\">Method</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th>Calling APIs</th>");
+        html.append("</tr></thead>\n");
+        html.append("      <tbody>\n");
+        int rank = 1;
+        for (SharedComponentHotspot component : components) {
+            html.append("        <tr>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
+                    .append(rank).append("</td>");
+            html.append("<td><code>").append(escape(component.method().toCanonicalString())).append("</code></td>");
+            appendNumericCell(html, component.revisions(), component.revisions());
+            appendNumericCell(html, component.loc(), component.loc());
+            appendScoreCell(html, component.score());
+            
+            // Calling APIs cell
+            html.append("<td>");
+            if (component.callingApis().isEmpty()) {
+                html.append("<span class=\"no-calls\">None</span>");
+            } else {
+                html.append("<details><summary>").append(component.callingApis().size()).append(" APIs</summary><ul>");
+                for (var api : component.callingApis()) {
+                    html.append("<li><code>").append(escape(api)).append("</code></li>");
+                }
+                html.append("</ul></details>");
+            }
+            html.append("</td>");
+            
+            html.append("</tr>\n");
+            rank++;
+        }
+        html.append("      </tbody>\n");
+        html.append("    </table>\n");
+        html.append("  </section>\n");
     }
 
     private static String escape(String raw) {

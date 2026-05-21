@@ -48,4 +48,33 @@ class YamlOutputWriterTest {
         assertThat(meta).containsEntry("totalCommits", 42);
         assertThat(meta).containsEntry("targetDescription", "LOCAL_GIT:/tmp/example");
     }
+
+    @Test
+    @DisplayName("emits api_report.yml when API analysis is enabled and layout is STANDALONE or BOTH")
+    void shouldEmitApiYamlFiles(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        java.util.List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.YAML),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true);
+
+        Path hotspotsYaml = tempDir.resolve("hotspots.yml");
+        Path apiReportYaml = tempDir.resolve("api_report.yml");
+
+        assertThat(hotspotsYaml).exists();
+        assertThat(apiReportYaml).exists();
+
+        ObjectMapper parser = new ObjectMapper(new YAMLFactory())
+                .registerModule(new JavaTimeModule());
+        
+        Map<String, Object> parsedCombined = parser.readValue(hotspotsYaml.toFile(), Map.class);
+        assertThat(parsedCombined).containsKeys("meta", "fileHotspots", "methodHotspots", "apiHotspots", "sharedComponents");
+
+        Map<String, Object> parsedStandalone = parser.readValue(apiReportYaml.toFile(), Map.class);
+        assertThat(parsedStandalone).containsKeys("meta", "apiHotspots", "sharedComponents");
+        assertThat(parsedStandalone).doesNotContainKey("fileHotspots");
+        assertThat(parsedStandalone).doesNotContainKey("methodHotspots");
+    }
 }

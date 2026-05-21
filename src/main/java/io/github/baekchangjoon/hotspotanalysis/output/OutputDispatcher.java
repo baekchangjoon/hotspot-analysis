@@ -35,6 +35,10 @@ public class OutputDispatcher {
     }
 
     public void dispatch(AnalysisResult result, OutputConfig outputConfig) {
+        dispatch(result, outputConfig, false);
+    }
+
+    public void dispatch(AnalysisResult result, OutputConfig outputConfig, boolean apiEnabled) {
         Objects.requireNonNull(result, "result");
         Objects.requireNonNull(outputConfig, "outputConfig");
         Path outputDir = Path.of(outputConfig.path()).toAbsolutePath().normalize();
@@ -43,7 +47,7 @@ public class OutputDispatcher {
             if (writer == null) {
                 throw new OutputException("No OutputWriter registered for format " + fmt);
             }
-            writer.write(result, outputDir);
+            writer.write(result, outputDir, outputConfig, apiEnabled);
         }
     }
 }

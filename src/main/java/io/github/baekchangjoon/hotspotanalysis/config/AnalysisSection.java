@@ -10,6 +10,16 @@ public record AnalysisSection(
         @NotNull(message = "analysis.target is required") @Valid TargetConfig target,
         @NotNull(message = "analysis.window is required") @Valid WindowConfig window,
         @NotNull(message = "analysis.scope is required") @Valid ScopeConfig scope,
-        @NotNull(message = "analysis.scoring is required") @Valid ScoringConfig scoring
+        @NotNull(message = "analysis.scoring is required") @Valid ScoringConfig scoring,
+        @Valid ApiAnalysisConfig apiAnalysis
 ) {
+    public AnalysisSection {
+        if (apiAnalysis == null) {
+            apiAnalysis = new ApiAnalysisConfig(false, ApiAnalysisConfig.SharedComponentMode.BOTH, java.util.List.of());
+        }
+    }
+
+    public AnalysisSection(TargetConfig target, WindowConfig window, ScopeConfig scope, ScoringConfig scoring) {
+        this(target, window, scope, scoring, new ApiAnalysisConfig(false, ApiAnalysisConfig.SharedComponentMode.BOTH, java.util.List.of()));
+    }
 }

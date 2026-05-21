@@ -317,6 +317,77 @@ class ConfigLoaderTest {
                 .hasMessageContaining("path");
     }
 
+    @Test
+    @DisplayName("loads configuration with default apiAnalysis and apiLayout when omitted")
+    void shouldLoadApiAnalysisConfigWithDefaults(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: ./my-project
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                  scoring:
+                    formula: simple
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 10
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(file);
+
+        assertThat(config.analysis().apiAnalysis()).isNotNull();
+        assertThat(config.analysis().apiAnalysis().enabled()).isFalse();
+        assertThat(config.analysis().apiAnalysis().sharedComponentMode())
+                .isEqualTo(ApiAnalysisConfig.SharedComponentMode.BOTH);
+        assertThat(config.analysis().apiAnalysis().classpathDirectories()).isEmpty();
+        assertThat(config.output().apiLayout()).isEqualTo(OutputConfig.ApiLayout.BOTH);
+    }
+
+    @Test
+    @DisplayName("loads configuration with explicit apiAnalysis and apiLayout values")
+    void shouldLoadApiAnalysisConfigWithExplicitValues(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: ./my-project
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                  scoring:
+                    formula: simple
+                  apiAnalysis:
+                    enabled: true
+                    sharedComponentMode: cumulative
+                    classpathDirectories:
+                      - "target/classes"
+                      - "lib/classes"
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 10
+                  apiLayout: standalone
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(file);
+
+        assertThat(config.analysis().apiAnalysis().enabled()).isTrue();
+        assertThat(config.analysis().apiAnalysis().sharedComponentMode())
+                .isEqualTo(ApiAnalysisConfig.SharedComponentMode.CUMULATIVE);
+        assertThat(config.analysis().apiAnalysis().classpathDirectories())
+                .containsExactly("target/classes", "lib/classes");
+        assertThat(config.output().apiLayout()).isEqualTo(OutputConfig.ApiLayout.STANDALONE);
+    }
+
     private static Path writeYaml(Path dir, String content) throws IOException {
         Path file = dir.resolve("hotspot.yml");
         Files.writeString(file, content);

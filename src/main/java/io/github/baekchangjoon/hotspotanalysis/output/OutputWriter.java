@@ -21,4 +21,8 @@ public interface OutputWriter {
      * granularity).
      */
     void write(AnalysisResult result, Path outputDir);
+
+    default void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
+        write(result, outputDir);
+    }
 }

@@ -134,43 +134,97 @@ jobs:
       - name: Run hotspot self-analysis (demo report for artifact download)
         if: success()
         run: |
-          mkdir -p build/hotspot-demo
-          cat > build/hotspot-demo/hotspot.yml <<'YAML'
+          mkdir -p build/hotspot-demo/repo/src/main/java/com/example
+          mkdir -p build/hotspot-demo/repo/src/main/java/org/springframework/web/bind/annotation
+          mkdir -p build/hotspot-demo/repo/build/classes/java/main
+          
+          # 1. Spring annotation mocks
+          cat > build/hotspot-demo/repo/src/main/java/org/springframework/web/bind/annotation/RestController.java <<'EOF'
+          package org.springframework.web.bind.annotation;
+          import java.lang.annotation.*;
+          @Target(ElementType.TYPE)
+          @Retention(RetentionPolicy.RUNTIME)
+          public @interface RestController {}
+          EOF
+          
+          cat > build/hotspot-demo/repo/src/main/java/org/springframework/web/bind/annotation/GetMapping.java <<'EOF'
+          package org.springframework.web.bind.annotation;
+          import java.lang.annotation.*;
+          @Target(ElementType.METHOD)
+          @Retention(RetentionPolicy.RUNTIME)
+          public @interface GetMapping {
+              String[] value() default {};
+          }
+          EOF
+          
+          # 2. Mock business logic and controller
+          cat > build/hotspot-demo/repo/src/main/java/com/example/MyService.java <<'EOF'
+          package com.example;
+          public class MyService {
+              public void serve() {}
+          }
+          EOF
+          
+          cat > build/hotspot-demo/repo/src/main/java/com/example/MyController.java <<'EOF'
+          package com.example;
+          import org.springframework.web.bind.annotation.*;
+          @RestController
+          public class MyController {
+              private MyService service = new MyService();
+              @GetMapping("/test")
+              public void getTest() {
+                  service.serve();
+              }
+          }
+          EOF
+          
+          # 3. Setup git repo & commits
+          cd build/hotspot-demo/repo
+          git init
+          git config user.email "ci@example.com"
+          git config user.name "CI Builder"
+          git add src/main/java/com/example/MyService.java
+          git commit -m "feat: add MyService"
+          git add src/main/java/org/springframework/web/bind/annotation/*.java src/main/java/com/example/MyController.java
+          git commit -m "feat: add MyController with /test endpoint calling service"
+          
+          # 4. Compile sources
+          javac -d build/classes/java/main $(find src/main/java -name "*.java")
+          
+          # 5. Create hotspot.yml config
+          cat > ../hotspot.yml <<'EOF'
           analysis:
             target:
               type: local-git
-              path: .
+              path: repo
             window:
-              # Cover the lifetime of this repo (created 2026-05-21).
-              since: "2026-05-01"
-              until: "2026-12-31"
+              days: 3650
             scope:
               granularity: [file, method]
-              # Two patterns to cover both single-module repos
-              # (sources under "src/main/java/...") and multi-module
-              # repos (sources under "<module>/src/main/java/..."):
-              # Java NIO's "**" does not match zero path segments, so
-              # neither pattern alone is sufficient.
               include:
                 - "src/main/java/**/*.java"
-                - "**/src/main/java/**/*.java"
-              exclude:
-                - "**/build/**"
-                - "**/test/**"
             scoring:
               formula: simple
+            apiAnalysis:
+              enabled: true
+              sharedComponentMode: BOTH
+              classpathDirectories:
+                - "repo/build/classes/java/main"
           output:
             formats: [csv, yaml, md, html]
-            path: build/hotspot-demo
+            path: .
             topN: 30
-          YAML
-          JAR=$(ls build/libs/hotspot-*.jar | head -1)
+            apiLayout: BOTH
+          EOF
+          
+          # 6. Run analysis
+          JAR=$(ls ../../libs/hotspot-*.jar | head -1)
           echo "Using $JAR"
-          java -jar "$JAR" analyze --config build/hotspot-demo/hotspot.yml
+          java -jar "$JAR" analyze --config ../hotspot.yml
           echo "--- Demo report directory ---"
-          ls -la build/hotspot-demo
+          ls -la ..
 
-      - name: Upload hotspot demo report (file_hotspots.csv, method_hotspots.csv, hotspots.yml, hotspots.md, hotspots.html)
+      - name: Upload hotspot demo report (hotspot files, API reports, and shared components)
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -182,6 +236,10 @@ jobs:
             build/hotspot-demo/hotspots.md
             build/hotspot-demo/hotspots.html
             build/hotspot-demo/hotspot.yml
+            build/hotspot-demo/api_report.md
+            build/hotspot-demo/api_report.html
+            build/hotspot-demo/api_hotspots.csv
+            build/hotspot-demo/shared_components.csv
           if-no-files-found: error
           retention-days: 30
 
