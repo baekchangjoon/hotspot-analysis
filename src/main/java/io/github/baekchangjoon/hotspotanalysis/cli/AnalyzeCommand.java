@@ -88,7 +88,8 @@ public class AnalyzeCommand implements Callable<Integer> {
         try {
             AnalysisConfig config = configLoader.load(configPath);
             AnalysisResult result = analyzer.analyze(config);
-            outputDispatcher.dispatch(result, config.output());
+            boolean apiEnabled = config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled();
+            outputDispatcher.dispatch(result, config.output(), apiEnabled);
             if (!quiet) {
                 printSummary(out, result);
             }

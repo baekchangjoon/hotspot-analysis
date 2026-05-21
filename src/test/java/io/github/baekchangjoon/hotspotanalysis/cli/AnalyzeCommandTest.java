@@ -11,6 +11,7 @@ import io.github.baekchangjoon.hotspotanalysis.output.CsvOutputWriter;
 import io.github.baekchangjoon.hotspotanalysis.output.MarkdownOutputWriter;
 import io.github.baekchangjoon.hotspotanalysis.output.OutputDispatcher;
 import io.github.baekchangjoon.hotspotanalysis.output.YamlOutputWriter;
+import io.github.baekchangjoon.hotspotanalysis.output.HtmlOutputWriter;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import org.eclipse.jgit.api.Git;
@@ -60,7 +61,7 @@ class AnalyzeCommandTest {
         }
 
         OutputDispatcher dispatcher = new OutputDispatcher(List.of(
-                new CsvOutputWriter(), new YamlOutputWriter(), new MarkdownOutputWriter()));
+                new CsvOutputWriter(), new YamlOutputWriter(), new MarkdownOutputWriter(), new HtmlOutputWriter()));
         HotspotAnalyzer analyzer = new HotspotAnalyzer(
                 new VcsProviderFactory(),
                 new JavaSourceCollector(),
@@ -286,5 +287,168 @@ class AnalyzeCommandTest {
                 "alice", "alice@example.com",
                 Date.from(ts), TimeZone.getTimeZone("UTC"));
         git.commit().setAuthor(ident).setCommitter(ident).setMessage("change").call();
+    }
+
+    @Test
+    @DisplayName("runs end-to-end with API analysis enabled, creates api hotspots reports, exits 0")
+    void shouldRunEndToEndWithApiAnalysis() throws Exception {
+        Path srcDir = repoRoot.resolve("src/main/java");
+        Path comExample = srcDir.resolve("com/example");
+        Path springDir = srcDir.resolve("org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.createDirectories(comExample);
+
+        // Write Spring annotations
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping {
+                    String[] value() default {};
+                    String[] path() default {};
+                }
+                """);
+
+        // Write Controller and Service files into git repo, and commit them
+        try (Git git = Git.open(repoRoot.toFile())) {
+            writeJava(git, "src/main/java/com/example/MyService.java",
+                    "package com.example; public class MyService { public void serve() {} }",
+                    Instant.parse("2026-01-10T10:00:00Z"));
+            writeJava(git, "src/main/java/com/example/MyController.java",
+                    """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    @RestController
+                    public class MyController {
+                        private MyService service = new MyService();
+                        @GetMapping("/test")
+                        public void getTest() {
+                            service.serve();
+                        }
+                    }
+                    """,
+                    Instant.parse("2026-01-11T10:00:00Z"));
+        }
+
+        // Compile them dynamically
+        Path buildClasses = repoRoot.resolve("build/classes/java/main");
+        compileJavaFiles(srcDir, buildClasses);
+
+        // Write config
+        Path configFile = writeApiConfig(
+                repoRoot.toString(),
+                outputDir.toString(),
+                List.of("CSV", "YAML", "MD", "HTML"),
+                "both",
+                List.of("build/classes/java/main")
+        );
+
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute("--config", configFile.toString());
+
+        assertThat(exit).isZero();
+
+        // Combined outputs
+        assertThat(outputDir.resolve("file_hotspots.csv")).exists();
+        assertThat(outputDir.resolve("method_hotspots.csv")).exists();
+        assertThat(outputDir.resolve("hotspots.yml")).exists();
+        assertThat(outputDir.resolve("hotspots.md")).exists();
+        assertThat(outputDir.resolve("hotspots.html")).exists();
+
+        // Standalone API outputs
+        assertThat(outputDir.resolve("api_hotspots.csv")).exists();
+        assertThat(outputDir.resolve("shared_components.csv")).exists();
+        assertThat(outputDir.resolve("api_report.yml")).exists();
+        assertThat(outputDir.resolve("api_report.md")).exists();
+        assertThat(outputDir.resolve("api_report.html")).exists();
+
+        String combinedHtml = Files.readString(outputDir.resolve("hotspots.html"));
+        assertThat(combinedHtml).contains("REST API Hotspots");
+        assertThat(combinedHtml).contains("Shared Components");
+        assertThat(combinedHtml).contains("/test");
+        assertThat(combinedHtml).contains("com.example.MyController#getTest()");
+        assertThat(combinedHtml).contains("com.example.MyService#serve()");
+
+        String standaloneHtml = Files.readString(outputDir.resolve("api_report.html"));
+        assertThat(standaloneHtml).contains("REST API Hotspots");
+        assertThat(standaloneHtml).contains("Shared Components");
+        assertThat(standaloneHtml).doesNotContain("File Hotspots");
+        assertThat(standaloneHtml).doesNotContain("Method Hotspots");
+    }
+
+    private Path writeApiConfig(String repoPath, String outPath, List<String> formats, String apiLayout, List<String> classpathDirs) throws Exception {
+        String formatsYaml = formats.stream()
+                .map(f -> "    - " + f)
+                .reduce((a, b) -> a + "\n" + b).orElse("");
+        String classpathYaml = classpathDirs.stream()
+                .map(d -> "      - \"" + d + "\"")
+                .reduce((a, b) -> a + "\n" + b).orElse("");
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                      - method
+                    include:
+                      - "**/*.java"
+                  scoring:
+                    formula: simple
+                  apiAnalysis:
+                    enabled: true
+                    sharedComponentMode: both
+                    classpathDirectories:
+                %s
+                output:
+                  formats:
+                %s
+                  path: %s
+                  topN: 0
+                  apiLayout: %s
+                """.formatted(repoPath, classpathYaml, formatsYaml, outPath, apiLayout);
+        Path config = tempDir.resolve("hotspot-api.yml");
+        Files.writeString(config, yaml);
+        return config;
+    }
+
+    private void compileJavaFiles(Path srcDir, Path destDir) throws Exception {
+        Files.createDirectories(destDir);
+        javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
+        javax.tools.StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null);
+
+        List<java.io.File> files = Files.walk(srcDir)
+                .filter(Files::isRegularFile)
+                .map(Path::toFile)
+                .toList();
+
+        String classpath = System.getProperty("java.class.path");
+        List<String> options = List.of("-d", destDir.toString(), "-classpath", classpath);
+        Iterable<? extends javax.tools.JavaFileObject> compilationUnits = fileManager.getJavaFileObjectsFromFiles(files);
+
+        javax.tools.DiagnosticCollector<javax.tools.JavaFileObject> diagnostics = new javax.tools.DiagnosticCollector<>();
+        javax.tools.JavaCompiler.CompilationTask task = compiler.getTask(null, fileManager, diagnostics, options, null, compilationUnits);
+        boolean success = task.call();
+        if (!success) {
+            for (var d : diagnostics.getDiagnostics()) {
+                System.err.println("COMPILER ERROR: " + d.toString());
+            }
+            throw new RuntimeException("Dynamic compilation of test classes failed.");
+        }
+        fileManager.close();
     }
 }

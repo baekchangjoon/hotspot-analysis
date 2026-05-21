@@ -4,15 +4,20 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.ApiHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.SharedComponentHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.TargetConfig;
+import io.github.baekchangjoon.hotspotanalysis.config.ApiAnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
+import io.github.baekchangjoon.hotspotanalysis.parser.model.ApiMappingInfo;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProvider;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.CommitRecord;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.nio.file.Path;
@@ -20,9 +25,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Orchestrates an end-to-end hotspot analysis run.
@@ -55,19 +62,32 @@ public class HotspotAnalyzer {
     private final RevisionsCalculator revisionsCalculator;
     private final LocCalculator locCalculator;
     private final HotspotScoreCalculator scoreCalculator;
+    private final CallGraphBuilder callGraphBuilder;
 
+    @Autowired
     public HotspotAnalyzer(VcsProviderFactory providerFactory,
                            JavaSourceCollector sourceCollector,
                            JavaSourceParser sourceParser,
                            RevisionsCalculator revisionsCalculator,
                            LocCalculator locCalculator,
                            HotspotScoreCalculator scoreCalculator) {
+        this(providerFactory, sourceCollector, sourceParser, revisionsCalculator, locCalculator, scoreCalculator, new CallGraphBuilder());
+    }
+
+    public HotspotAnalyzer(VcsProviderFactory providerFactory,
+                           JavaSourceCollector sourceCollector,
+                           JavaSourceParser sourceParser,
+                           RevisionsCalculator revisionsCalculator,
+                           LocCalculator locCalculator,
+                           HotspotScoreCalculator scoreCalculator,
+                           CallGraphBuilder callGraphBuilder) {
         this.providerFactory = Objects.requireNonNull(providerFactory);
         this.sourceCollector = Objects.requireNonNull(sourceCollector);
         this.sourceParser = Objects.requireNonNull(sourceParser);
         this.revisionsCalculator = Objects.requireNonNull(revisionsCalculator);
         this.locCalculator = Objects.requireNonNull(locCalculator);
         this.scoreCalculator = Objects.requireNonNull(scoreCalculator);
+        this.callGraphBuilder = Objects.requireNonNull(callGraphBuilder);
     }
 
     public AnalysisResult analyze(AnalysisConfig config) {
@@ -100,10 +120,109 @@ public class HotspotAnalyzer {
         List<MethodHotspot> methods = buildMethodHotspots(
                 methodsByFile, methodRevisions, formula);
 
+        List<ApiHotspot> apiHotspots = new ArrayList<>();
+        List<SharedComponentHotspot> sharedComponents = new ArrayList<>();
+
+        if (config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled()) {
+            ApiAnalysisConfig apiConfig = config.analysis().apiAnalysis();
+            CallGraphBuilder.CallGraphResult cgResult = callGraphBuilder.buildCallGraphs(
+                    repoRoot, javaFiles, apiConfig.classpathDirectories());
+
+            Map<MethodSignature, Integer> locMap = new HashMap<>();
+            Map<MethodSignature, List<ApiMappingInfo>> apiMappingsMap = new HashMap<>();
+            for (List<MethodInfo> list : methodsByFile.values()) {
+                for (MethodInfo m : list) {
+                    locMap.put(m.signature(), m.lineCount());
+                    if (m.apiMappings() != null && !m.apiMappings().isEmpty()) {
+                        apiMappingsMap.put(m.signature(), m.apiMappings());
+                    }
+                }
+            }
+
+            Map<MethodSignature, List<MethodSignature>> callGraphs = cgResult.callGraphs();
+            Map<MethodSignature, List<String>> callingApisMap = new HashMap<>();
+
+            for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
+                MethodSignature apiMethod = entry.getKey();
+                List<ApiMappingInfo> mappings = apiMappingsMap.get(apiMethod);
+                if (mappings == null) continue;
+                for (ApiMappingInfo mapping : mappings) {
+                    String apiSigStr = mapping.httpMethod() + " " + mapping.route();
+                    for (MethodSignature calledMethod : entry.getValue()) {
+                        callingApisMap.computeIfAbsent(calledMethod, k -> new ArrayList<>()).add(apiSigStr);
+                    }
+                }
+            }
+
+            Set<MethodSignature> sharedComponentSignatures = new HashSet<>();
+            if (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE ||
+                apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.BOTH) {
+                for (Map.Entry<MethodSignature, List<String>> entry : callingApisMap.entrySet()) {
+                    if (entry.getValue().size() >= 2) {
+                        sharedComponentSignatures.add(entry.getKey());
+                    }
+                }
+            }
+
+            for (MethodSignature sharedSig : sharedComponentSignatures) {
+                int revs = methodRevisions.getOrDefault(sharedSig, 0);
+                int loc = locMap.getOrDefault(sharedSig, 0);
+                double score = scoreCalculator.calculate(revs, loc, formula);
+                List<String> callingApis = callingApisMap.get(sharedSig);
+                sharedComponents.add(new SharedComponentHotspot(sharedSig, revs, loc, score, callingApis));
+            }
+            sharedComponents.sort(Comparator.comparingDouble(SharedComponentHotspot::score).reversed()
+                    .thenComparing(sc -> sc.method().toCanonicalString()));
+
+            for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
+                MethodSignature controllerMethod = entry.getKey();
+                List<ApiMappingInfo> mappings = apiMappingsMap.get(controllerMethod);
+                if (mappings == null) continue;
+
+                for (ApiMappingInfo mapping : mappings) {
+                    int apiRevs = methodRevisions.getOrDefault(controllerMethod, 0);
+                    int apiLoc = locMap.getOrDefault(controllerMethod, 0);
+
+                    List<MethodSignature> filteredCallGraph = new ArrayList<>();
+
+                    for (MethodSignature calledMethod : entry.getValue()) {
+                        boolean isShared = sharedComponentSignatures.contains(calledMethod);
+                        boolean exclude = isShared && (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE);
+
+                        if (!exclude) {
+                            apiRevs += methodRevisions.getOrDefault(calledMethod, 0);
+                            apiLoc += locMap.getOrDefault(calledMethod, 0);
+                        }
+                        filteredCallGraph.add(calledMethod);
+                    }
+
+                    double apiScore = scoreCalculator.calculate(apiRevs, apiLoc, formula);
+                    apiHotspots.add(new ApiHotspot(
+                            mapping.httpMethod(),
+                            mapping.route(),
+                            controllerMethod,
+                            apiRevs,
+                            apiLoc,
+                            apiScore,
+                            filteredCallGraph
+                    ));
+                }
+            }
+            apiHotspots.sort(Comparator.comparingDouble(ApiHotspot::score).reversed()
+                    .thenComparing(ApiHotspot::route)
+                    .thenComparing(ApiHotspot::httpMethod));
+        }
+
         int topN = config.output().topN();
         if (topN > 0) {
             files = takeTop(files, topN);
             methods = takeTop(methods, topN);
+            if (!apiHotspots.isEmpty()) {
+                apiHotspots = takeTop(apiHotspots, topN);
+            }
+            if (!sharedComponents.isEmpty()) {
+                sharedComponents = takeTop(sharedComponents, topN);
+            }
         }
 
         AnalysisMeta meta = new AnalysisMeta(
@@ -114,7 +233,7 @@ public class HotspotAnalyzer {
                 countMethods(methodsByFile),
                 formula);
 
-        return new AnalysisResult(files, methods, meta);
+        return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta);
     }
 
     private Map<String, List<MethodInfo>> parseAll(Path repoRoot, List<Path> javaFiles) {

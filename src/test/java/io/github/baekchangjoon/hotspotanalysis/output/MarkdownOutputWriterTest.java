@@ -59,4 +59,36 @@ class MarkdownOutputWriterTest {
         assertThat(md).contains("| Scoring formula | SIMPLE |");
         assertThat(md).contains("| Total commits | 42 |");
     }
+
+    @Test
+    @DisplayName("writes hotspots.md (combined) and api_report.md (standalone) when API analysis is enabled")
+    void shouldWriteApiMarkdownFiles(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        java.util.List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.MD),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true);
+
+        Path hotspotsMd = tempDir.resolve("hotspots.md");
+        Path apiReportMd = tempDir.resolve("api_report.md");
+
+        assertThat(hotspotsMd).exists();
+        assertThat(apiReportMd).exists();
+
+        String combinedContent = Files.readString(hotspotsMd);
+        assertThat(combinedContent).contains("# Hotspot Analysis Report");
+        assertThat(combinedContent).contains("## File Hotspots");
+        assertThat(combinedContent).contains("## Method Hotspots");
+        assertThat(combinedContent).contains("## REST API Hotspots");
+        assertThat(combinedContent).contains("## Shared Components");
+
+        String standaloneContent = Files.readString(apiReportMd);
+        assertThat(standaloneContent).contains("# RESTful API Hotspot Analysis Report");
+        assertThat(standaloneContent).doesNotContain("## File Hotspots");
+        assertThat(standaloneContent).doesNotContain("## Method Hotspots");
+        assertThat(standaloneContent).contains("## REST API Hotspots");
+        assertThat(standaloneContent).contains("## Shared Components");
+    }
 }
