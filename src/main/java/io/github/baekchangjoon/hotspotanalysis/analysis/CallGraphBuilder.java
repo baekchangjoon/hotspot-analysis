@@ -187,7 +187,20 @@ public class CallGraphBuilder {
                 if (Files.exists(p)) {
                     try {
                         urls.add(p.toUri().toURL());
-                    } catch (MalformedURLException e) {
+                        if (Files.isDirectory(p)) {
+                            try (var stream = Files.walk(p)) {
+                                stream.filter(Files::isRegularFile)
+                                      .filter(path -> path.toString().endsWith(".jar"))
+                                      .forEach(path -> {
+                                          try {
+                                              urls.add(path.toUri().toURL());
+                                          } catch (MalformedURLException e) {
+                                              // ignore
+                                          }
+                                      });
+                            }
+                        }
+                    } catch (Exception e) {
                         // ignore
                     }
                 }
