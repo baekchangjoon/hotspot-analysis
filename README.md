@@ -1,6 +1,8 @@
 # hotspot-analysis
 
 [![CI](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
+[![Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/.github/badges/jacoco.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
+[![Branch Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/.github/badges/branches.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 
 > Rank Java source files and methods by **Hotspot score** = `revisions × LOC`,
 > so testing effort can be invested where the historical evidence says bugs
