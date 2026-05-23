@@ -15,7 +15,8 @@ public record MethodInfo(
         int startLine,
         int endLine,
         List<ParameterInfo> parameters,
-        List<ApiMappingInfo> apiMappings
+        List<ApiMappingInfo> apiMappings,
+        int cognitiveComplexity
 ) {
 
     public MethodInfo {
@@ -37,8 +38,12 @@ public record MethodInfo(
         }
     }
 
+    public MethodInfo(MethodSignature signature, int startLine, int endLine, List<ParameterInfo> parameters, List<ApiMappingInfo> apiMappings) {
+        this(signature, startLine, endLine, parameters, apiMappings, 0);
+    }
+
     public MethodInfo(MethodSignature signature, int startLine, int endLine, List<ParameterInfo> parameters) {
-        this(signature, startLine, endLine, parameters, List.of());
+        this(signature, startLine, endLine, parameters, List.of(), 0);
     }
 
     public int lineCount() {
