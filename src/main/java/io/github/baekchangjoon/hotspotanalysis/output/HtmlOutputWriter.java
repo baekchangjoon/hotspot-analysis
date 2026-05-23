@@ -81,7 +81,7 @@ public class HtmlOutputWriter implements OutputWriter {
 
         // Tab Content
         html.append("  <div id=\"files-tab\" class=\"tab-content active\">\n");
-        appendFileSection(html, result.fileHotspots());
+        appendFileSection(html, result.fileHotspots(), result.methodHotspots());
         html.append("  </div>\n");
 
         html.append("  <div id=\"methods-tab\" class=\"tab-content\">\n");
@@ -290,6 +290,51 @@ public class HtmlOutputWriter implements OutputWriter {
                         --row-hover: #161b22; --code-bg: #161b22;
                       }
                     }
+
+                    /* X-Ray Drilldown Styles */
+                    .xray-toggle-icon {
+                      font-size: 0.8em;
+                      color: var(--muted);
+                      margin-left: 4px;
+                      transition: transform 0.2s ease;
+                      display: inline-block;
+                    }
+                    .file-row.expanded .xray-toggle-icon {
+                      transform: rotate(90deg);
+                    }
+                    .xray-row {
+                      background: var(--code-bg);
+                    }
+                    .xray-container {
+                      padding: 16px 24px !important;
+                      border-left: 4px solid var(--accent);
+                    }
+                    .xray-title {
+                      font-size: 0.95rem;
+                      font-weight: 600;
+                      margin-bottom: 8px;
+                      color: var(--fg);
+                    }
+                    .xray-table {
+                      width: 100%;
+                      border-collapse: collapse;
+                      font-size: 0.88rem;
+                    }
+                    .xray-table th, .xray-table td {
+                      padding: 6px 12px;
+                      border-bottom: 1px solid var(--border);
+                      text-align: left;
+                    }
+                    .xray-table th {
+                      color: var(--muted);
+                      font-weight: 600;
+                      border-bottom: 2px solid var(--border);
+                    }
+                    .no-methods {
+                      color: var(--muted);
+                      font-style: italic;
+                      margin: 0;
+                    }
                   </style>
                 </head>
                 """);
@@ -321,7 +366,12 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(escape(value)).append("</code></td></tr>\n");
     }
 
-    private static void appendFileSection(StringBuilder html, List<FileHotspot> files) {
+    private static void appendFileSection(StringBuilder html, List<FileHotspot> files, List<MethodHotspot> methodHotspots) {
+        java.util.Map<String, List<MethodHotspot>> methodsByFile = new java.util.HashMap<>();
+        for (MethodHotspot mh : methodHotspots) {
+            methodsByFile.computeIfAbsent(mh.filePath(), k -> new java.util.ArrayList<>()).add(mh);
+        }
+
         html.append("  <section>\n");
         html.append("    <h2>File Hotspots (").append(files.size()).append(" rows)</h2>\n");
         html.append("    <div class=\"toolbar\">\n");
@@ -341,14 +391,64 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      <tbody>\n");
         int rank = 1;
         for (FileHotspot file : files) {
-            html.append("        <tr>");
+            List<MethodHotspot> fileMethods = methodsByFile.getOrDefault(file.path(), java.util.List.of());
+            double totalMethodScore = fileMethods.stream().mapToDouble(MethodHotspot::score).sum();
+
+            html.append("        <tr class=\"file-row\" onclick=\"toggleXray(&#39;xray-")
+                .append(rank).append("&#39;, this)\" style=\"cursor: pointer;\">");
             html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
                     .append(rank).append("</td>");
-            html.append("<td><code>").append(escape(file.path())).append("</code></td>");
+            html.append("<td><code>").append(escape(file.path())).append("</code> <span class=\"xray-toggle-icon\">▶</span></td>");
             appendNumericCell(html, file.revisions(), file.revisions());
             appendNumericCell(html, file.loc(), file.loc());
             appendScoreCell(html, file.score());
             html.append("</tr>\n");
+
+            html.append("        <tr id=\"xray-").append(rank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
+            html.append("          <td colspan=\"5\" class=\"xray-container\">\n");
+            if (fileMethods.isEmpty()) {
+                html.append("            <p class=\"no-methods\">No methods analyzed in this file.</p>\n");
+            } else {
+                html.append("            <div class=\"xray-title\">X-Ray Method Drill-Down for <code>").append(escape(file.path())).append("</code></div>\n");
+                html.append("            <table class=\"xray-table\">\n");
+                html.append("              <thead><tr>");
+                html.append("<th>Method Signature</th>");
+                html.append("<th class=\"num\">Lines</th>");
+                html.append("<th class=\"num\">Complexity</th>");
+                html.append("<th class=\"num\">Decayed Revs</th>");
+                html.append("<th class=\"num\">Coverage</th>");
+                html.append("<th class=\"num\">Score</th>");
+                html.append("<th class=\"num\">Share</th>");
+                html.append("</tr></thead>\n");
+                html.append("              <tbody>\n");
+                for (MethodHotspot mh : fileMethods) {
+                    double share = totalMethodScore > 0 ? (mh.score() / totalMethodScore) * 100.0 : 0.0;
+                    String methodSig = mh.signature().methodName() + "(" + String.join(", ", mh.signature().parameterTypes()) + ")";
+
+                    html.append("                <tr>");
+                    html.append("<td><code>").append(escape(methodSig)).append("</code></td>");
+                    html.append("<td class=\"num\">").append(mh.startLine()).append("&ndash;").append(mh.endLine()).append("</td>");
+
+                    double cc = mh.cognitiveComplexity() != null ? mh.cognitiveComplexity() : 0.0;
+                    html.append("<td class=\"num\">").append((int) cc).append("</td>");
+
+                    double dr = mh.decayedRevisions() != null ? mh.decayedRevisions() : (double) mh.revisions();
+                    html.append("<td class=\"num\">").append(String.format("%.2f", dr)).append("</td>");
+
+                    double cov = mh.coverage() != null ? mh.coverage() : 0.0;
+                    html.append("<td class=\"num\">").append(String.format("%.1f%%", cov * 100.0)).append("</td>");
+
+                    appendScoreCell(html, mh.score());
+
+                    html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
+                    html.append("</tr>\n");
+                }
+                html.append("              </tbody>\n");
+                html.append("            </table>\n");
+            }
+            html.append("          </td>\n");
+            html.append("        </tr>\n");
+
             rank++;
         }
         html.append("      </tbody>\n");
@@ -430,6 +530,19 @@ public class HtmlOutputWriter implements OutputWriter {
                   <footer>Sort by clicking a column header. Filter rows by typing in the search box above each table.</footer>
                   <script>
                   (function () {
+                    function toggleXray(rowId, el) {
+                      var target = document.getElementById(rowId);
+                      if (!target) return;
+                      if (target.style.display === 'none') {
+                        target.style.display = 'table-row';
+                        el.classList.add('expanded');
+                      } else {
+                        target.style.display = 'none';
+                        el.classList.remove('expanded');
+                      }
+                    }
+                    window.toggleXray = toggleXray;
+
                     function switchTab(evt, tabId) {
                       var contents = document.querySelectorAll('.tab-content');
                       contents.forEach(function (content) {
