@@ -15,7 +15,10 @@ public record MethodHotspot(
         int endLine,
         int revisions,
         int loc,
-        double score
+        double score,
+        Double decayedRevisions,
+        Double cognitiveComplexity,
+        Double coverage
 ) {
 
     public MethodHotspot {
@@ -32,5 +35,9 @@ public record MethodHotspot(
             throw new IllegalArgumentException(
                     "revisions and loc must both be >= 0 (was " + revisions + " / " + loc + ")");
         }
+    }
+
+    public MethodHotspot(MethodSignature signature, String filePath, int startLine, int endLine, int revisions, int loc, double score) {
+        this(signature, filePath, startLine, endLine, revisions, loc, score, null, null, null);
     }
 }

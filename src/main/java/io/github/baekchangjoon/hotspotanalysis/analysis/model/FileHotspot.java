@@ -9,7 +9,10 @@ public record FileHotspot(
         String path,
         int revisions,
         int loc,
-        double score
+        double score,
+        Double decayedRevisions,
+        Double cognitiveComplexity,
+        Double coverage
 ) {
 
     public FileHotspot {
@@ -23,5 +26,9 @@ public record FileHotspot(
         if (loc < 0) {
             throw new IllegalArgumentException("loc must be >= 0");
         }
+    }
+
+    public FileHotspot(String path, int revisions, int loc, double score) {
+        this(path, revisions, loc, score, null, null, null);
     }
 }
