@@ -36,6 +36,7 @@ public class HotspotScoreCalculator {
         }
         return switch (formula) {
             case SIMPLE -> (double) revisions * loc;
+            case COMPOSITE -> throw new UnsupportedOperationException("COMPOSITE formula not implemented yet");
         };
     }
 }
