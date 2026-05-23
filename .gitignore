@@ -85,9 +85,19 @@ demo/
 !.env.example
 hotspot.yml
 hotspot.yaml
+hotspot-*.yml
+hotspot-*.yaml
 hotspot.local.yml
 hotspot.local.yaml
 *.pem
 *.key
 credentials.json
 .secrets/
+
+# ─────────────────────────────────────────────────────────────
+# Local development & workspace junk
+# ─────────────────────────────────────────────────────────────
+.antigravitycli/
+*-hotspot-report/
+*-copy-deps.gradle
+init-*.gradle
