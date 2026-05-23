@@ -120,4 +120,97 @@ public class RevisionsCalculator {
             }
         }
     }
+
+    /**
+     * Calculates decayed revisions per file, returning file path -> decayed score.
+     */
+    public Map<String, Double> calculateFileDecayedRevisions(List<CommitRecord> commits, int halfLifeDays, java.time.Instant until) {
+        Map<String, Double> counts = new HashMap<>();
+        double lambda = Math.log(2.0) / halfLifeDays;
+        
+        for (CommitRecord commit : commits) {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(commit.committedAt(), until);
+            if (days < 0) {
+                days = 0;
+            }
+            double weight = Math.exp(-lambda * days);
+            
+            Set<String> pathsTouchedInThisCommit = new HashSet<>();
+            for (FileChange change : commit.changes()) {
+                pathsTouchedInThisCommit.add(change.path());
+            }
+            for (String path : pathsTouchedInThisCommit) {
+                counts.merge(path, weight, Double::sum);
+            }
+        }
+        return Map.copyOf(counts);
+    }
+
+    /**
+     * Calculates decayed revisions per method, returning method signature -> decayed score.
+     */
+    public Map<MethodSignature, Double> calculateMethodDecayedRevisions(
+            List<CommitRecord> commits,
+            Map<String, List<MethodInfo>> methodsByFile,
+            int halfLifeDays,
+            java.time.Instant until) {
+
+        Map<MethodSignature, Double> result = new HashMap<>();
+        for (List<MethodInfo> methods : methodsByFile.values()) {
+            for (MethodInfo method : methods) {
+                result.put(method.signature(), 0.0);
+            }
+        }
+
+        double lambda = Math.log(2.0) / halfLifeDays;
+
+        for (CommitRecord commit : commits) {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(commit.committedAt(), until);
+            if (days < 0) {
+                days = 0;
+            }
+            double weight = Math.exp(-lambda * days);
+
+            Set<MethodSignature> creditedInThisCommit = new HashSet<>();
+            for (FileChange change : commit.changes()) {
+                List<MethodInfo> methods = methodsByFile.get(change.path());
+                if (methods == null || methods.isEmpty()) {
+                    continue;
+                }
+                if (change.hunks().isEmpty()) {
+                    creditAllMethodsInFileDecayed(methods, creditedInThisCommit, result, weight);
+                } else {
+                    creditMethodsOverlappingHunksDecayed(
+                            change.hunks(), methods, creditedInThisCommit, result, weight);
+                }
+            }
+        }
+        return Map.copyOf(result);
+    }
+
+    private void creditAllMethodsInFileDecayed(List<MethodInfo> methods,
+                                                Set<MethodSignature> credited,
+                                                Map<MethodSignature, Double> counts,
+                                                double weight) {
+        for (MethodInfo method : methods) {
+            if (credited.add(method.signature())) {
+                counts.merge(method.signature(), weight, Double::sum);
+            }
+        }
+    }
+
+    private void creditMethodsOverlappingHunksDecayed(List<DiffHunk> hunks,
+                                                       List<MethodInfo> methods,
+                                                       Set<MethodSignature> credited,
+                                                       Map<MethodSignature, Double> counts,
+                                                       double weight) {
+        for (DiffHunk hunk : hunks) {
+            for (MethodInfo method : methods) {
+                if (hunk.overlaps(method.startLine(), method.endLine())
+                        && credited.add(method.signature())) {
+                    counts.merge(method.signature(), weight, Double::sum);
+                }
+            }
+        }
+    }
 }

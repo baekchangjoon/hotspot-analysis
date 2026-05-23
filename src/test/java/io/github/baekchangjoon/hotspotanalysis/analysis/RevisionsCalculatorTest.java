@@ -182,4 +182,44 @@ class RevisionsCalculatorTest {
                 new MethodSignature(fqcn, name, List.of()),
                 start, end, List.<ParameterInfo>of());
     }
+
+    // ---------------------------------------------------------------
+    // Decayed revisions
+    // ---------------------------------------------------------------
+
+    @Test
+    @DisplayName("calculates decayed revisions using half-life decay")
+    void shouldCalculateDecayedRevisions() {
+        Instant tMinus90 = T0.minus(java.time.Duration.ofDays(90));
+        
+        List<CommitRecord> commits = List.of(
+                new CommitRecord("c1", "alice", tMinus90, "msg", List.of(change("A.java"))),
+                new CommitRecord("c2", "alice", T0, "msg", List.of(change("A.java")))
+        );
+
+        Map<String, Double> revisions = calculator.calculateFileDecayedRevisions(commits, 90, T0);
+
+        assertThat(revisions.get("A.java")).isCloseTo(1.5, org.assertj.core.data.Offset.offset(0.01));
+    }
+
+    @Test
+    @DisplayName("calculates decayed revisions for methods")
+    void shouldCalculateMethodDecayedRevisions() {
+        MethodInfo m1 = method("Foo", "alpha", 5, 15);
+        Instant tMinus90 = T0.minus(java.time.Duration.ofDays(90));
+        
+        FileChange edit = new FileChange(
+                "Foo.java", null, 1, 0, ChangeType.MODIFIED,
+                List.of(new DiffHunk(10, 11)));
+        
+        List<CommitRecord> commits = List.of(
+                new CommitRecord("c1", "alice", tMinus90, "msg1", List.of(edit)),
+                new CommitRecord("c2", "alice", T0, "msg2", List.of(edit))
+        );
+
+        Map<MethodSignature, Double> revisions = calculator.calculateMethodDecayedRevisions(
+                commits, Map.of("Foo.java", List.of(m1)), 90, T0);
+
+        assertThat(revisions.get(m1.signature())).isCloseTo(1.5, org.assertj.core.data.Offset.offset(0.01));
+    }
 }
