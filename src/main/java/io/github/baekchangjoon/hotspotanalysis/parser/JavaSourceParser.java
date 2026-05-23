@@ -43,6 +43,8 @@ import java.util.List;
 @Component
 public class JavaSourceParser {
 
+    private final CognitiveComplexityCalculator cognitiveComplexityCalculator = new CognitiveComplexityCalculator();
+
     static {
         StaticJavaParser
                 .getParserConfiguration()
@@ -95,7 +97,8 @@ public class JavaSourceParser {
         MethodSignature signature = new MethodSignature(
                 fqcn, md.getNameAsString(), parameterTypes);
         List<ApiMappingInfo> apiMappings = resolveApiMappings(md);
-        return new MethodInfo(signature, range.begin.line, range.end.line, parameters, apiMappings);
+        int cognitiveComplexity = cognitiveComplexityCalculator.calculate(md);
+        return new MethodInfo(signature, range.begin.line, range.end.line, parameters, apiMappings, cognitiveComplexity);
     }
 
     private List<ApiMappingInfo> resolveApiMappings(MethodDeclaration md) {
