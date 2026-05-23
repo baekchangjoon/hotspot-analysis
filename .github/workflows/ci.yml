@@ -70,13 +70,36 @@ jobs:
           badges-directory: .github/badges
           generate-branches-badge: true
 
-      - name: Commit badge changes
-        if: github.ref == 'refs/heads/main'
+      - name: Publish badges to dedicated branch
+        # `main` is protected (PR-required + status checks), so the workflow
+        # token can't push to it. Instead, mirror the SVGs onto a long-lived
+        # orphan branch named `badges` that is intentionally outside the
+        # protection ruleset. README references the `badges` ref via raw URL.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+
+          WORKTREE="$(mktemp -d)"
+          if git ls-remote --exit-code --heads origin badges >/dev/null 2>&1; then
+            git fetch origin badges:badges
+            git worktree add "$WORKTREE" badges
+          else
+            git worktree add --orphan -b badges "$WORKTREE"
+          fi
+
+          mkdir -p "$WORKTREE/.github/badges"
+          cp .github/badges/*.svg "$WORKTREE/.github/badges/"
+
+          cd "$WORKTREE"
           git add .github/badges
-          git diff --quiet && git diff --staged --quiet || (git commit -m "Update coverage badge" && git push)
+          if git diff --staged --quiet; then
+            echo "Badges unchanged; nothing to publish."
+          else
+            git commit -m "Update coverage badge"
+            git push origin badges
+          fi
 
       - name: Generate test summary
         if: always()
