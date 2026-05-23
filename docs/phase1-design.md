@@ -3,7 +3,7 @@
 > Status: Draft (confirmed 2026-05-21)
 > Scope: Phase 1 — CLI prototype with constrained scope
 > Owner: Baek
-> See also: [`../hotspot-analysis.md`](../hotspot-analysis.md) (theory & background)
+> See also: [`./hotspot-analysis.md`](./hotspot-analysis.md) (theory & background)
 
 ## 0. Goals and Non-goals
 
