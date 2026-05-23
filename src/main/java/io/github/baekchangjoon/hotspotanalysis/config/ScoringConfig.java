@@ -8,11 +8,22 @@ import jakarta.validation.constraints.NotNull;
  * {@code revisions * loc} formula; additional formulas will be added later.
  */
 public record ScoringConfig(
-        @NotNull Formula formula
+        @NotNull Formula formula,
+        Integer decayHalfLifeDays
 ) {
+    public ScoringConfig {
+        if (decayHalfLifeDays == null) {
+            decayHalfLifeDays = 90;
+        }
+    }
+
+    public ScoringConfig(Formula formula) {
+        this(formula, 90);
+    }
 
     public enum Formula {
-        SIMPLE;
+        SIMPLE,
+        COMPOSITE;
 
         @JsonCreator
         public static Formula from(String raw) {
