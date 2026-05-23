@@ -122,7 +122,9 @@ Repo-level docs:
 - `docs/phase1-design.md` — full Phase 1 design (architecture, schema, E2E plan, TDD breakdown).
 - `docs/reports/T1-…T11-*.md` — one completion report per task (chronological).
 - `docs/SESSION-HANDOFF.md` — **this document**.
-- `hotspot-analysis.md` — original theory / methodology notes (read-only reference).
+- `docs/hotspot-analysis.md` — original theory / methodology notes (read-only reference).
+- `docs/hotspot-advanced-theory.md` — advanced techniques survey (Cognitive Complexity, Recency Decay, Coverage Gap, etc.) and feasibility review.
+- `docs/hotspot-advanced-spec.md` — detailed mathematical spec for the advanced techniques selected for implementation.
 
 ---
 
@@ -324,7 +326,9 @@ When starting Phase 2, **always**:
 
 ## 12. References
 
-- Original methodology notes: [`../hotspot-analysis.md`](../hotspot-analysis.md)
+- Original methodology notes: [`./hotspot-analysis.md`](./hotspot-analysis.md)
+- Advanced techniques survey: [`./hotspot-advanced-theory.md`](./hotspot-advanced-theory.md)
+- Advanced techniques spec: [`./hotspot-advanced-spec.md`](./hotspot-advanced-spec.md)
 - Phase 1 design: [`./phase1-design.md`](./phase1-design.md)
 - Per-task completion reports: `./reports/T1-…T11-*.md`
 - Pull request #1 (Phase 1 + hardening):
