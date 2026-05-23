@@ -36,7 +36,20 @@ public class HotspotScoreCalculator {
         }
         return switch (formula) {
             case SIMPLE -> (double) revisions * loc;
-            case COMPOSITE -> throw new UnsupportedOperationException("COMPOSITE formula not implemented yet");
+            case COMPOSITE -> throw new UnsupportedOperationException("Use calculateComposite for COMPOSITE formula");
         };
+    }
+
+    public double calculateComposite(double decayedRevisions, double cognitiveComplexity, double coverage) {
+        if (decayedRevisions < 0) {
+            throw new IllegalArgumentException("decayedRevisions must be >= 0");
+        }
+        if (cognitiveComplexity < 0) {
+            throw new IllegalArgumentException("cognitiveComplexity must be >= 0");
+        }
+        if (coverage < 0.0 || coverage > 1.0) {
+            throw new IllegalArgumentException("coverage must be between 0.0 and 1.0");
+        }
+        return cognitiveComplexity * decayedRevisions * (1.0 / (coverage + 0.1));
     }
 }

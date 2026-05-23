@@ -104,6 +104,93 @@ class HotspotCliE2ETest {
     }
 
     @Test
+    @DisplayName("hotspot analyze with composite formula runs end-to-end and outputs advanced statistics")
+    void shouldRunCompositeAnalyzeEndToEndViaSpring(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Path outDir = tempDir.resolve("out");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    """
+                    package com.example;
+                    public class Hot {
+                      void m(int x) {
+                        if (x > 0) {
+                          for (int i=0; i<x; i++) {}
+                        }
+                      }
+                    }
+                    """,
+                    Instant.parse("2026-05-20T10:00:00Z"));
+            writeJava(git, "src/main/java/com/example/Cold.java",
+                    "package com.example; public class Cold { void n() {} }",
+                    Instant.parse("2026-01-01T10:00:00Z"));
+        }
+
+        // Write a mock JaCoCo report
+        Path jacocoReport = tempDir.resolve("jacoco.xml");
+        Files.writeString(jacocoReport, """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <report name="hotspot-analysis">
+                  <package name="com/example">
+                    <sourcefile name="Hot.java">
+                      <line nr="2" mi="0" ci="1" mb="0" cb="0"/>
+                      <line nr="3" mi="0" ci="1" mb="0" cb="0"/>
+                      <line nr="4" mi="0" ci="1" mb="0" cb="0"/>
+                      <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                    </sourcefile>
+                    <sourcefile name="Cold.java">
+                      <line nr="1" mi="1" ci="0" mb="0" cb="0"/>
+                    </sourcefile>
+                  </package>
+                </report>
+                """);
+
+        Path configFile = tempDir.resolve("hotspot.yml");
+        Files.writeString(configFile, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    until: 2026-05-23
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                      - method
+                    include:
+                      - "**/*.java"
+                  scoring:
+                    formula: composite
+                    decayHalfLifeDays: 90
+                  jacocoReportPath: %s
+                output:
+                  formats:
+                    - CSV
+                    - YAML
+                    - MD
+                    - HTML
+                  path: %s
+                  topN: 0
+                """.formatted(repoRoot, jacocoReport, outDir));
+
+        application.run("analyze", "--config", configFile.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isZero();
+        assertThat(Files.exists(outDir.resolve("file_hotspots.csv"))).isTrue();
+        assertThat(Files.exists(outDir.resolve("method_hotspots.csv"))).isTrue();
+        assertThat(Files.exists(outDir.resolve("hotspots.html"))).isTrue();
+
+        String html = Files.readString(outDir.resolve("hotspots.html"));
+        assertThat(html).contains("Hot.java");
+        assertThat(html).contains("X-Ray Method Drill-Down");
+        assertThat(html).contains("toggleXray");
+        assertThat(html).contains("Complexity");
+    }
+
+    @Test
     @DisplayName("hotspot init --output <file> writes a working sample (exit 0)")
     void shouldInitConfig(@TempDir Path tempDir) {
         Path target = tempDir.resolve("hotspot.yml");
