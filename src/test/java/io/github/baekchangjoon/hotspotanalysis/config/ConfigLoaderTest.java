@@ -371,6 +371,34 @@ class ConfigLoaderTest {
         return file;
     }
 
+    @Test
+    @DisplayName("rejects legacy scoring.formula key with friendly migration message")
+    void rejectsLegacyScoringFormulaKeyWithFriendlyMessage(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: /tmp/some-repo
+                  window:
+                    days: 365
+                  scope:
+                    granularity: [file]
+                    include: ["src/main/java/**/*.java"]
+                  scoring:
+                    formula: simple
+                output:
+                  formats: [csv]
+                  path: ./hotspot-report
+                  topN: 0
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        assertThatThrownBy(() -> newLoaderWithEnv(Map.of()).load(file))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("scoring.formula has been removed")
+                .hasMessageContaining("Delete this line");
+    }
+
     private static ConfigLoader newLoaderWithEnv(Map<String, String> env) {
         return new ConfigLoader(new EnvironmentVariableResolver(env::get));
     }
