@@ -480,3 +480,11 @@ dependencies {
 5. CodeScene or other commercial tool integration (any phase)
 
 These will be revisited as each phase approaches.
+
+## 13. v0.2: Unified scoring model
+
+Starting v0.2, the `SIMPLE`/`COMPOSITE` distinction is gone. Every run
+computes both scores plus the four input factors and emits them side by
+side in every output format. See
+`docs/superpowers/specs/2026-05-25-unified-scoring-design.md` for the
+approved design.

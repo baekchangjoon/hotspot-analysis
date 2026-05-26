@@ -1,5 +1,11 @@
 # Hotspot Analysis 고도화 상세 명세 및 계산 공식
 
+> **v0.2 note.** Starting v0.2, all four factors described below
+> (Recency Decay, Cognitive Complexity, Coverage Multiplier, X-Ray) are
+> always computed — there is no longer a `formula: simple|composite`
+> toggle. See `docs/advanced-techniques-verification.md` for the
+> validation results.
+
 이 문서는 `hotspot-analysis` 프로젝트에 추가로 도입할 고도화 핵심 기법들(A-2, B-2, C-4, C-5)의 동작 원리, 상세 수학적 계산 공식 및 컴포넌트 아키텍처 설계를 설명합니다.
 
 ---

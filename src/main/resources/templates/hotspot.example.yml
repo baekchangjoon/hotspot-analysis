@@ -41,10 +41,15 @@ analysis:
       - "**/target/**"
 
   scoring:
-    # Half-life (days) for the exponential recency-decay weight applied to
-    # commits. 90 is the default; raise for slow-moving legacy code, lower
-    # for fast-moving features.
+    # Optional. Half-life (days) for the exponential recency decay weight
+    # applied to each commit. 90 days is the default; raise for slow-moving
+    # legacy code, lower for fast-moving features.
     decayHalfLifeDays: 90
+
+  # Optional. When supplied, every file/method's Coverage Multiplier is
+  # computed as 1 / (line_coverage + 0.1). Absent → multiplier defaults
+  # to 1.0 (no coverage penalty).
+  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # csv | yaml | md | html (multiple allowed, case-insensitive)
