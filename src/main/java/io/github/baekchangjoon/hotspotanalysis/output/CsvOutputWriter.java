@@ -13,11 +13,17 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Writes the analysis result as CSV files: {@code file_hotspots.csv},
  * {@code method_hotspots.csv}, and optionally API analysis files.
+ *
+ * <p>Column order follows the canonical 7-metric block:
+ * {@code loc, revisions, simple_score, recency_decay, cognitive_complexity,
+ * coverage_multiplier, composite_score}.</p>
  */
 @Component
 public class CsvOutputWriter implements OutputWriter {
@@ -64,14 +70,19 @@ public class CsvOutputWriter implements OutputWriter {
 
     private void writeFileHotspots(AnalysisResult result, Path target) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,path,revisions,loc,score\n");
+            writer.write("rank,path,loc,revisions,simple_score,recency_decay,"
+                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
             int rank = 1;
-            for (FileHotspot file : result.fileHotspots()) {
+            for (FileHotspot f : result.fileHotspots()) {
                 writer.write(rank++ + ","
-                        + escape(file.path()) + ","
-                        + file.revisions() + ","
-                        + file.loc() + ","
-                        + formatScore(file.simpleScore()) + "\n");
+                        + escape(f.path()) + ","
+                        + f.loc() + ","
+                        + f.revisions() + ","
+                        + fmt(f.simpleScore()) + ","
+                        + fmt(f.recencyDecay()) + ","
+                        + fmt(f.cognitiveComplexity()) + ","
+                        + fmt(f.coverageMultiplier()) + ","
+                        + fmt(f.compositeScore()) + "\n");
             }
         }
     }
@@ -79,19 +90,72 @@ public class CsvOutputWriter implements OutputWriter {
     private void writeMethodHotspots(AnalysisResult result, Path target) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
             writer.write("rank,fqcn,method,parameters,file,start_line,end_line,"
-                    + "revisions,loc,score\n");
+                    + "loc,revisions,simple_score,recency_decay,"
+                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
             int rank = 1;
-            for (MethodHotspot method : result.methodHotspots()) {
+            for (MethodHotspot m : result.methodHotspots()) {
                 writer.write(rank++ + ","
-                        + escape(method.signature().fullyQualifiedClassName()) + ","
-                        + escape(method.signature().methodName()) + ","
-                        + escape(String.join(";", method.signature().parameterTypes())) + ","
-                        + escape(method.filePath()) + ","
-                        + method.startLine() + ","
-                        + method.endLine() + ","
-                        + method.revisions() + ","
-                        + method.loc() + ","
-                        + formatScore(method.simpleScore()) + "\n");
+                        + escape(m.signature().fullyQualifiedClassName()) + ","
+                        + escape(m.signature().methodName()) + ","
+                        + escape(String.join(";", m.signature().parameterTypes())) + ","
+                        + escape(m.filePath()) + ","
+                        + m.startLine() + ","
+                        + m.endLine() + ","
+                        + m.loc() + ","
+                        + m.revisions() + ","
+                        + fmt(m.simpleScore()) + ","
+                        + fmt(m.recencyDecay()) + ","
+                        + fmt(m.cognitiveComplexity()) + ","
+                        + fmt(m.coverageMultiplier()) + ","
+                        + fmt(m.compositeScore()) + "\n");
+            }
+        }
+    }
+
+    private void writeApiHotspots(AnalysisResult result, Path target) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
+            writer.write("rank,http_method,route,fqcn,method,parameters,"
+                    + "loc,revisions,simple_score,recency_decay,"
+                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
+            int rank = 1;
+            for (ApiHotspot api : result.apiHotspots()) {
+                writer.write(rank++ + ","
+                        + escape(api.httpMethod()) + ","
+                        + escape(api.route()) + ","
+                        + escape(api.controllerMethod().fullyQualifiedClassName()) + ","
+                        + escape(api.controllerMethod().methodName()) + ","
+                        + escape(String.join(";", api.controllerMethod().parameterTypes())) + ","
+                        + api.loc() + ","
+                        + api.revisions() + ","
+                        + fmt(api.simpleScore()) + ","
+                        + fmt(api.recencyDecay()) + ","
+                        + fmt(api.cognitiveComplexity()) + ","
+                        + fmt(api.coverageMultiplier()) + ","
+                        + fmt(api.compositeScore()) + "\n");
+            }
+        }
+    }
+
+    private void writeSharedComponents(AnalysisResult result, Path target) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
+            writer.write("rank,fqcn,method,parameters,"
+                    + "loc,revisions,simple_score,recency_decay,"
+                    + "cognitive_complexity,coverage_multiplier,composite_score,"
+                    + "calling_apis\n");
+            int rank = 1;
+            for (SharedComponentHotspot component : result.sharedComponents()) {
+                writer.write(rank++ + ","
+                        + escape(component.method().fullyQualifiedClassName()) + ","
+                        + escape(component.method().methodName()) + ","
+                        + escape(String.join(";", component.method().parameterTypes())) + ","
+                        + component.loc() + ","
+                        + component.revisions() + ","
+                        + fmt(component.simpleScore()) + ","
+                        + fmt(component.recencyDecay()) + ","
+                        + fmt(component.cognitiveComplexity()) + ","
+                        + fmt(component.coverageMultiplier()) + ","
+                        + fmt(component.compositeScore()) + ","
+                        + escape(String.join(";", component.callingApis())) + "\n");
             }
         }
     }
@@ -103,46 +167,14 @@ public class CsvOutputWriter implements OutputWriter {
         return "\"" + raw.replace("\"", "\"\"") + "\"";
     }
 
-    private static String formatScore(double score) {
-        if (score == Math.floor(score) && !Double.isInfinite(score)) {
-            return String.valueOf((long) score);
+    /**
+     * Formats a double: no decimals when the value is a whole number,
+     * otherwise 4 decimal places with US locale (dot separator).
+     */
+    private static String fmt(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) {
+            return Long.toString((long) v);
         }
-        return String.format("%.4f", score);
-    }
-
-    private void writeApiHotspots(AnalysisResult result, Path target) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,http_method,route,controller_method,revisions,loc,score,call_graph\n");
-            int rank = 1;
-            for (ApiHotspot api : result.apiHotspots()) {
-                List<String> cgSigs = new java.util.ArrayList<>();
-                for (var sig : api.callGraph()) {
-                    cgSigs.add(sig.toCanonicalString());
-                }
-                writer.write(rank++ + ","
-                        + escape(api.httpMethod()) + ","
-                        + escape(api.route()) + ","
-                        + escape(api.controllerMethod().toCanonicalString()) + ","
-                        + api.revisions() + ","
-                        + api.loc() + ","
-                        + formatScore(api.simpleScore()) + ","
-                        + escape(String.join(";", cgSigs)) + "\n");
-            }
-        }
-    }
-
-    private void writeSharedComponents(AnalysisResult result, Path target) throws IOException {
-        try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,method,revisions,loc,score,calling_apis\n");
-            int rank = 1;
-            for (SharedComponentHotspot component : result.sharedComponents()) {
-                writer.write(rank++ + ","
-                        + escape(component.method().toCanonicalString()) + ","
-                        + component.revisions() + ","
-                        + component.loc() + ","
-                        + formatScore(component.simpleScore()) + ","
-                        + escape(String.join(";", component.callingApis())) + "\n");
-            }
-        }
+        return String.format(Locale.ROOT, "%.4f", v);
     }
 }

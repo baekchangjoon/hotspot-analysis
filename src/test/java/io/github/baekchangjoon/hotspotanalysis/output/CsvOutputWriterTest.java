@@ -28,11 +28,12 @@ class CsvOutputWriterTest {
         Path csv = tempDir.resolve("file_hotspots.csv");
         assertThat(csv).exists();
         String content = Files.readString(csv);
-        assertThat(content).startsWith("rank,path,revisions,loc,score\n");
+        assertThat(content).startsWith(
+                "rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
         assertThat(content).contains(
-                "1,src/main/java/com/example/Hot.java,5,120,600\n");
+                "1,src/main/java/com/example/Hot.java,120,5,600,4.2500,8,1,34\n");
         assertThat(content).contains(
-                "2,src/main/java/com/example/Cold.java,1,30,30\n");
+                "2,src/main/java/com/example/Cold.java,30,1,30,0.7500,2,1,1.5000\n");
     }
 
     @Test
@@ -44,13 +45,13 @@ class CsvOutputWriterTest {
         assertThat(csv).exists();
         String content = Files.readString(csv);
         assertThat(content).startsWith(
-                "rank,fqcn,method,parameters,file,start_line,end_line,revisions,loc,score\n");
+                "rank,fqcn,method,parameters,file,start_line,end_line,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
         assertThat(content).contains(
                 "1,com.example.Hot,doWork,int;String,"
-                        + "src/main/java/com/example/Hot.java,12,28,4,17,68\n");
+                        + "src/main/java/com/example/Hot.java,12,28,17,4,68,3.4000,6,1,20.4000\n");
         assertThat(content).contains(
                 "2,com.example.Hot,doWork,,"
-                        + "src/main/java/com/example/Hot.java,30,32,1,3,3\n");
+                        + "src/main/java/com/example/Hot.java,30,32,3,1,3,0.8500,2,1,1.7000\n");
     }
 
     @Test
@@ -96,7 +97,7 @@ class CsvOutputWriterTest {
         writer.write(result, tempDir);
 
         assertThat(Files.readString(tempDir.resolve("file_hotspots.csv")))
-                .contains("1,A.java,3,7,21.5000\n");
+                .contains("1,A.java,7,3,21.5000,1,1,1,1\n");
     }
 
     @Test
@@ -117,11 +118,15 @@ class CsvOutputWriterTest {
         assertThat(sharedCsv).exists();
 
         String apiContent = Files.readString(apiCsv);
-        assertThat(apiContent).startsWith("rank,http_method,route,controller_method,revisions,loc,score,call_graph\n");
-        assertThat(apiContent).contains("1,GET,/api/a,com.example.MyController#apiA(),5,120,600,com.example.MyService#commonMethod()");
+        assertThat(apiContent).startsWith(
+                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
+        assertThat(apiContent).contains(
+                "1,GET,/api/a,com.example.MyController,apiA,,120,5,600,4.2500,8,1,34\n");
 
         String sharedContent = Files.readString(sharedCsv);
-        assertThat(sharedContent).startsWith("rank,method,revisions,loc,score,calling_apis\n");
-        assertThat(sharedContent).contains("1,com.example.MyService#commonMethod(),1,30,30,GET /api/a");
+        assertThat(sharedContent).startsWith(
+                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score,calling_apis\n");
+        assertThat(sharedContent).contains(
+                "1,com.example.MyService,commonMethod,,30,1,30,0.8500,2,1,1.7000,GET /api/a\n");
     }
 }
