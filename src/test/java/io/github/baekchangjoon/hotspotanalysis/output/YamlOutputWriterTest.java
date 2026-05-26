@@ -203,6 +203,18 @@ class YamlOutputWriterTest {
     }
 
     @Test
+    @DisplayName("whole-number scores are emitted as integers, not floats (e.g. 600 not 600.0)")
+    void emitsWholeNumberSimpleScoreAsInteger(@TempDir Path tempDir) throws IOException {
+        // sampleResult() → Hot.java has loc=120, revisions=5 → simpleScore=600.0 (whole number)
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+
+        String yaml = Files.readString(tempDir.resolve("hotspots.yml"));
+        // 600 must be emitted as integer, not as 600.0
+        assertThat(yaml).contains("simpleScore: 600\n");
+        assertThat(yaml).doesNotContain("simpleScore: 600.0");
+    }
+
+    @Test
     @DisplayName("sharedComponent rows use canonical flat key layout in correct order")
     void shouldEmitCanonicalSharedComponentKeys(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,

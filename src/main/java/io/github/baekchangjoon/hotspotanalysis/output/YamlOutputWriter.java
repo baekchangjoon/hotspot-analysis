@@ -166,11 +166,11 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("path", f.path());
         m.put("loc", f.loc());
         m.put("revisions", f.revisions());
-        m.put("simpleScore", round4(f.simpleScore()));
-        m.put("recencyDecay", round4(f.recencyDecay()));
-        m.put("cognitiveComplexity", round4(f.cognitiveComplexity()));
-        m.put("coverageMultiplier", round4(f.coverageMultiplier()));
-        m.put("compositeScore", round4(f.compositeScore()));
+        m.put("simpleScore", asYamlNumber(f.simpleScore()));
+        m.put("recencyDecay", asYamlNumber(f.recencyDecay()));
+        m.put("cognitiveComplexity", asYamlNumber(f.cognitiveComplexity()));
+        m.put("coverageMultiplier", asYamlNumber(f.coverageMultiplier()));
+        m.put("compositeScore", asYamlNumber(f.compositeScore()));
         return m;
     }
 
@@ -229,11 +229,11 @@ public class YamlOutputWriter implements OutputWriter {
                                        double compositeScore) {
         m.put("loc", loc);
         m.put("revisions", revisions);
-        m.put("simpleScore", round4(simpleScore));
-        m.put("recencyDecay", round4(recencyDecay));
-        m.put("cognitiveComplexity", round4(cognitiveComplexity));
-        m.put("coverageMultiplier", round4(coverageMultiplier));
-        m.put("compositeScore", round4(compositeScore));
+        m.put("simpleScore", asYamlNumber(simpleScore));
+        m.put("recencyDecay", asYamlNumber(recencyDecay));
+        m.put("cognitiveComplexity", asYamlNumber(cognitiveComplexity));
+        m.put("coverageMultiplier", asYamlNumber(coverageMultiplier));
+        m.put("compositeScore", asYamlNumber(compositeScore));
     }
 
     /** Converts a list of {@link MethodSignature} to canonical strings for YAML sequences. */
@@ -245,5 +245,17 @@ public class YamlOutputWriter implements OutputWriter {
 
     private static double round4(double v) {
         return Math.round(v * 10_000.0) / 10_000.0;
+    }
+
+    /**
+     * Returns a {@code long} when the value is a whole number so that the YAML
+     * serialiser emits {@code 600} instead of {@code 600.0}, matching the
+     * integer rendering used by the CSV/Markdown/HTML writers.
+     */
+    private static Object asYamlNumber(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) {
+            return (long) v;
+        }
+        return round4(v);
     }
 }
