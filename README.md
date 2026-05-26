@@ -4,7 +4,8 @@
 [![Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/jacoco.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 [![Branch Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/branches.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 
-> Rank Java source files and methods by **Hotspot score** = `revisions × LOC`,
+> Rank Java source files and methods by a **Composite Hotspot Score** that
+> combines recency-weighted revisions, cognitive complexity, and coverage gap —
 > so testing effort can be invested where the historical evidence says bugs
 > are most likely to live.
 > Based on Adam Tornhill's *Your Code as a Crime Scene* methodology.
@@ -23,7 +24,7 @@ in CSV / YAML / Markdown.
 - **YAML configuration** — strongly typed, validated via Jakarta Bean Validation, env-var substitution.
 - **Four output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly), **HTML (browser-ready, sortable, filterable, XSS-safe, dark-mode aware)**.
 - **Self-analysis demo in CI** — every CI run produces a fresh `hotspot-demo-report-<N>` artifact you can download and open in a browser.
-- **145 tests, 0 failures** — every layer is covered (contract tests + unit + Spring Boot E2E).
+- **Comprehensive tests across every layer** — contract tests + unit + Spring Boot E2E, 0 failures.
 
 ---
 
@@ -83,7 +84,7 @@ analysis:
       - "**/target/**"
 
   scoring:
-    formula: simple   # Phase 1: revisions x loc
+    decayHalfLifeDays: 90   # half-life for recency decay (days)
 
 output:
   # Case-insensitive: csv | yaml | md | html (multiple allowed)
@@ -102,7 +103,7 @@ Outputs:
 
 ```
 hotspot-report/
-├── file_hotspots.csv      ← CSV is split per granularity (5- vs 10-column headers)
+├── file_hotspots.csv      ← CSV is split per granularity (9 columns for files, 14 for methods)
 ├── method_hotspots.csv
 ├── hotspots.yml           ← YAML/MD/HTML bundle both granularities in one document
 ├── hotspots.md
@@ -110,8 +111,8 @@ hotspot-report/
 ```
 
 > **Why are CSVs split but YAML/MD/HTML combined?**
-> CSV is a single-header tabular format and the file (5 cols) and method
-> (10 cols) reports can't share a header, so they are emitted as two files
+> CSV is a single-header tabular format and the file (9 cols) and method
+> (14 cols) reports can't share a header, so they are emitted as two files
 > for Excel/Sheets ease of use. YAML, Markdown, and HTML are document
 > formats that naturally hold both tables in one file — easier to attach
 > to a PR (`.md`), feed downstream automation (`.yml`), or open in a browser
@@ -180,7 +181,7 @@ Commands:
 | `analysis.scope.granularity[]` | `file` \| `method` | Both can be selected |
 | `analysis.scope.include[]` | glob[] | At least one entry required |
 | `analysis.scope.exclude[]` | glob[] | Optional |
-| `analysis.scoring.formula` | `simple` | `revisions × loc` (Phase 1) |
+| `analysis.scoring.decayHalfLifeDays` | integer ≥ 1 | Half-life for recency decay; default 90 days |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | At least one |
 | `output.path` | string | Output directory |
 | `output.topN` | integer ≥ 0 | `0` means "all rows" |
@@ -193,22 +194,21 @@ documentation examples don't trigger errors.
 
 ## How the score is computed
 
-```
-For each file F in scope:
-  revisions(F) = number of commits in window touching F
-  loc(F)       = current line count of F
-  score(F)     = revisions(F) × loc(F)            ← SIMPLE formula
+Every report now carries **two scores** and **four input factors** side by side, in this canonical order:
 
-For each method M in F:
-  revisions(M) = commits whose diff hunks overlap the M's line range
-                 (falls back to file-level when hunk info is unavailable)
-  loc(M)       = M.endLine − M.startLine + 1
-  score(M)     = revisions(M) × loc(M)
-```
+| Column | Meaning |
+|---|---|
+| LOC | Current line count of the artifact |
+| Revisions | Number of commits within the window that touched it |
+| Simple Score | `Revisions × LOC` — Adam Tornhill's original signal |
+| Recency Decay | `Σ exp(-ln(2) × Δt / halfLife)` over the same commits |
+| Cognitive Complexity | SonarQube-inspired AST-walk score |
+| Coverage Multiplier | `1 / (line_coverage + 0.1)` from JaCoCo XML; 1.0 if no report supplied |
+| Composite Score | `Cognitive Complexity × Recency Decay × Coverage Multiplier` |
 
-Multi-edit dedup: a commit that touches the same file (or method's range)
-multiple times still counts as **one** revision, matching
-`git log --oneline -- <path> | wc -l`.
+Rows are sorted by **Composite Score DESC** (ties broken by path / canonical signature).
+
+CSVs split per granularity (9 columns for files, 14 for methods); YAML/MD/HTML bundle every granularity into one document.
 
 ---
 
@@ -356,7 +356,7 @@ alternatives.
 ## Development
 
 ```bash
-./gradlew test            # 145 tests, ~10s
+./gradlew test            # comprehensive test suite, ~10s
 ./gradlew build           # full assembly
 ./gradlew check           # tests + static analysis
 ```
