@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 class HotspotScoreCalculatorTest {
 
@@ -50,5 +51,62 @@ class HotspotScoreCalculatorTest {
     void shouldRejectNullFormula() {
         assertThatThrownBy(() -> calculator.calculate(1, 1, null))
                 .isInstanceOf(NullPointerException.class);
+    }
+
+    @Test
+    void simpleMultipliesRevisionsByLoc() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThat(c.simple(3, 120)).isEqualTo(360.0);
+    }
+
+    @Test
+    void simpleRejectsNegativeInputs() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThatThrownBy(() -> c.simple(-1, 10))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> c.simple(1, -5))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void compositeMultipliesAllThreeFactors() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThat(c.composite(25.0, 0.425, 0.9381))
+                .isCloseTo(9.97, within(0.01));
+    }
+
+    @Test
+    void compositeRejectsInvalidInputs() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThatThrownBy(() -> c.composite(-1, 0.5, 1.0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> c.composite(1.0, -0.5, 1.0))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> c.composite(1.0, 0.5, 0.0))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void multiplierReturnsOneWhenCoverageAbsent() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThat(c.multiplier(java.util.OptionalDouble.empty())).isEqualTo(1.0);
+    }
+
+    @Test
+    void multiplierReturnsInverseShiftedCoverage() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThat(c.multiplier(java.util.OptionalDouble.of(0.0)))
+                .isCloseTo(10.0, within(1e-9));
+        assertThat(c.multiplier(java.util.OptionalDouble.of(1.0)))
+                .isCloseTo(1.0 / 1.1, within(1e-9));
+    }
+
+    @Test
+    void multiplierRejectsOutOfRangeCoverage() {
+        HotspotScoreCalculator c = new HotspotScoreCalculator();
+        assertThatThrownBy(() -> c.multiplier(java.util.OptionalDouble.of(-0.01)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> c.multiplier(java.util.OptionalDouble.of(1.01)))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 }
