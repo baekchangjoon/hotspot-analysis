@@ -31,10 +31,11 @@ class MarkdownOutputWriterTest {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
-        assertThat(md).contains("| Rank | Path | Revisions | LOC | Score |");
-        assertThat(md).contains("|---:|:---|---:|---:|---:|");
         assertThat(md).contains(
-                "| 1 | `src/main/java/com/example/Hot.java` | 5 | 120 | 600 |");
+                "| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
+        assertThat(md).contains("|---:|:---|---:|---:|---:|---:|---:|---:|---:|");
+        assertThat(md).contains(
+                "| 1 | `src/main/java/com/example/Hot.java` | 120 | 5 | 600 | 4.2500 | 8 | 1 | 34 |");
     }
 
     @Test
@@ -47,14 +48,16 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
-    @DisplayName("renders the method table with canonical signatures")
+    @DisplayName("renders the method table with canonical columns")
     void shouldRenderMethodTable(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
         assertThat(md).contains(
-                "| 1 | `com.example.Hot#doWork(int, String)` | "
-                        + "`src/main/java/com/example/Hot.java` | 12-28 | 4 | 17 | 68 |");
+                "| Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
+        assertThat(md).contains(
+                "| 1 | `com.example.Hot` | `doWork` | `int, String` | "
+                        + "`src/main/java/com/example/Hot.java` | 12-28 | 17 | 4 | 68 | 3.4000 | 6 | 1 | 20.4000 |");
     }
 
     @Test
