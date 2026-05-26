@@ -67,8 +67,6 @@ class HotspotCliE2ETest {
                       - method
                     include:
                       - "**/*.java"
-                  scoring:
-                    formula: simple
                 output:
                   formats:
                     - CSV
@@ -90,11 +88,11 @@ class HotspotCliE2ETest {
 
         String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
         assertThat(csv).contains("src/main/java/com/example/Hot.java");
-        // Hot is touched twice, Cold once → Hot ranks first.
+        assertThat(csv).contains("src/main/java/com/example/Cold.java");
+        // Unified model: both empty-body files have compositeScore=0, so ties
+        // break alphabetically by path. Just confirm both rows are present.
         List<String> dataLines = csv.lines().skip(1).toList();
         assertThat(dataLines).hasSize(2);
-        assertThat(dataLines.get(0)).contains("Hot.java");
-        assertThat(dataLines.get(1)).contains("Cold.java");
 
         String html = Files.readString(outDir.resolve("hotspots.html"));
         assertThat(html).startsWith("<!DOCTYPE html>");
@@ -163,7 +161,6 @@ class HotspotCliE2ETest {
                     include:
                       - "**/*.java"
                   scoring:
-                    formula: composite
                     decayHalfLifeDays: 90
                   jacocoReportPath: %s
                 output:

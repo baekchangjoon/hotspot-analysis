@@ -354,7 +354,6 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  <table class=\"meta-table\">\n");
         appendMetaRow(html, "Generated at", meta.analyzedAt().toString());
         appendMetaRow(html, "Target",       meta.targetDescription());
-        appendMetaRow(html, "Scoring formula", meta.scoringFormula().name());
         appendMetaRow(html, "Total commits", Integer.toString(meta.totalCommits()));
         appendMetaRow(html, "Total files",   Integer.toString(meta.totalFiles()));
         appendMetaRow(html, "Total methods", Integer.toString(meta.totalMethods()));
@@ -392,7 +391,7 @@ public class HtmlOutputWriter implements OutputWriter {
         int rank = 1;
         for (FileHotspot file : files) {
             List<MethodHotspot> fileMethods = methodsByFile.getOrDefault(file.path(), java.util.List.of());
-            double totalMethodScore = fileMethods.stream().mapToDouble(MethodHotspot::score).sum();
+            double totalMethodScore = fileMethods.stream().mapToDouble(MethodHotspot::simpleScore).sum();
 
             html.append("        <tr class=\"file-row\" onclick=\"toggleXray(&#39;xray-")
                 .append(rank).append("&#39;, this)\" style=\"cursor: pointer;\">");
@@ -401,7 +400,7 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td><code>").append(escape(file.path())).append("</code> <span class=\"xray-toggle-icon\">▶</span></td>");
             appendNumericCell(html, file.revisions(), file.revisions());
             appendNumericCell(html, file.loc(), file.loc());
-            appendScoreCell(html, file.score());
+            appendScoreCell(html, file.simpleScore());
             html.append("</tr>\n");
 
             html.append("        <tr id=\"xray-").append(rank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
@@ -415,30 +414,30 @@ public class HtmlOutputWriter implements OutputWriter {
                 html.append("<th>Method Signature</th>");
                 html.append("<th class=\"num\">Lines</th>");
                 html.append("<th class=\"num\">Complexity</th>");
-                html.append("<th class=\"num\">Decayed Revs</th>");
-                html.append("<th class=\"num\">Coverage</th>");
+                html.append("<th class=\"num\">Recency Decay</th>");
+                html.append("<th class=\"num\">Coverage Multiplier</th>");
                 html.append("<th class=\"num\">Score</th>");
                 html.append("<th class=\"num\">Share</th>");
                 html.append("</tr></thead>\n");
                 html.append("              <tbody>\n");
                 for (MethodHotspot mh : fileMethods) {
-                    double share = totalMethodScore > 0 ? (mh.score() / totalMethodScore) * 100.0 : 0.0;
+                    double share = totalMethodScore > 0 ? (mh.simpleScore() / totalMethodScore) * 100.0 : 0.0;
                     String methodSig = mh.signature().methodName() + "(" + String.join(", ", mh.signature().parameterTypes()) + ")";
 
                     html.append("                <tr>");
                     html.append("<td><code>").append(escape(methodSig)).append("</code></td>");
                     html.append("<td class=\"num\">").append(mh.startLine()).append("&ndash;").append(mh.endLine()).append("</td>");
 
-                    double cc = mh.cognitiveComplexity() != null ? mh.cognitiveComplexity() : 0.0;
+                    double cc = mh.cognitiveComplexity();
                     html.append("<td class=\"num\">").append((int) cc).append("</td>");
 
-                    double dr = mh.decayedRevisions() != null ? mh.decayedRevisions() : (double) mh.revisions();
+                    double dr = mh.recencyDecay();
                     html.append("<td class=\"num\">").append(String.format("%.2f", dr)).append("</td>");
 
-                    double cov = mh.coverage() != null ? mh.coverage() : 0.0;
-                    html.append("<td class=\"num\">").append(String.format("%.1f%%", cov * 100.0)).append("</td>");
+                    double mult = mh.coverageMultiplier();
+                    html.append("<td class=\"num\">").append(String.format("%.2f", mult)).append("</td>");
 
-                    appendScoreCell(html, mh.score());
+                    appendScoreCell(html, mh.simpleScore());
 
                     html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
                     html.append("</tr>\n");
@@ -498,7 +497,7 @@ public class HtmlOutputWriter implements OutputWriter {
                     .append("\">").append(lineRange).append("</td>");
             appendNumericCell(html, method.revisions(), method.revisions());
             appendNumericCell(html, method.loc(), method.loc());
-            appendScoreCell(html, method.score());
+            appendScoreCell(html, method.simpleScore());
             html.append("</tr>\n");
             rank++;
         }
@@ -651,7 +650,7 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td><code>").append(escape(api.controllerMethod().toCanonicalString())).append("</code></td>");
             appendNumericCell(html, api.revisions(), api.revisions());
             appendNumericCell(html, api.loc(), api.loc());
-            appendScoreCell(html, api.score());
+            appendScoreCell(html, api.simpleScore());
             
             // Call Graph cell
             html.append("<td>");
@@ -701,7 +700,7 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td><code>").append(escape(component.method().toCanonicalString())).append("</code></td>");
             appendNumericCell(html, component.revisions(), component.revisions());
             appendNumericCell(html, component.loc(), component.loc());
-            appendScoreCell(html, component.score());
+            appendScoreCell(html, component.simpleScore());
             
             // Calling APIs cell
             html.append("<td>");

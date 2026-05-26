@@ -70,7 +70,6 @@ public class MarkdownOutputWriter implements OutputWriter {
         sb.append("| Field | Value |\n|---|---|\n");
         sb.append("| Generated at | ").append(meta.analyzedAt()).append(" |\n");
         sb.append("| Target | `").append(meta.targetDescription()).append("` |\n");
-        sb.append("| Scoring formula | ").append(meta.scoringFormula()).append(" |\n");
         sb.append("| Total commits | ").append(meta.totalCommits()).append(" |\n");
         sb.append("| Total files | ").append(meta.totalFiles()).append(" |\n");
         sb.append("| Total methods | ").append(meta.totalMethods()).append(" |\n\n");
@@ -94,7 +93,6 @@ public class MarkdownOutputWriter implements OutputWriter {
         sb.append("| Field | Value |\n|---|---|\n");
         sb.append("| Generated at | ").append(meta.analyzedAt()).append(" |\n");
         sb.append("| Target | `").append(meta.targetDescription()).append("` |\n");
-        sb.append("| Scoring formula | ").append(meta.scoringFormula()).append(" |\n");
         sb.append("| Total commits | ").append(meta.totalCommits()).append(" |\n");
         sb.append("| Total files | ").append(meta.totalFiles()).append(" |\n");
         sb.append("| Total methods | ").append(meta.totalMethods()).append(" |\n\n");
@@ -114,7 +112,7 @@ public class MarkdownOutputWriter implements OutputWriter {
             sb.append("| ").append(rank++).append(" | `").append(file.path()).append("` | ")
                     .append(file.revisions()).append(" | ")
                     .append(file.loc()).append(" | ")
-                    .append(formatScore(file.score())).append(" |\n");
+                    .append(formatScore(file.simpleScore())).append(" |\n");
         }
         sb.append("\n");
     }
@@ -131,7 +129,7 @@ public class MarkdownOutputWriter implements OutputWriter {
                     .append(method.startLine()).append("-").append(method.endLine()).append(" | ")
                     .append(method.revisions()).append(" | ")
                     .append(method.loc()).append(" | ")
-                    .append(formatScore(method.score())).append(" |\n");
+                    .append(formatScore(method.simpleScore())).append(" |\n");
         }
         sb.append("\n");
     }
@@ -152,7 +150,7 @@ public class MarkdownOutputWriter implements OutputWriter {
                     .append(api.controllerMethod().toCanonicalString()).append("` | ")
                     .append(api.revisions()).append(" | ")
                     .append(api.loc()).append(" | ")
-                    .append(formatScore(api.score())).append(" | ")
+                    .append(formatScore(api.simpleScore())).append(" | ")
                     .append(String.join("<br>", cgSigs)).append(" |\n");
         }
         sb.append("\n");
@@ -172,7 +170,7 @@ public class MarkdownOutputWriter implements OutputWriter {
                     .append(component.method().toCanonicalString()).append("` | ")
                     .append(component.revisions()).append(" | ")
                     .append(component.loc()).append(" | ")
-                    .append(formatScore(component.score())).append(" | ")
+                    .append(formatScore(component.simpleScore())).append(" | ")
                     .append(String.join("<br>", apis)).append(" |\n");
         }
         sb.append("\n");

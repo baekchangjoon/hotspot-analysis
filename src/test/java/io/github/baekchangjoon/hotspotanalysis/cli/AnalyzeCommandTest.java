@@ -112,7 +112,7 @@ class AnalyzeCommandTest {
     @DisplayName("returns exit code 1 when the configuration is invalid")
     void shouldFailWhenConfigInvalid() throws Exception {
         Path configFile = tempDir.resolve("bad.yml");
-        Files.writeString(configFile, "analysis:\n  scoring:\n    formula: SIMPLE\n");
+        Files.writeString(configFile, "analysis: {}\n");
 
         StringWriter errWriter = new StringWriter();
         CommandLine cli = new CommandLine(command);
@@ -230,8 +230,6 @@ class AnalyzeCommandTest {
                       - method
                     include:
                       - "**/*.java"
-                  scoring:
-                    formula: simple
                 output:
                   formats:
                 %s
@@ -263,8 +261,6 @@ class AnalyzeCommandTest {
                       - method
                     include:
                       - "%s"
-                  scoring:
-                    formula: simple
                 output:
                   formats:
                 %s
@@ -407,8 +403,6 @@ class AnalyzeCommandTest {
                       - method
                     include:
                       - "**/*.java"
-                  scoring:
-                    formula: simple
                   apiAnalysis:
                     enabled: true
                     sharedComponentMode: both

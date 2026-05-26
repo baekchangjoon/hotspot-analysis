@@ -30,7 +30,7 @@ class YamlOutputWriterTest {
         assertThat(content).contains("fileHotspots:");
         assertThat(content).contains("methodHotspots:");
         assertThat(content).contains("analyzedAt: \"2026-05-21T09:00:00Z\"");
-        assertThat(content).contains("scoringFormula: \"SIMPLE\"");
+        assertThat(content).doesNotContain("scoringFormula");
     }
 
     @Test

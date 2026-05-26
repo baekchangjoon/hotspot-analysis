@@ -7,7 +7,6 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.ApiHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.SharedComponentHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
-import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.TargetConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ApiAnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
@@ -29,10 +28,15 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.OptionalDouble;
 import java.util.Set;
 
 /**
- * Orchestrates an end-to-end hotspot analysis run.
+ * Orchestrates an end-to-end hotspot analysis run using the unified
+ * scoring model: every file and method always receives both the
+ * Simple (revisions × LOC) and Composite (cognitive-complexity ×
+ * recency-decay × coverage-multiplier) scores, plus the four input
+ * factors that feed them.
  *
  * <p>Pipeline:
  * <ol>
@@ -40,10 +44,12 @@ import java.util.Set;
  *   <li>Load commits inside the configured {@code window}.</li>
  *   <li>Walk the working tree, collect Java files matching the {@code scope}.</li>
  *   <li>Parse each file → list of {@link MethodInfo}.</li>
- *   <li>Compute file-level and method-level revisions.</li>
- *   <li>Compute LOC per file (current working-tree value) and per method.</li>
- *   <li>Combine via {@link HotspotScoreCalculator} into score values.</li>
- *   <li>Sort by descending score, apply {@code output.topN} if set.</li>
+ *   <li>Compute revisions, LOC, recency-decayed revisions, cognitive
+ *       complexity, and coverage multiplier for every file & method.</li>
+ *   <li>Combine via {@link HotspotScoreCalculator} into both Simple and
+ *       Composite scores.</li>
+ *   <li>Sort by descending Composite score; apply {@code output.topN}
+ *       if set.</li>
  *   <li>Return immutable {@link AnalysisResult}.</li>
  * </ol>
  *
@@ -114,221 +120,47 @@ public class HotspotAnalyzer {
         Map<String, Integer> fileLoc =
                 locCalculator.countLines(repoRoot, methodsByFile.keySet());
 
-        ScoringConfig.Formula formula = config.analysis().scoring().formula();
-        List<FileHotspot> files;
-        List<MethodHotspot> methods;
+        Instant untilInstant = (config.analysis().window().until() != null)
+                ? config.analysis().window().until().plusDays(1)
+                        .atStartOfDay(java.time.ZoneOffset.UTC).toInstant().minusNanos(1)
+                : Instant.now();
+        int halfLifeDays = config.analysis().scoring().decayHalfLifeDays();
 
-        io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser = new io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser();
-        if (config.analysis().jacocoReportPath() != null && !config.analysis().jacocoReportPath().isEmpty()) {
-            Path jacocoPath = Path.of(config.analysis().jacocoReportPath());
-            if (!jacocoPath.isAbsolute()) {
-                jacocoPath = repoRoot.resolve(jacocoPath);
-            }
-            jacocoParser.parse(jacocoPath);
+        Map<String, Double> fileDecayed =
+                revisionsCalculator.calculateFileDecayedRevisions(commits, halfLifeDays, untilInstant);
+        Map<MethodSignature, Double> methodDecayed =
+                revisionsCalculator.calculateMethodDecayedRevisions(commits, methodsByFile, halfLifeDays, untilInstant);
+
+        boolean jacocoSupplied =
+                config.analysis().jacocoReportPath() != null
+                        && !config.analysis().jacocoReportPath().isEmpty();
+        io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser =
+                new io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser();
+        if (jacocoSupplied) {
+            Path p = Path.of(config.analysis().jacocoReportPath());
+            if (!p.isAbsolute()) p = repoRoot.resolve(p);
+            jacocoParser.parse(p);
         }
 
-        Map<MethodSignature, Double> methodComplexities = new HashMap<>();
-        Map<MethodSignature, Double> methodCoverages = new HashMap<>();
-        for (Map.Entry<String, List<MethodInfo>> entry : methodsByFile.entrySet()) {
-            String path = entry.getKey();
-            for (MethodInfo m : entry.getValue()) {
-                methodComplexities.put(m.signature(), (double) m.cognitiveComplexity());
-                double cov = jacocoParser.getMethodCoverage(path, m.startLine(), m.endLine());
-                methodCoverages.put(m.signature(), cov);
-            }
-        }
-
-        if (formula == ScoringConfig.Formula.COMPOSITE) {
-            Instant untilInstant = Instant.now();
-            if (config.analysis().window().until() != null) {
-                untilInstant = config.analysis().window().until().plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().minusNanos(1);
-            }
-            int halfLifeDays = config.analysis().scoring().decayHalfLifeDays() != null ? config.analysis().scoring().decayHalfLifeDays() : 90;
-
-            Map<String, Double> fileDecayedRevisions = revisionsCalculator.calculateFileDecayedRevisions(commits, halfLifeDays, untilInstant);
-            Map<MethodSignature, Double> methodDecayedRevisions = revisionsCalculator.calculateMethodDecayedRevisions(commits, methodsByFile, halfLifeDays, untilInstant);
-
-            files = buildCompositeFileHotspots(methodsByFile, fileRevisions, fileLoc, fileDecayedRevisions, jacocoParser);
-            methods = buildCompositeMethodHotspots(methodsByFile, methodRevisions, methodDecayedRevisions, jacocoParser);
-        } else {
-            files = buildFileHotspots(methodsByFile.keySet(), fileRevisions, fileLoc, formula);
-            methods = buildMethodHotspots(methodsByFile, methodRevisions, formula);
-        }
+        List<FileHotspot> files = buildFileHotspots(
+                methodsByFile, fileRevisions, fileLoc, fileDecayed, jacocoParser, jacocoSupplied);
+        List<MethodHotspot> methods = buildMethodHotspots(
+                methodsByFile, methodRevisions, methodDecayed, jacocoParser, jacocoSupplied);
 
         List<ApiHotspot> apiHotspots = new ArrayList<>();
         List<SharedComponentHotspot> sharedComponents = new ArrayList<>();
-
         if (config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled()) {
-            ApiAnalysisConfig apiConfig = config.analysis().apiAnalysis();
-            CallGraphBuilder.CallGraphResult cgResult = callGraphBuilder.buildCallGraphs(
-                    repoRoot, javaFiles, apiConfig.classpathDirectories());
-
-            Map<MethodSignature, Integer> locMap = new HashMap<>();
-            Map<MethodSignature, List<ApiMappingInfo>> apiMappingsMap = new HashMap<>();
-            for (List<MethodInfo> list : methodsByFile.values()) {
-                for (MethodInfo m : list) {
-                    locMap.put(m.signature(), m.lineCount());
-                    if (m.apiMappings() != null && !m.apiMappings().isEmpty()) {
-                        apiMappingsMap.put(m.signature(), m.apiMappings());
-                    }
-                }
-            }
-
-            Map<MethodSignature, List<MethodSignature>> callGraphs = cgResult.callGraphs();
-            Map<MethodSignature, List<String>> callingApisMap = new HashMap<>();
-
-            for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
-                MethodSignature apiMethod = entry.getKey();
-                List<ApiMappingInfo> mappings = apiMappingsMap.get(apiMethod);
-                if (mappings == null) continue;
-                for (ApiMappingInfo mapping : mappings) {
-                    String apiSigStr = mapping.httpMethod() + " " + mapping.route();
-                    for (MethodSignature calledMethod : entry.getValue()) {
-                        callingApisMap.computeIfAbsent(calledMethod, k -> new ArrayList<>()).add(apiSigStr);
-                    }
-                }
-            }
-
-            Set<MethodSignature> sharedComponentSignatures = new HashSet<>();
-            if (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE ||
-                apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.BOTH) {
-                for (Map.Entry<MethodSignature, List<String>> entry : callingApisMap.entrySet()) {
-                    if (entry.getValue().size() >= 2) {
-                        sharedComponentSignatures.add(entry.getKey());
-                    }
-                }
-            }
-
-            if (formula == ScoringConfig.Formula.COMPOSITE) {
-                Instant untilInstant = Instant.now();
-                if (config.analysis().window().until() != null) {
-                    untilInstant = config.analysis().window().until().plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().minusNanos(1);
-                }
-                int halfLifeDays = config.analysis().scoring().decayHalfLifeDays() != null ? config.analysis().scoring().decayHalfLifeDays() : 90;
-                Map<MethodSignature, Double> methodDecayedRevisions = revisionsCalculator.calculateMethodDecayedRevisions(commits, methodsByFile, halfLifeDays, untilInstant);
-
-                for (MethodSignature sharedSig : sharedComponentSignatures) {
-                    double decayedRevs = methodDecayedRevisions.getOrDefault(sharedSig, 0.0);
-                    double complexity = methodComplexities.getOrDefault(sharedSig, 0.0);
-                    double coverage = methodCoverages.getOrDefault(sharedSig, 0.0);
-                    double score = scoreCalculator.calculateComposite(decayedRevs, complexity, coverage);
-                    List<String> callingApis = callingApisMap.get(sharedSig);
-                    sharedComponents.add(new SharedComponentHotspot(sharedSig, methodRevisions.getOrDefault(sharedSig, 0), locMap.getOrDefault(sharedSig, 0), score, callingApis));
-                }
-            } else {
-                for (MethodSignature sharedSig : sharedComponentSignatures) {
-                    int revs = methodRevisions.getOrDefault(sharedSig, 0);
-                    int loc = locMap.getOrDefault(sharedSig, 0);
-                    double score = scoreCalculator.calculate(revs, loc, formula);
-                    List<String> callingApis = callingApisMap.get(sharedSig);
-                    sharedComponents.add(new SharedComponentHotspot(sharedSig, revs, loc, score, callingApis));
-                }
-            }
-            sharedComponents.sort(Comparator.comparingDouble(SharedComponentHotspot::score).reversed()
-                    .thenComparing(sc -> sc.method().toCanonicalString()));
-
-            if (formula == ScoringConfig.Formula.COMPOSITE) {
-                Instant untilInstant = Instant.now();
-                if (config.analysis().window().until() != null) {
-                    untilInstant = config.analysis().window().until().plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant().minusNanos(1);
-                }
-                int halfLifeDays = config.analysis().scoring().decayHalfLifeDays() != null ? config.analysis().scoring().decayHalfLifeDays() : 90;
-                Map<MethodSignature, Double> methodDecayedRevisions = revisionsCalculator.calculateMethodDecayedRevisions(commits, methodsByFile, halfLifeDays, untilInstant);
-
-                for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
-                    MethodSignature controllerMethod = entry.getKey();
-                    List<ApiMappingInfo> mappings = apiMappingsMap.get(controllerMethod);
-                    if (mappings == null) continue;
-
-                    for (ApiMappingInfo mapping : mappings) {
-                        double apiDecayedRevs = methodDecayedRevisions.getOrDefault(controllerMethod, 0.0);
-                        double apiComplexity = methodComplexities.getOrDefault(controllerMethod, 0.0);
-                        double sumCoverage = methodCoverages.getOrDefault(controllerMethod, 0.0);
-                        int count = 1;
-
-                        int apiRevs = methodRevisions.getOrDefault(controllerMethod, 0);
-                        int apiLoc = locMap.getOrDefault(controllerMethod, 0);
-
-                        List<MethodSignature> filteredCallGraph = new ArrayList<>();
-
-                        for (MethodSignature calledMethod : entry.getValue()) {
-                            boolean isShared = sharedComponentSignatures.contains(calledMethod);
-                            boolean exclude = isShared && (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE);
-
-                            if (!exclude) {
-                                apiRevs += methodRevisions.getOrDefault(calledMethod, 0);
-                                apiLoc += locMap.getOrDefault(calledMethod, 0);
-                                apiDecayedRevs += methodDecayedRevisions.getOrDefault(calledMethod, 0.0);
-                                apiComplexity += methodComplexities.getOrDefault(calledMethod, 0.0);
-                                sumCoverage += methodCoverages.getOrDefault(calledMethod, 0.0);
-                                count++;
-                            }
-                            filteredCallGraph.add(calledMethod);
-                        }
-
-                        double apiScore = scoreCalculator.calculateComposite(apiDecayedRevs, apiComplexity, sumCoverage / count);
-                        apiHotspots.add(new ApiHotspot(
-                                mapping.httpMethod(),
-                                mapping.route(),
-                                controllerMethod,
-                                apiRevs,
-                                apiLoc,
-                                apiScore,
-                                filteredCallGraph
-                        ));
-                    }
-                }
-            } else {
-                for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
-                    MethodSignature controllerMethod = entry.getKey();
-                    List<ApiMappingInfo> mappings = apiMappingsMap.get(controllerMethod);
-                    if (mappings == null) continue;
-
-                    for (ApiMappingInfo mapping : mappings) {
-                        int apiRevs = methodRevisions.getOrDefault(controllerMethod, 0);
-                        int apiLoc = locMap.getOrDefault(controllerMethod, 0);
-
-                        List<MethodSignature> filteredCallGraph = new ArrayList<>();
-
-                        for (MethodSignature calledMethod : entry.getValue()) {
-                            boolean isShared = sharedComponentSignatures.contains(calledMethod);
-                            boolean exclude = isShared && (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE);
-
-                            if (!exclude) {
-                                apiRevs += methodRevisions.getOrDefault(calledMethod, 0);
-                                apiLoc += locMap.getOrDefault(calledMethod, 0);
-                            }
-                            filteredCallGraph.add(calledMethod);
-                        }
-
-                        double apiScore = scoreCalculator.calculate(apiRevs, apiLoc, formula);
-                        apiHotspots.add(new ApiHotspot(
-                                mapping.httpMethod(),
-                                mapping.route(),
-                                controllerMethod,
-                                apiRevs,
-                                apiLoc,
-                                apiScore,
-                                filteredCallGraph
-                        ));
-                    }
-                }
-            }
-            apiHotspots.sort(Comparator.comparingDouble(ApiHotspot::score).reversed()
-                    .thenComparing(ApiHotspot::route)
-                    .thenComparing(ApiHotspot::httpMethod));
+            buildApiAndShared(repoRoot, config, javaFiles, methodsByFile,
+                    methodRevisions, methodDecayed, jacocoParser, jacocoSupplied,
+                    apiHotspots, sharedComponents);
         }
 
         int topN = config.output().topN();
         if (topN > 0) {
             files = takeTop(files, topN);
             methods = takeTop(methods, topN);
-            if (!apiHotspots.isEmpty()) {
-                apiHotspots = takeTop(apiHotspots, topN);
-            }
-            if (!sharedComponents.isEmpty()) {
-                sharedComponents = takeTop(sharedComponents, topN);
-            }
+            if (!apiHotspots.isEmpty()) apiHotspots = takeTop(apiHotspots, topN);
+            if (!sharedComponents.isEmpty()) sharedComponents = takeTop(sharedComponents, topN);
         }
 
         AnalysisMeta meta = new AnalysisMeta(
@@ -336,9 +168,7 @@ public class HotspotAnalyzer {
                 "LOCAL_GIT:" + repoRoot,
                 commits.size(),
                 methodsByFile.size(),
-                countMethods(methodsByFile),
-                formula);
-
+                countMethods(methodsByFile));
         return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta);
     }
 
@@ -351,100 +181,202 @@ public class HotspotAnalyzer {
         return result;
     }
 
-    private List<FileHotspot> buildFileHotspots(java.util.Set<String> paths,
-                                                Map<String, Integer> fileRevisions,
-                                                Map<String, Integer> fileLoc,
-                                                ScoringConfig.Formula formula) {
-        List<FileHotspot> hotspots = new ArrayList<>();
-        for (String path : paths) {
+    private List<FileHotspot> buildFileHotspots(
+            Map<String, List<MethodInfo>> methodsByFile,
+            Map<String, Integer> fileRevisions,
+            Map<String, Integer> fileLoc,
+            Map<String, Double> fileDecayed,
+            io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
+            boolean jacocoSupplied) {
+        List<FileHotspot> out = new ArrayList<>();
+        for (Map.Entry<String, List<MethodInfo>> e : methodsByFile.entrySet()) {
+            String path = e.getKey();
             int revisions = fileRevisions.getOrDefault(path, 0);
             int loc = fileLoc.getOrDefault(path, 0);
-            double score = scoreCalculator.calculate(revisions, loc, formula);
-            hotspots.add(new FileHotspot(path, revisions, loc, score));
+            double simple = scoreCalculator.simple(revisions, loc);
+            double decayed = fileDecayed.getOrDefault(path, 0.0);
+            double cc = 0.0;
+            for (MethodInfo m : e.getValue()) cc += m.cognitiveComplexity();
+            double mult = scoreCalculator.multiplier(
+                    jacocoSupplied ? OptionalDouble.of(jacoco.getFileCoverage(path))
+                                   : OptionalDouble.empty());
+            double composite = scoreCalculator.composite(cc, decayed, mult);
+            out.add(new FileHotspot(path, loc, revisions, simple, decayed, cc, mult, composite));
         }
-        hotspots.sort(Comparator
-                .comparingDouble(FileHotspot::score).reversed()
+        out.sort(Comparator.comparingDouble(FileHotspot::compositeScore).reversed()
                 .thenComparing(FileHotspot::path));
-        return hotspots;
+        return out;
     }
 
-    private List<MethodHotspot> buildMethodHotspots(Map<String, List<MethodInfo>> methodsByFile,
-                                                    Map<MethodSignature, Integer> methodRevisions,
-                                                    ScoringConfig.Formula formula) {
-        List<MethodHotspot> hotspots = new ArrayList<>();
-        for (Map.Entry<String, List<MethodInfo>> entry : methodsByFile.entrySet()) {
-            for (MethodInfo method : entry.getValue()) {
-                int revisions = methodRevisions.getOrDefault(method.signature(), 0);
-                int loc = method.lineCount();
-                double score = scoreCalculator.calculate(revisions, loc, formula);
-                hotspots.add(new MethodHotspot(
-                        method.signature(), entry.getKey(),
-                        method.startLine(), method.endLine(),
-                        revisions, loc, score));
+    private List<MethodHotspot> buildMethodHotspots(
+            Map<String, List<MethodInfo>> methodsByFile,
+            Map<MethodSignature, Integer> methodRevisions,
+            Map<MethodSignature, Double> methodDecayed,
+            io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
+            boolean jacocoSupplied) {
+        List<MethodHotspot> out = new ArrayList<>();
+        for (Map.Entry<String, List<MethodInfo>> e : methodsByFile.entrySet()) {
+            String path = e.getKey();
+            for (MethodInfo m : e.getValue()) {
+                int revisions = methodRevisions.getOrDefault(m.signature(), 0);
+                int loc = m.lineCount();
+                double simple = scoreCalculator.simple(revisions, loc);
+                double decayed = methodDecayed.getOrDefault(m.signature(), 0.0);
+                double cc = m.cognitiveComplexity();
+                double mult = scoreCalculator.multiplier(
+                        jacocoSupplied
+                                ? OptionalDouble.of(
+                                        jacoco.getMethodCoverage(path, m.startLine(), m.endLine()))
+                                : OptionalDouble.empty());
+                double composite = scoreCalculator.composite(cc, decayed, mult);
+                out.add(new MethodHotspot(
+                        m.signature(), path, m.startLine(), m.endLine(),
+                        loc, revisions, simple, decayed, cc, mult, composite));
             }
         }
-        hotspots.sort(Comparator
-                .comparingDouble(MethodHotspot::score).reversed()
+        out.sort(Comparator.comparingDouble(MethodHotspot::compositeScore).reversed()
                 .thenComparing(h -> h.signature().toCanonicalString()));
-        return hotspots;
+        return out;
     }
 
-    private List<FileHotspot> buildCompositeFileHotspots(Map<String, List<MethodInfo>> methodsByFile,
-                                                         Map<String, Integer> fileRevisions,
-                                                         Map<String, Integer> fileLoc,
-                                                         Map<String, Double> fileDecayedRevisions,
-                                                         io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser) {
-        List<FileHotspot> hotspots = new ArrayList<>();
-        for (String path : methodsByFile.keySet()) {
-            int revisions = fileRevisions.getOrDefault(path, 0);
-            int loc = fileLoc.getOrDefault(path, 0);
+    private void buildApiAndShared(
+            Path repoRoot,
+            AnalysisConfig config,
+            List<Path> javaFiles,
+            Map<String, List<MethodInfo>> methodsByFile,
+            Map<MethodSignature, Integer> methodRevisions,
+            Map<MethodSignature, Double> methodDecayed,
+            io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
+            boolean jacocoSupplied,
+            List<ApiHotspot> apiOut,
+            List<SharedComponentHotspot> sharedOut) {
 
-            double decayedRevs = fileDecayedRevisions.getOrDefault(path, 0.0);
-            double cognitiveComplexity = 0.0;
-            List<MethodInfo> mList = methodsByFile.get(path);
-            if (mList != null) {
-                for (MethodInfo m : mList) {
-                    cognitiveComplexity += m.cognitiveComplexity();
-                }
-            }
-            double coverage = jacocoParser.getFileCoverage(path);
-            double score = scoreCalculator.calculateComposite(decayedRevs, cognitiveComplexity, coverage);
+        ApiAnalysisConfig apiConfig = config.analysis().apiAnalysis();
+        CallGraphBuilder.CallGraphResult cgResult = callGraphBuilder.buildCallGraphs(
+                repoRoot, javaFiles, apiConfig.classpathDirectories());
 
-            hotspots.add(new FileHotspot(path, revisions, loc, score, decayedRevs, cognitiveComplexity, coverage));
-        }
-        hotspots.sort(Comparator
-                .comparingDouble(FileHotspot::score).reversed()
-                .thenComparing(FileHotspot::path));
-        return hotspots;
-    }
-
-    private List<MethodHotspot> buildCompositeMethodHotspots(Map<String, List<MethodInfo>> methodsByFile,
-                                                             Map<MethodSignature, Integer> methodRevisions,
-                                                             Map<MethodSignature, Double> methodDecayedRevisions,
-                                                             io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser) {
-        List<MethodHotspot> hotspots = new ArrayList<>();
+        // Per-method auxiliary maps: LOC, cognitive complexity, precomputed
+        // coverage, and API mappings.
+        Map<MethodSignature, Integer> locMap = new HashMap<>();
+        Map<MethodSignature, Double> methodCcs = new HashMap<>();
+        Map<MethodSignature, Double> methodCovs = new HashMap<>();
+        Map<MethodSignature, List<ApiMappingInfo>> apiMappingsMap = new HashMap<>();
         for (Map.Entry<String, List<MethodInfo>> entry : methodsByFile.entrySet()) {
             String path = entry.getKey();
-            for (MethodInfo method : entry.getValue()) {
-                int revisions = methodRevisions.getOrDefault(method.signature(), 0);
-                int loc = method.lineCount();
-
-                double decayedRevs = methodDecayedRevisions.getOrDefault(method.signature(), 0.0);
-                double cognitiveComplexity = (double) method.cognitiveComplexity();
-                double coverage = jacocoParser.getMethodCoverage(path, method.startLine(), method.endLine());
-                double score = scoreCalculator.calculateComposite(decayedRevs, cognitiveComplexity, coverage);
-
-                hotspots.add(new MethodHotspot(
-                        method.signature(), path,
-                        method.startLine(), method.endLine(),
-                        revisions, loc, score,
-                        decayedRevs, cognitiveComplexity, coverage));
+            for (MethodInfo m : entry.getValue()) {
+                locMap.put(m.signature(), m.lineCount());
+                methodCcs.put(m.signature(), (double) m.cognitiveComplexity());
+                if (jacocoSupplied) {
+                    methodCovs.put(m.signature(),
+                            jacoco.getMethodCoverage(path, m.startLine(), m.endLine()));
+                }
+                if (m.apiMappings() != null && !m.apiMappings().isEmpty()) {
+                    apiMappingsMap.put(m.signature(), m.apiMappings());
+                }
             }
         }
-        hotspots.sort(Comparator
-                .comparingDouble(MethodHotspot::score).reversed()
-                .thenComparing(h -> h.signature().toCanonicalString()));
-        return hotspots;
+
+        Map<MethodSignature, List<MethodSignature>> callGraphs = cgResult.callGraphs();
+        Map<MethodSignature, List<String>> callingApisMap = new HashMap<>();
+        for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
+            MethodSignature apiMethod = entry.getKey();
+            List<ApiMappingInfo> mappings = apiMappingsMap.get(apiMethod);
+            if (mappings == null) continue;
+            for (ApiMappingInfo mapping : mappings) {
+                String apiSigStr = mapping.httpMethod() + " " + mapping.route();
+                for (MethodSignature calledMethod : entry.getValue()) {
+                    callingApisMap.computeIfAbsent(calledMethod, k -> new ArrayList<>()).add(apiSigStr);
+                }
+            }
+        }
+
+        Set<MethodSignature> sharedComponentSignatures = new HashSet<>();
+        if (apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.SEPARATE ||
+            apiConfig.sharedComponentMode() == ApiAnalysisConfig.SharedComponentMode.BOTH) {
+            for (Map.Entry<MethodSignature, List<String>> entry : callingApisMap.entrySet()) {
+                if (entry.getValue().size() >= 2) {
+                    sharedComponentSignatures.add(entry.getKey());
+                }
+            }
+        }
+
+        // Shared components.
+        for (MethodSignature sharedSig : sharedComponentSignatures) {
+            int revs = methodRevisions.getOrDefault(sharedSig, 0);
+            int loc = locMap.getOrDefault(sharedSig, 0);
+            double simple = scoreCalculator.simple(revs, loc);
+            double decayed = methodDecayed.getOrDefault(sharedSig, 0.0);
+            double cc = methodCcs.getOrDefault(sharedSig, 0.0);
+            double mult = jacocoSupplied
+                    ? scoreCalculator.multiplier(
+                            OptionalDouble.of(methodCovs.getOrDefault(sharedSig, 0.0)))
+                    : 1.0;
+            double composite = scoreCalculator.composite(cc, decayed, mult);
+            List<String> callingApis = callingApisMap.getOrDefault(sharedSig, List.of());
+            sharedOut.add(new SharedComponentHotspot(
+                    sharedSig, loc, revs, simple, decayed, cc, mult, composite, callingApis));
+        }
+        sharedOut.sort(Comparator.comparingDouble(SharedComponentHotspot::compositeScore).reversed()
+                .thenComparing(sc -> sc.method().toCanonicalString()));
+
+        // API hotspots — aggregate the controller method and all called methods along its call graph.
+        for (Map.Entry<MethodSignature, List<MethodSignature>> entry : callGraphs.entrySet()) {
+            MethodSignature controllerMethod = entry.getKey();
+            List<ApiMappingInfo> mappings = apiMappingsMap.get(controllerMethod);
+            if (mappings == null) continue;
+
+            for (ApiMappingInfo mapping : mappings) {
+                int apiRevs = methodRevisions.getOrDefault(controllerMethod, 0);
+                int apiLoc = locMap.getOrDefault(controllerMethod, 0);
+                double apiDecayed = methodDecayed.getOrDefault(controllerMethod, 0.0);
+                double apiCc = methodCcs.getOrDefault(controllerMethod, 0.0);
+
+                double covSum = jacocoSupplied
+                        ? methodCovs.getOrDefault(controllerMethod, 0.0) : 0.0;
+                int covCount = jacocoSupplied ? 1 : 0;
+
+                List<MethodSignature> filteredCallGraph = new ArrayList<>();
+                for (MethodSignature calledMethod : entry.getValue()) {
+                    boolean isShared = sharedComponentSignatures.contains(calledMethod);
+                    boolean exclude = isShared && (apiConfig.sharedComponentMode()
+                            == ApiAnalysisConfig.SharedComponentMode.SEPARATE);
+
+                    if (!exclude) {
+                        apiRevs += methodRevisions.getOrDefault(calledMethod, 0);
+                        apiLoc += locMap.getOrDefault(calledMethod, 0);
+                        apiDecayed += methodDecayed.getOrDefault(calledMethod, 0.0);
+                        apiCc += methodCcs.getOrDefault(calledMethod, 0.0);
+                        if (jacocoSupplied) {
+                            covSum += methodCovs.getOrDefault(calledMethod, 0.0);
+                            covCount++;
+                        }
+                    }
+                    filteredCallGraph.add(calledMethod);
+                }
+
+                double apiSimple = scoreCalculator.simple(apiRevs, apiLoc);
+                double mult = (jacocoSupplied && covCount > 0)
+                        ? scoreCalculator.multiplier(OptionalDouble.of(covSum / covCount))
+                        : 1.0;
+                double apiComposite = scoreCalculator.composite(apiCc, apiDecayed, mult);
+
+                apiOut.add(new ApiHotspot(
+                        mapping.httpMethod(),
+                        mapping.route(),
+                        controllerMethod,
+                        apiLoc,
+                        apiRevs,
+                        apiSimple,
+                        apiDecayed,
+                        apiCc,
+                        mult,
+                        apiComposite,
+                        filteredCallGraph));
+            }
+        }
+        apiOut.sort(Comparator.comparingDouble(ApiHotspot::compositeScore).reversed()
+                .thenComparing(ApiHotspot::route)
+                .thenComparing(ApiHotspot::httpMethod));
     }
 
     private static <T> List<T> takeTop(List<T> source, int n) {

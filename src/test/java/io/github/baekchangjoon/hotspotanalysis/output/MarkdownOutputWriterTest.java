@@ -38,6 +38,15 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
+    @DisplayName("meta block no longer carries a 'Scoring formula' row in unified mode")
+    void shouldNotRenderScoringFormulaRow(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+
+        String md = Files.readString(tempDir.resolve("hotspots.md"));
+        assertThat(md).doesNotContain("Scoring formula");
+    }
+
+    @Test
     @DisplayName("renders the method table with canonical signatures")
     void shouldRenderMethodTable(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
@@ -56,7 +65,6 @@ class MarkdownOutputWriterTest {
         String md = Files.readString(tempDir.resolve("hotspots.md"));
         assertThat(md).contains("| Generated at | 2026-05-21T09:00:00Z |");
         assertThat(md).contains("| Target | `LOCAL_GIT:/tmp/example` |");
-        assertThat(md).contains("| Scoring formula | SIMPLE |");
         assertThat(md).contains("| Total commits | 42 |");
     }
 

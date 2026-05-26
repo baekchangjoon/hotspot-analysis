@@ -33,8 +33,6 @@ class ConfigLoaderTest {
                     granularity: [file, method]
                     include: ["src/main/java/**/*.java"]
                     exclude: ["**/generated/**"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv, md]
                   path: ./hotspot-report
@@ -52,7 +50,8 @@ class ConfigLoaderTest {
                 .containsExactly(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD);
         assertThat(config.analysis().scope().include()).containsExactly("src/main/java/**/*.java");
         assertThat(config.analysis().scope().exclude()).containsExactly("**/generated/**");
-        assertThat(config.analysis().scoring().formula()).isEqualTo(ScoringConfig.Formula.SIMPLE);
+        assertThat(config.analysis().scoring()).isNotNull();
+        assertThat(config.analysis().scoring().decayHalfLifeDays()).isEqualTo(90);
         assertThat(config.output().formats())
                 .containsExactly(OutputConfig.OutputFormat.CSV, OutputConfig.OutputFormat.MD);
         assertThat(config.output().path()).isEqualTo("./hotspot-report");
@@ -76,8 +75,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -118,8 +115,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -144,8 +139,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -169,8 +162,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -197,8 +188,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -224,8 +213,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: []
                   path: ./out
@@ -251,8 +238,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -277,8 +262,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -303,8 +286,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -330,8 +311,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                 output:
                   formats: [csv]
                   path: ./out
@@ -362,8 +341,6 @@ class ConfigLoaderTest {
                   scope:
                     granularity: [file]
                     include: ["**/*.java"]
-                  scoring:
-                    formula: simple
                   apiAnalysis:
                     enabled: true
                     sharedComponentMode: cumulative

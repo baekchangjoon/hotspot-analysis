@@ -6,33 +6,32 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Per-REST-API hotspot result.
+ * Per-REST-API hotspot result. Carries the four input factors plus both
+ * derived scores in canonical order.
  */
 public record ApiHotspot(
         String httpMethod,
         String route,
         MethodSignature controllerMethod,
-        int revisions,
         int loc,
-        double score,
+        int revisions,
+        double simpleScore,
+        double recencyDecay,
+        double cognitiveComplexity,
+        double coverageMultiplier,
+        double compositeScore,
         List<MethodSignature> callGraph
 ) {
-
     public ApiHotspot {
         Objects.requireNonNull(httpMethod, "httpMethod");
         Objects.requireNonNull(route, "route");
         Objects.requireNonNull(controllerMethod, "controllerMethod");
-        Objects.requireNonNull(callGraph, "callGraph");
-        if (httpMethod.isBlank()) {
-            throw new IllegalArgumentException("httpMethod must not be blank");
+        callGraph = callGraph == null ? List.of() : List.copyOf(callGraph);
+        if (loc < 0 || revisions < 0) {
+            throw new IllegalArgumentException("loc and revisions must be >= 0");
         }
-        if (route.isBlank()) {
-            throw new IllegalArgumentException("route must not be blank");
+        if (coverageMultiplier <= 0) {
+            throw new IllegalArgumentException("coverageMultiplier must be > 0");
         }
-        if (revisions < 0 || loc < 0) {
-            throw new IllegalArgumentException(
-                    "revisions and loc must both be >= 0 (was " + revisions + " / " + loc + ")");
-        }
-        callGraph = List.copyOf(callGraph);
     }
 }
