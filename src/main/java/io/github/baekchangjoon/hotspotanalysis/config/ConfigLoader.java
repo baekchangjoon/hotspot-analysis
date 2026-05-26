@@ -68,6 +68,12 @@ public class ConfigLoader {
         try {
             return yamlMapper.readValue(resolvedYaml, AnalysisConfig.class);
         } catch (UnrecognizedPropertyException ex) {
+            if ("formula".equals(ex.getPropertyName())) {
+                throw new ConfigLoadException(
+                        "scoring.formula has been removed in v0.2 — all reports now"
+                                + " include both Simple and Composite scores. Delete this line.",
+                        ex);
+            }
             throw new ConfigLoadException(
                     "Unknown configuration key: " + ex.getPropertyName(), ex);
         } catch (InvalidFormatException ex) {
