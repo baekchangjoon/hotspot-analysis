@@ -199,7 +199,7 @@ class ApiHotspotCalculatorTest {
         ScopeConfig scope = new ScopeConfig(
                 List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
                 List.of("**/*.java"), List.of());
-        ScoringConfig scoring = new ScoringConfig(ScoringConfig.Formula.SIMPLE);
+        ScoringConfig scoring = new ScoringConfig();
         ApiAnalysisConfig apiConfig = new ApiAnalysisConfig(true, mode, List.of("build/classes/java/main"));
         AnalysisSection section = new AnalysisSection(target, window, scope, scoring, apiConfig);
         OutputConfig output = new OutputConfig(

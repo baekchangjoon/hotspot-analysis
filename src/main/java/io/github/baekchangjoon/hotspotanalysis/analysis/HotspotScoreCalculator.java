@@ -1,57 +1,22 @@
 package io.github.baekchangjoon.hotspotanalysis.analysis;
 
-import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
 import org.springframework.stereotype.Component;
 
-import java.util.Objects;
+import java.util.OptionalDouble;
 
 /**
- * Applies the configured scoring formula to a pair of metrics
- * ({@code revisions}, {@code loc}).
+ * Pure helpers for the unified scoring model.
  *
- * <p>Phase 1 supports {@link ScoringConfig.Formula#SIMPLE} only:
- * <pre>
- *     score = revisions × loc
- * </pre>
- * This is Adam Tornhill's "Your Code as a Crime Scene" original proxy — the
- * empirical strongest single predictor of bug density across multiple studies
- * (e.g. Tornhill 2015; Bird et al. 2009 reports change-coupling × size with
- * Spearman ρ ≈ 0.55 against defect counts).</p>
- *
- * <p>Future formulas (e.g. log-weighted, recency-decayed) will be added as
- * additional enum values in {@link ScoringConfig.Formula}.</p>
+ * <ul>
+ *   <li>{@link #simple(int, int)} — Adam Tornhill's original {@code revisions × loc}.</li>
+ *   <li>{@link #composite(double, double, double)} — cognitive complexity ×
+ *       recency decay × coverage multiplier.</li>
+ *   <li>{@link #multiplier(OptionalDouble)} — {@code 1/(coverage + 0.1)} or 1.0
+ *       when no coverage data was supplied.</li>
+ * </ul>
  */
 @Component
 public class HotspotScoreCalculator {
-
-    public double calculate(int revisions, int loc, ScoringConfig.Formula formula) {
-        Objects.requireNonNull(formula, "formula");
-        if (revisions < 0) {
-            throw new IllegalArgumentException(
-                    "revisions must be >= 0 (was " + revisions + ")");
-        }
-        if (loc < 0) {
-            throw new IllegalArgumentException(
-                    "loc must be >= 0 (was " + loc + ")");
-        }
-        return switch (formula) {
-            case SIMPLE -> (double) revisions * loc;
-            case COMPOSITE -> throw new UnsupportedOperationException("Use calculateComposite for COMPOSITE formula");
-        };
-    }
-
-    public double calculateComposite(double decayedRevisions, double cognitiveComplexity, double coverage) {
-        if (decayedRevisions < 0) {
-            throw new IllegalArgumentException("decayedRevisions must be >= 0");
-        }
-        if (cognitiveComplexity < 0) {
-            throw new IllegalArgumentException("cognitiveComplexity must be >= 0");
-        }
-        if (coverage < 0.0 || coverage > 1.0) {
-            throw new IllegalArgumentException("coverage must be between 0.0 and 1.0");
-        }
-        return cognitiveComplexity * decayedRevisions * (1.0 / (coverage + 0.1));
-    }
 
     public double simple(int revisions, int loc) {
         if (revisions < 0 || loc < 0) {
@@ -74,7 +39,7 @@ public class HotspotScoreCalculator {
         return cognitiveComplexity * recencyDecay * coverageMultiplier;
     }
 
-    public double multiplier(java.util.OptionalDouble coverage) {
+    public double multiplier(OptionalDouble coverage) {
         if (coverage.isEmpty()) {
             return 1.0;
         }

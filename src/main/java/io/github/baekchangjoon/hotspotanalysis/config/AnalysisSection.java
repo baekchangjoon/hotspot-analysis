@@ -10,11 +10,14 @@ public record AnalysisSection(
         @NotNull(message = "analysis.target is required") @Valid TargetConfig target,
         @NotNull(message = "analysis.window is required") @Valid WindowConfig window,
         @NotNull(message = "analysis.scope is required") @Valid ScopeConfig scope,
-        @NotNull(message = "analysis.scoring is required") @Valid ScoringConfig scoring,
+        @Valid ScoringConfig scoring,
         @Valid ApiAnalysisConfig apiAnalysis,
         String jacocoReportPath
 ) {
     public AnalysisSection {
+        if (scoring == null) {
+            scoring = new ScoringConfig();
+        }
         if (apiAnalysis == null) {
             apiAnalysis = new ApiAnalysisConfig(false, ApiAnalysisConfig.SharedComponentMode.BOTH, java.util.List.of());
         }
