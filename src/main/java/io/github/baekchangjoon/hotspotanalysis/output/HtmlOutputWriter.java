@@ -380,65 +380,74 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(files.size()).append(" / ").append(files.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"file-hotspots\" class=\"sortable\">\n");
+        // Canonical columns: Rank, Path, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">Path</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
-        for (FileHotspot file : files) {
-            List<MethodHotspot> fileMethods = methodsByFile.getOrDefault(file.path(), java.util.List.of());
-            double totalMethodScore = fileMethods.stream().mapToDouble(MethodHotspot::simpleScore).sum();
+        for (FileHotspot f : files) {
+            List<MethodHotspot> fileMethods = methodsByFile.getOrDefault(f.path(), java.util.List.of());
+            String xrayToggle = " <span class=\"xray-toggle-icon\">▶</span>";
 
             html.append("        <tr class=\"file-row\" onclick=\"toggleXray(&#39;xray-")
                 .append(rank).append("&#39;, this)\" style=\"cursor: pointer;\">");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
-                    .append(rank).append("</td>");
-            html.append("<td><code>").append(escape(file.path())).append("</code> <span class=\"xray-toggle-icon\">▶</span></td>");
-            appendNumericCell(html, file.revisions(), file.revisions());
-            appendNumericCell(html, file.loc(), file.loc());
-            appendScoreCell(html, file.simpleScore());
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td><code>").append(escape(f.path())).append("</code>").append(xrayToggle).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.loc()).append("\">").append(f.loc()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.revisions()).append("\">").append(f.revisions()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.simpleScore()).append("\">").append(fmt(f.simpleScore())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.recencyDecay()).append("\">").append(fmt(f.recencyDecay())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.cognitiveComplexity()).append("\">").append(fmt(f.cognitiveComplexity())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.coverageMultiplier()).append("\">").append(fmt(f.coverageMultiplier())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(f.compositeScore()).append("\">").append(fmt(f.compositeScore())).append("</td>");
             html.append("</tr>\n");
 
             html.append("        <tr id=\"xray-").append(rank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
-            html.append("          <td colspan=\"5\" class=\"xray-container\">\n");
+            html.append("          <td colspan=\"9\" class=\"xray-container\">\n");
             if (fileMethods.isEmpty()) {
                 html.append("            <p class=\"no-methods\">No methods analyzed in this file.</p>\n");
             } else {
-                html.append("            <div class=\"xray-title\">X-Ray Method Drill-Down for <code>").append(escape(file.path())).append("</code></div>\n");
+                // X-Ray share is based on compositeScore
+                double totalCompositeScore = fileMethods.stream().mapToDouble(MethodHotspot::compositeScore).sum();
+
+                html.append("            <div class=\"xray-title\">X-Ray Method Drill-Down for <code>").append(escape(f.path())).append("</code></div>\n");
                 html.append("            <table class=\"xray-table\">\n");
+                // Canonical X-Ray columns: Method Signature, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Share
                 html.append("              <thead><tr>");
                 html.append("<th>Method Signature</th>");
-                html.append("<th class=\"num\">Lines</th>");
-                html.append("<th class=\"num\">Complexity</th>");
+                html.append("<th class=\"num\">LOC</th>");
+                html.append("<th class=\"num\">Revisions</th>");
+                html.append("<th class=\"num\">Simple Score</th>");
                 html.append("<th class=\"num\">Recency Decay</th>");
+                html.append("<th class=\"num\">Cognitive Complexity</th>");
                 html.append("<th class=\"num\">Coverage Multiplier</th>");
-                html.append("<th class=\"num\">Score</th>");
+                html.append("<th class=\"num\">Composite Score</th>");
                 html.append("<th class=\"num\">Share</th>");
                 html.append("</tr></thead>\n");
                 html.append("              <tbody>\n");
                 for (MethodHotspot mh : fileMethods) {
-                    double share = totalMethodScore > 0 ? (mh.simpleScore() / totalMethodScore) * 100.0 : 0.0;
-                    String methodSig = mh.signature().methodName() + "(" + String.join(", ", mh.signature().parameterTypes()) + ")";
+                    double share = totalCompositeScore > 0 ? (mh.compositeScore() / totalCompositeScore) * 100.0 : 0.0;
+                    String methodSig = escape(mh.signature().methodName())
+                            + "(" + escape(String.join(", ", mh.signature().parameterTypes())) + ")";
 
                     html.append("                <tr>");
-                    html.append("<td><code>").append(escape(methodSig)).append("</code></td>");
-                    html.append("<td class=\"num\">").append(mh.startLine()).append("&ndash;").append(mh.endLine()).append("</td>");
-
-                    double cc = mh.cognitiveComplexity();
-                    html.append("<td class=\"num\">").append((int) cc).append("</td>");
-
-                    double dr = mh.recencyDecay();
-                    html.append("<td class=\"num\">").append(String.format("%.2f", dr)).append("</td>");
-
-                    double mult = mh.coverageMultiplier();
-                    html.append("<td class=\"num\">").append(String.format("%.2f", mult)).append("</td>");
-
-                    appendScoreCell(html, mh.simpleScore());
-
+                    html.append("<td><code>").append(methodSig).append("</code></td>");
+                    html.append("<td class=\"num\">").append(mh.loc()).append("</td>");
+                    html.append("<td class=\"num\">").append(mh.revisions()).append("</td>");
+                    html.append("<td class=\"num\">").append(fmt(mh.simpleScore())).append("</td>");
+                    html.append("<td class=\"num\">").append(fmt(mh.recencyDecay())).append("</td>");
+                    html.append("<td class=\"num\">").append(fmt(mh.cognitiveComplexity())).append("</td>");
+                    html.append("<td class=\"num\">").append(fmt(mh.coverageMultiplier())).append("</td>");
+                    html.append("<td class=\"num\">").append(fmt(mh.compositeScore())).append("</td>");
                     html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
                     html.append("</tr>\n");
                 }
@@ -466,38 +475,46 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(methods.size()).append(" / ").append(methods.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"method-hotspots\" class=\"sortable\">\n");
+        // Canonical columns: Rank, FQCN, Method, Parameters, File, Lines, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
-        html.append("<th data-sort-type=\"string\">Class</th>");
+        html.append("<th data-sort-type=\"string\">FQCN</th>");
         html.append("<th data-sort-type=\"string\">Method</th>");
         html.append("<th data-sort-type=\"string\">Parameters</th>");
         html.append("<th data-sort-type=\"string\">File</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Lines</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
-        for (MethodHotspot method : methods) {
-            String fqcn = method.signature().fullyQualifiedClassName();
-            String name = method.signature().methodName();
-            String params = String.join(", ", method.signature().parameterTypes());
-            html.append("        <tr data-path=\"").append(escape(method.filePath()))
-                    .append("\" data-start-line=\"").append(method.startLine())
-                    .append("\" data-end-line=\"").append(method.endLine()).append("\">");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
-                    .append(rank).append("</td>");
+        for (MethodHotspot m : methods) {
+            String fqcn = m.signature().fullyQualifiedClassName();
+            String name = m.signature().methodName();
+            String params = String.join(", ", m.signature().parameterTypes());
+            String lineRange = m.startLine() + "&ndash;" + m.endLine();
+
+            html.append("        <tr data-path=\"").append(escape(m.filePath()))
+                    .append("\" data-start-line=\"").append(m.startLine())
+                    .append("\" data-end-line=\"").append(m.endLine()).append("\">");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
             html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
             html.append("<td><code>").append(escape(name)).append("</code></td>");
             html.append("<td class=\"params\">").append(escape(params)).append("</td>");
-            html.append("<td><code>").append(escape(method.filePath())).append("</code></td>");
-            String lineRange = method.startLine() + "&ndash;" + method.endLine();
-            html.append("<td class=\"num\" data-sort-value=\"").append(method.startLine())
-                    .append("\">").append(lineRange).append("</td>");
-            appendNumericCell(html, method.revisions(), method.revisions());
-            appendNumericCell(html, method.loc(), method.loc());
-            appendScoreCell(html, method.simpleScore());
+            html.append("<td><code>").append(escape(m.filePath())).append("</code></td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.startLine()).append("\">").append(lineRange).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.loc()).append("\">").append(m.loc()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.revisions()).append("\">").append(m.revisions()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.simpleScore()).append("\">").append(fmt(m.simpleScore())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.recencyDecay()).append("\">").append(fmt(m.recencyDecay())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.cognitiveComplexity()).append("\">").append(fmt(m.cognitiveComplexity())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.coverageMultiplier()).append("\">").append(fmt(m.coverageMultiplier())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(m.compositeScore()).append("\">").append(fmt(m.compositeScore())).append("</td>");
             html.append("</tr>\n");
             rank++;
         }
@@ -506,22 +523,15 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  </section>\n");
     }
 
-    private static void appendNumericCell(StringBuilder html, int displayValue, int sortValue) {
-        html.append("<td class=\"num\" data-sort-value=\"").append(sortValue).append("\">")
-                .append(displayValue).append("</td>");
-    }
-
-    private static void appendScoreCell(StringBuilder html, double score) {
-        long rounded = Math.round(score);
-        html.append("<td class=\"num\" data-sort-value=\"").append(rounded).append("\">")
-                .append(formatScore(score)).append("</td>");
-    }
-
-    private static String formatScore(double score) {
-        if (score == Math.floor(score) && !Double.isInfinite(score)) {
-            return Long.toString((long) score);
+    /**
+     * Formats a double: no decimals when the value is a whole number,
+     * otherwise 4 decimal places with US locale (dot separator).
+     */
+    private static String fmt(double v) {
+        if (v == Math.floor(v) && !Double.isInfinite(v)) {
+            return Long.toString((long) v);
         }
-        return String.format("%.2f", score);
+        return String.format(java.util.Locale.ROOT, "%.4f", v);
     }
 
     private static void appendScript(StringBuilder html) {
@@ -627,31 +637,46 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(apis.size()).append(" / ").append(apis.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"api-hotspots\" class=\"sortable\">\n");
+        // Canonical columns: Rank, HTTP Method, Route, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Call Graph
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">HTTP Method</th>");
         html.append("<th data-sort-type=\"string\">Route</th>");
-        html.append("<th data-sort-type=\"string\">Controller Method</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"string\">FQCN</th>");
+        html.append("<th data-sort-type=\"string\">Method</th>");
+        html.append("<th data-sort-type=\"string\">Parameters</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
         html.append("<th>Call Graph</th>");
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
         for (ApiHotspot api : apis) {
+            String fqcn   = api.controllerMethod().fullyQualifiedClassName();
+            String method = api.controllerMethod().methodName();
+            String params = String.join(", ", api.controllerMethod().parameterTypes());
+
             html.append("        <tr>");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
-                    .append(rank).append("</td>");
-            html.append("<td><span class=\"method-badge ")
-                    .append(api.httpMethod().toLowerCase()).append("\">")
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td><span class=\"method-badge ").append(api.httpMethod().toLowerCase()).append("\">")
                     .append(escape(api.httpMethod())).append("</span></td>");
             html.append("<td><code>").append(escape(api.route())).append("</code></td>");
-            html.append("<td><code>").append(escape(api.controllerMethod().toCanonicalString())).append("</code></td>");
-            appendNumericCell(html, api.revisions(), api.revisions());
-            appendNumericCell(html, api.loc(), api.loc());
-            appendScoreCell(html, api.simpleScore());
-            
+            html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
+            html.append("<td><code>").append(escape(method)).append("</code></td>");
+            html.append("<td class=\"params\">").append(escape(params)).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.loc()).append("\">").append(api.loc()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.revisions()).append("\">").append(api.revisions()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.simpleScore()).append("\">").append(fmt(api.simpleScore())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.recencyDecay()).append("\">").append(fmt(api.recencyDecay())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.cognitiveComplexity()).append("\">").append(fmt(api.cognitiveComplexity())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.coverageMultiplier()).append("\">").append(fmt(api.coverageMultiplier())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(api.compositeScore()).append("\">").append(fmt(api.compositeScore())).append("</td>");
+
             // Call Graph cell
             html.append("<td>");
             if (api.callGraph().isEmpty()) {
@@ -664,7 +689,7 @@ public class HtmlOutputWriter implements OutputWriter {
                 html.append("</ul></details>");
             }
             html.append("</td>");
-            
+
             html.append("</tr>\n");
             rank++;
         }
@@ -683,38 +708,54 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(components.size()).append(" / ").append(components.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"shared-hotspots\" class=\"sortable\">\n");
+        // Canonical columns: Rank, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Calling APIs
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"string\">FQCN</th>");
         html.append("<th data-sort-type=\"string\">Method</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"string\">Parameters</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
         html.append("<th>Calling APIs</th>");
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
-        for (SharedComponentHotspot component : components) {
+        for (SharedComponentHotspot c : components) {
+            String fqcn   = c.method().fullyQualifiedClassName();
+            String method = c.method().methodName();
+            String params = String.join(", ", c.method().parameterTypes());
+
             html.append("        <tr>");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">")
-                    .append(rank).append("</td>");
-            html.append("<td><code>").append(escape(component.method().toCanonicalString())).append("</code></td>");
-            appendNumericCell(html, component.revisions(), component.revisions());
-            appendNumericCell(html, component.loc(), component.loc());
-            appendScoreCell(html, component.simpleScore());
-            
+            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
+            html.append("<td><code>").append(escape(method)).append("</code></td>");
+            html.append("<td class=\"params\">").append(escape(params)).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.loc()).append("\">").append(c.loc()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.revisions()).append("\">").append(c.revisions()).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.simpleScore()).append("\">").append(fmt(c.simpleScore())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.recencyDecay()).append("\">").append(fmt(c.recencyDecay())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.cognitiveComplexity()).append("\">").append(fmt(c.cognitiveComplexity())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.coverageMultiplier()).append("\">").append(fmt(c.coverageMultiplier())).append("</td>");
+            html.append("<td class=\"num\" data-sort-value=\"").append(c.compositeScore()).append("\">").append(fmt(c.compositeScore())).append("</td>");
+
             // Calling APIs cell
             html.append("<td>");
-            if (component.callingApis().isEmpty()) {
+            if (c.callingApis().isEmpty()) {
                 html.append("<span class=\"no-calls\">None</span>");
             } else {
-                html.append("<details><summary>").append(component.callingApis().size()).append(" APIs</summary><ul>");
-                for (var api : component.callingApis()) {
+                html.append("<details><summary>").append(c.callingApis().size()).append(" APIs</summary><ul>");
+                for (var api : c.callingApis()) {
                     html.append("<li><code>").append(escape(api)).append("</code></li>");
                 }
                 html.append("</ul></details>");
             }
             html.append("</td>");
-            
+
             html.append("</tr>\n");
             rank++;
         }

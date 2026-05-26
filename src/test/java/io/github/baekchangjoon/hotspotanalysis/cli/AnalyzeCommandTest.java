@@ -373,8 +373,11 @@ class AnalyzeCommandTest {
         assertThat(combinedHtml).contains("REST API Hotspots");
         assertThat(combinedHtml).contains("Shared Components");
         assertThat(combinedHtml).contains("/test");
-        assertThat(combinedHtml).contains("com.example.MyController#getTest()");
-        assertThat(combinedHtml).contains("com.example.MyService#serve()");
+        // API and Shared sections now emit FQCN, Method, Parameters in separate cells
+        assertThat(combinedHtml).contains("com.example.MyController");
+        assertThat(combinedHtml).contains("getTest");
+        assertThat(combinedHtml).contains("com.example.MyService");
+        assertThat(combinedHtml).contains("serve");
 
         String standaloneHtml = Files.readString(outputDir.resolve("api_report.html"));
         assertThat(standaloneHtml).contains("REST API Hotspots");

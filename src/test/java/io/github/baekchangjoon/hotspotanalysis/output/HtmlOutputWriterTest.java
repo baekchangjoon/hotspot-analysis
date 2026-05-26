@@ -59,6 +59,227 @@ class HtmlOutputWriterTest {
     }
 
     @Test
+    @DisplayName("file table has canonical 7-metric column headers in spec order")
+    void shouldRenderFileTableHeaders(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // All canonical headers must appear
+        assertThat(html).contains(">Rank<");
+        assertThat(html).contains(">Path<");
+        assertThat(html).contains(">LOC<");
+        assertThat(html).contains(">Revisions<");
+        assertThat(html).contains(">Simple Score<");
+        assertThat(html).contains(">Recency Decay<");
+        assertThat(html).contains(">Cognitive Complexity<");
+        assertThat(html).contains(">Coverage Multiplier<");
+        assertThat(html).contains(">Composite Score<");
+
+        // Order: Rank, Path, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
+        int rankIdx    = html.indexOf(">Rank<");
+        int pathIdx    = html.indexOf(">Path<");
+        int locIdx     = html.indexOf(">LOC<");
+        int revIdx     = html.indexOf(">Revisions<");
+        int simpleIdx  = html.indexOf(">Simple Score<");
+        int recencyIdx = html.indexOf(">Recency Decay<");
+        int cogIdx     = html.indexOf(">Cognitive Complexity<");
+        int covIdx     = html.indexOf(">Coverage Multiplier<");
+        int compIdx    = html.indexOf(">Composite Score<");
+        assertThat(rankIdx).isLessThan(pathIdx);
+        assertThat(pathIdx).isLessThan(locIdx);
+        assertThat(locIdx).isLessThan(revIdx);
+        assertThat(revIdx).isLessThan(simpleIdx);
+        assertThat(simpleIdx).isLessThan(recencyIdx);
+        assertThat(recencyIdx).isLessThan(cogIdx);
+        assertThat(cogIdx).isLessThan(covIdx);
+        assertThat(covIdx).isLessThan(compIdx);
+    }
+
+    @Test
+    @DisplayName("method table has canonical identifier + 7-metric column headers in spec order")
+    void shouldRenderMethodTableHeaders(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // All method-table headers must appear: Rank, FQCN, Method, Parameters, File, Lines, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
+        assertThat(html).contains(">FQCN<");
+        assertThat(html).contains(">Method<");
+        assertThat(html).contains(">Parameters<");
+        assertThat(html).contains(">File<");
+        assertThat(html).contains(">Lines<");
+
+        // Order check within the method section (find the method-hotspots table and verify order there)
+        int methodTableStart = html.indexOf("id=\"method-hotspots\"");
+        assertThat(methodTableStart).isGreaterThan(0);
+        String methodSection = html.substring(methodTableStart);
+
+        int rankIdx    = methodSection.indexOf(">Rank<");
+        int fqcnIdx    = methodSection.indexOf(">FQCN<");
+        int methodIdx  = methodSection.indexOf(">Method<");
+        int paramsIdx  = methodSection.indexOf(">Parameters<");
+        int fileIdx    = methodSection.indexOf(">File<");
+        int linesIdx   = methodSection.indexOf(">Lines<");
+        int locIdx     = methodSection.indexOf(">LOC<");
+        int revIdx     = methodSection.indexOf(">Revisions<");
+        int simpleIdx  = methodSection.indexOf(">Simple Score<");
+        int recencyIdx = methodSection.indexOf(">Recency Decay<");
+        int cogIdx     = methodSection.indexOf(">Cognitive Complexity<");
+        int covIdx     = methodSection.indexOf(">Coverage Multiplier<");
+        int compIdx    = methodSection.indexOf(">Composite Score<");
+
+        assertThat(rankIdx).isLessThan(fqcnIdx);
+        assertThat(fqcnIdx).isLessThan(methodIdx);
+        assertThat(methodIdx).isLessThan(paramsIdx);
+        assertThat(paramsIdx).isLessThan(fileIdx);
+        assertThat(fileIdx).isLessThan(linesIdx);
+        assertThat(linesIdx).isLessThan(locIdx);
+        assertThat(locIdx).isLessThan(revIdx);
+        assertThat(revIdx).isLessThan(simpleIdx);
+        assertThat(simpleIdx).isLessThan(recencyIdx);
+        assertThat(recencyIdx).isLessThan(cogIdx);
+        assertThat(cogIdx).isLessThan(covIdx);
+        assertThat(covIdx).isLessThan(compIdx);
+    }
+
+    @Test
+    @DisplayName("X-Ray drilldown has canonical 7-metric column headers including Share")
+    void shouldRenderXRayDrilldownHeaders(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // X-Ray table headers: Method Signature, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Share
+        assertThat(html).contains(">Method Signature<");
+        assertThat(html).contains(">Share<");
+
+        // Verify order within the xray-table
+        int xrayStart = html.indexOf("class=\"xray-table\"");
+        assertThat(xrayStart).isGreaterThan(0);
+        String xraySection = html.substring(xrayStart);
+
+        int sigIdx     = xraySection.indexOf(">Method Signature<");
+        int locIdx     = xraySection.indexOf(">LOC<");
+        int revIdx     = xraySection.indexOf(">Revisions<");
+        int simpleIdx  = xraySection.indexOf(">Simple Score<");
+        int recencyIdx = xraySection.indexOf(">Recency Decay<");
+        int cogIdx     = xraySection.indexOf(">Cognitive Complexity<");
+        int covIdx     = xraySection.indexOf(">Coverage Multiplier<");
+        int compIdx    = xraySection.indexOf(">Composite Score<");
+        int shareIdx   = xraySection.indexOf(">Share<");
+
+        assertThat(sigIdx).isLessThan(locIdx);
+        assertThat(locIdx).isLessThan(revIdx);
+        assertThat(revIdx).isLessThan(simpleIdx);
+        assertThat(simpleIdx).isLessThan(recencyIdx);
+        assertThat(recencyIdx).isLessThan(cogIdx);
+        assertThat(cogIdx).isLessThan(covIdx);
+        assertThat(covIdx).isLessThan(compIdx);
+        assertThat(compIdx).isLessThan(shareIdx);
+    }
+
+    @Test
+    @DisplayName("API table has canonical column headers in spec order")
+    void shouldRenderApiTableHeaders(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                10,
+                OutputConfig.ApiLayout.COMBINED
+        );
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        int apiTableStart = html.indexOf("id=\"api-hotspots\"");
+        assertThat(apiTableStart).isGreaterThan(0);
+        String apiSection = html.substring(apiTableStart);
+
+        // Rank, HTTP Method, Route, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Call Graph
+        int rankIdx     = apiSection.indexOf(">Rank<");
+        int httpIdx     = apiSection.indexOf(">HTTP Method<");
+        int routeIdx    = apiSection.indexOf(">Route<");
+        int fqcnIdx     = apiSection.indexOf(">FQCN<");
+        int methodIdx   = apiSection.indexOf(">Method<");
+        int paramsIdx   = apiSection.indexOf(">Parameters<");
+        int locIdx      = apiSection.indexOf(">LOC<");
+        int revIdx      = apiSection.indexOf(">Revisions<");
+        int simpleIdx   = apiSection.indexOf(">Simple Score<");
+        int recencyIdx  = apiSection.indexOf(">Recency Decay<");
+        int cogIdx      = apiSection.indexOf(">Cognitive Complexity<");
+        int covIdx      = apiSection.indexOf(">Coverage Multiplier<");
+        int compIdx     = apiSection.indexOf(">Composite Score<");
+        int callIdx     = apiSection.indexOf(">Call Graph<");
+
+        assertThat(rankIdx).isLessThan(httpIdx);
+        assertThat(httpIdx).isLessThan(routeIdx);
+        assertThat(routeIdx).isLessThan(fqcnIdx);
+        assertThat(fqcnIdx).isLessThan(methodIdx);
+        assertThat(methodIdx).isLessThan(paramsIdx);
+        assertThat(paramsIdx).isLessThan(locIdx);
+        assertThat(locIdx).isLessThan(revIdx);
+        assertThat(revIdx).isLessThan(simpleIdx);
+        assertThat(simpleIdx).isLessThan(recencyIdx);
+        assertThat(recencyIdx).isLessThan(cogIdx);
+        assertThat(cogIdx).isLessThan(covIdx);
+        assertThat(covIdx).isLessThan(compIdx);
+        assertThat(compIdx).isLessThan(callIdx);
+    }
+
+    @Test
+    @DisplayName("Shared Components table has canonical column headers in spec order")
+    void shouldRenderSharedTableHeaders(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                10,
+                OutputConfig.ApiLayout.COMBINED
+        );
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        int sharedTableStart = html.indexOf("id=\"shared-hotspots\"");
+        assertThat(sharedTableStart).isGreaterThan(0);
+        String sharedSection = html.substring(sharedTableStart);
+
+        // Rank, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Calling APIs
+        int rankIdx     = sharedSection.indexOf(">Rank<");
+        int fqcnIdx     = sharedSection.indexOf(">FQCN<");
+        int methodIdx   = sharedSection.indexOf(">Method<");
+        int paramsIdx   = sharedSection.indexOf(">Parameters<");
+        int locIdx      = sharedSection.indexOf(">LOC<");
+        int revIdx      = sharedSection.indexOf(">Revisions<");
+        int simpleIdx   = sharedSection.indexOf(">Simple Score<");
+        int recencyIdx  = sharedSection.indexOf(">Recency Decay<");
+        int cogIdx      = sharedSection.indexOf(">Cognitive Complexity<");
+        int covIdx      = sharedSection.indexOf(">Coverage Multiplier<");
+        int compIdx     = sharedSection.indexOf(">Composite Score<");
+        int callingIdx  = sharedSection.indexOf(">Calling APIs<");
+
+        assertThat(rankIdx).isLessThan(fqcnIdx);
+        assertThat(fqcnIdx).isLessThan(methodIdx);
+        assertThat(methodIdx).isLessThan(paramsIdx);
+        assertThat(paramsIdx).isLessThan(locIdx);
+        assertThat(locIdx).isLessThan(revIdx);
+        assertThat(revIdx).isLessThan(simpleIdx);
+        assertThat(simpleIdx).isLessThan(recencyIdx);
+        assertThat(recencyIdx).isLessThan(cogIdx);
+        assertThat(cogIdx).isLessThan(covIdx);
+        assertThat(covIdx).isLessThan(compIdx);
+        assertThat(compIdx).isLessThan(callingIdx);
+    }
+
+    @Test
+    @DisplayName("X-Ray Share column uses compositeScore (not simpleScore) for the calculation")
+    void shouldUseCompositeScoreForXRayShare(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // sampleResult has two methods for Hot.java with compositeScores 20.4 and 1.7
+        // totalCompositeScore = 22.1; composite-based share of first = 20.4/22.1*100 ≈ 92.3%
+        // (Simple-score based share would be 68/(68+3)*100 ≈ 95.8%, which we do NOT expect.)
+        assertThat(html).contains("92.3%");
+        assertThat(html).doesNotContain("95.8%");
+    }
+
+    @Test
     @DisplayName("renders one row per file hotspot with sort-friendly data attributes")
     void shouldRenderFileHotspotRows(@TempDir Path tempDir) throws Exception {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
@@ -67,8 +288,11 @@ class HtmlOutputWriterTest {
         assertThat(html).contains("src/main/java/com/example/Hot.java");
         assertThat(html).contains("src/main/java/com/example/Cold.java");
         // numeric columns use data-sort-value for client-side ordering
-        assertThat(html).contains("data-sort-value=\"600\"");
-        assertThat(html).contains("data-sort-value=\"30\"");
+        // Hot.java: loc=120 (int), revisions=5 (int), simpleScore=600.0 (double)
+        assertThat(html).contains("data-sort-value=\"120\"");  // loc of Hot.java
+        assertThat(html).contains("data-sort-value=\"5\"");   // revisions of Hot.java
+        // Cold.java: loc=30 (int), simpleScore=30.0 (double)
+        assertThat(html).contains("data-sort-value=\"30\"");  // loc of Cold.java
     }
 
     @Test
@@ -157,8 +381,11 @@ class HtmlOutputWriterTest {
         assertThat(html).contains("Shared Components");
         assertThat(html).contains("GET");
         assertThat(html).contains("/api/a");
-        assertThat(html).contains("com.example.MyController#apiA()");
-        assertThat(html).contains("com.example.MyService#commonMethod()");
+        // API and Shared sections now emit FQCN, Method, Parameters in separate cells
+        assertThat(html).contains("com.example.MyController");
+        assertThat(html).contains("apiA");
+        assertThat(html).contains("com.example.MyService");
+        assertThat(html).contains("commonMethod");
     }
 
     @Test
