@@ -26,6 +26,12 @@ public record ApiHotspot(
         Objects.requireNonNull(httpMethod, "httpMethod");
         Objects.requireNonNull(route, "route");
         Objects.requireNonNull(controllerMethod, "controllerMethod");
+        if (httpMethod.isBlank()) {
+            throw new IllegalArgumentException("httpMethod must not be blank");
+        }
+        if (route.isBlank()) {
+            throw new IllegalArgumentException("route must not be blank");
+        }
         callGraph = callGraph == null ? List.of() : List.copyOf(callGraph);
         if (loc < 0 || revisions < 0) {
             throw new IllegalArgumentException("loc and revisions must be >= 0");
