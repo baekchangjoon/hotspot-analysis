@@ -180,6 +180,78 @@ class HotspotCliE2ETest {
     }
 
     @Test
+    @DisplayName("analyze with jacocoReportPath applies coverage multiplier (not neutral 1)")
+    void shouldApplyCoverageMultiplierFromJacocoReport(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Path outDir = tempDir.resolve("out");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() {} }",
+                    Instant.parse("2026-01-10T10:00:00Z"));
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot {\n  void m() { int x = 1; }\n}",
+                    Instant.parse("2026-01-11T10:00:00Z"));
+        }
+
+        // Write a minimal valid jacoco.xml with 50% coverage for Hot.java
+        // (line 3 covered, line 4 not covered → coverage = 0.5 → multiplier = 1/(0.5+0.1) ≈ 1.6667)
+        Path jacocoXml = tempDir.resolve("jacoco.xml");
+        Files.writeString(jacocoXml, """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+                <report name="t">
+                  <package name="com/example">
+                    <sourcefile name="Hot.java">
+                      <line nr="3" mi="0" ci="2"/>
+                      <line nr="4" mi="2" ci="0"/>
+                    </sourcefile>
+                  </package>
+                </report>
+                """);
+
+        Path configFile = tempDir.resolve("hotspot.yml");
+        Files.writeString(configFile, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                    include:
+                      - "**/*.java"
+                  jacocoReportPath: %s
+                output:
+                  formats:
+                    - CSV
+                  path: %s
+                  topN: 0
+                """.formatted(repoRoot, jacocoXml, outDir));
+
+        application.run("analyze", "--config", configFile.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isZero();
+
+        String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
+        // Find the Hot.java row and verify coverage_multiplier is NOT "1" (neutral default)
+        // Coverage=0.5 → multiplier=1/(0.5+0.1)≈1.6667, so the value should differ from "1"
+        String hotRow = csv.lines()
+                .filter(line -> line.contains("Hot.java"))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Hot.java row not found in CSV"));
+
+        // coverage_multiplier is at index 7 (0-based) in:
+        // rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score
+        String[] cols = hotRow.split(",", -1);
+        String coverageMultiplier = cols[7];
+        assertThat(coverageMultiplier).isNotEqualTo("1");
+    }
+
+    @Test
     @DisplayName("hotspot init --output <file> writes a working sample (exit 0)")
     void shouldInitConfig(@TempDir Path tempDir) {
         Path target = tempDir.resolve("hotspot.yml");
