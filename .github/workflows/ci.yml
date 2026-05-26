@@ -243,8 +243,6 @@ jobs:
               granularity: [file, method]
               include:
                 - "src/main/java/**/*.java"
-            scoring:
-              formula: simple
             apiAnalysis:
               enabled: true
               sharedComponentMode: BOTH
