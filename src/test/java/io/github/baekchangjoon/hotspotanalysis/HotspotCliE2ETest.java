@@ -102,8 +102,8 @@ class HotspotCliE2ETest {
     }
 
     @Test
-    @DisplayName("hotspot analyze with composite formula runs end-to-end and outputs advanced statistics")
-    void shouldRunCompositeAnalyzeEndToEndViaSpring(@TempDir Path tempDir) throws Exception {
+    @DisplayName("analyze emits all seven metrics in every report format (unified scoring model)")
+    void analyzeEmitsAllSevenMetricsInEveryReport(@TempDir Path tempDir) throws Exception {
         Path repoRoot = tempDir.resolve("repo");
         Path outDir = tempDir.resolve("out");
         Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
@@ -115,7 +115,7 @@ class HotspotCliE2ETest {
                     public class Hot {
                       void m(int x) {
                         if (x > 0) {
-                          for (int i=0; i<x; i++) {}
+                          for (int i = 0; i < x; i++) {}
                         }
                       }
                     }
@@ -125,25 +125,6 @@ class HotspotCliE2ETest {
                     "package com.example; public class Cold { void n() {} }",
                     Instant.parse("2026-01-01T10:00:00Z"));
         }
-
-        // Write a mock JaCoCo report
-        Path jacocoReport = tempDir.resolve("jacoco.xml");
-        Files.writeString(jacocoReport, """
-                <?xml version="1.0" encoding="UTF-8"?>
-                <report name="hotspot-analysis">
-                  <package name="com/example">
-                    <sourcefile name="Hot.java">
-                      <line nr="2" mi="0" ci="1" mb="0" cb="0"/>
-                      <line nr="3" mi="0" ci="1" mb="0" cb="0"/>
-                      <line nr="4" mi="0" ci="1" mb="0" cb="0"/>
-                      <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
-                    </sourcefile>
-                    <sourcefile name="Cold.java">
-                      <line nr="1" mi="1" ci="0" mb="0" cb="0"/>
-                    </sourcefile>
-                  </package>
-                </report>
-                """);
 
         Path configFile = tempDir.resolve("hotspot.yml");
         Files.writeString(configFile, """
@@ -162,7 +143,6 @@ class HotspotCliE2ETest {
                       - "**/*.java"
                   scoring:
                     decayHalfLifeDays: 90
-                  jacocoReportPath: %s
                 output:
                   formats:
                     - CSV
@@ -171,20 +151,32 @@ class HotspotCliE2ETest {
                     - HTML
                   path: %s
                   topN: 0
-                """.formatted(repoRoot, jacocoReport, outDir));
+                """.formatted(repoRoot, outDir));
 
         application.run("analyze", "--config", configFile.toString(), "--quiet");
 
         assertThat(application.getExitCode()).isZero();
-        assertThat(Files.exists(outDir.resolve("file_hotspots.csv"))).isTrue();
-        assertThat(Files.exists(outDir.resolve("method_hotspots.csv"))).isTrue();
-        assertThat(Files.exists(outDir.resolve("hotspots.html"))).isTrue();
 
-        String html = Files.readString(outDir.resolve("hotspots.html"));
-        assertThat(html).contains("Hot.java");
-        assertThat(html).contains("X-Ray Method Drill-Down");
-        assertThat(html).contains("toggleXray");
-        assertThat(html).contains("Complexity");
+        // CSV: assert exact canonical 7-metric header
+        String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
+        String header = csv.lines().findFirst().orElseThrow();
+        assertThat(header).isEqualTo(
+                "rank,path,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,coverage_multiplier,composite_score");
+
+        // YAML: camelCase canonical keys
+        assertThat(Files.readString(outDir.resolve("hotspots.yml")))
+                .contains("compositeScore").contains("simpleScore");
+
+        // Markdown: human-readable column headers
+        assertThat(Files.readString(outDir.resolve("hotspots.md")))
+                .contains("Composite Score").contains("Simple Score");
+
+        // HTML: human-readable headers; no legacy "Scoring formula" meta-row
+        assertThat(Files.readString(outDir.resolve("hotspots.html")))
+                .contains("Composite Score")
+                .contains("Simple Score")
+                .doesNotContain("Scoring formula");
     }
 
     @Test
