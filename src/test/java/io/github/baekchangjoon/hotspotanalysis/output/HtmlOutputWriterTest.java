@@ -5,7 +5,6 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
-import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -48,15 +47,15 @@ class HtmlOutputWriterTest {
     }
 
     @Test
-    @DisplayName("renders metadata block (target, commits, files, methods, formula)")
+    @DisplayName("renders metadata block (target, commits, files, methods); no scoring formula in unified mode")
     void shouldRenderMetadataBlock(@TempDir Path tempDir) throws Exception {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
         String html = Files.readString(tempDir.resolve("hotspots.html"));
 
         assertThat(html).contains("LOCAL_GIT:/tmp/example");
-        assertThat(html).contains(">42<");        // totalCommits
-        assertThat(html).contains("SIMPLE");      // scoring formula
-        assertThat(html).contains("2026-05-21");  // generation timestamp
+        assertThat(html).contains(">42<");          // totalCommits
+        assertThat(html).contains("2026-05-21");    // generation timestamp
+        assertThat(html).doesNotContain("Scoring formula");
     }
 
     @Test
@@ -88,22 +87,29 @@ class HtmlOutputWriterTest {
     @DisplayName("escapes HTML-active characters in user-controlled values (XSS guard)")
     void shouldEscapeUserControlledValues(@TempDir Path tempDir) throws Exception {
         FileHotspot hostile = new FileHotspot(
-                "src/<script>alert(1)</script>/Evil.java", 9, 99, 891.0);
+                "src/<script>alert(1)</script>/Evil.java",
+                /* loc */ 99, /* revisions */ 9,
+                /* simpleScore */ 891.0, /* recencyDecay */ 1.0,
+                /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                /* compositeScore */ 1.0);
         MethodHotspot hostileMethod = new MethodHotspot(
                 new MethodSignature(
                         "com.example.<img src=x onerror=alert(2)>",
                         "boom\"&<>",
                         List.of("List<String&Co>")),
                 "src/<script>alert(1)</script>/Evil.java",
-                1, 2, 3, 4, 12.0);
+                1, 2,
+                /* loc */ 4, /* revisions */ 3,
+                /* simpleScore */ 12.0, /* recencyDecay */ 1.0,
+                /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                /* compositeScore */ 1.0);
         AnalysisResult result = new AnalysisResult(
                 List.of(hostile),
                 List.of(hostileMethod),
                 new AnalysisMeta(
                         Instant.parse("2026-05-21T09:00:00Z"),
                         "LOCAL_GIT:/tmp/<script>",
-                        1, 1, 1,
-                        ScoringConfig.Formula.SIMPLE));
+                        1, 1, 1));
 
         writer.write(result, tempDir);
         String html = Files.readString(tempDir.resolve("hotspots.html"));

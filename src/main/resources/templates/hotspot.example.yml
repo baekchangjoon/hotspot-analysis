@@ -41,8 +41,10 @@ analysis:
       - "**/target/**"
 
   scoring:
-    # Phase 1: simple = revisions * loc
-    formula: simple
+    # Half-life (days) for the exponential recency-decay weight applied to
+    # commits. 90 is the default; raise for slow-moving legacy code, lower
+    # for fast-moving features.
+    decayHalfLifeDays: 90
 
 output:
   # csv | yaml | md | html (multiple allowed, case-insensitive)

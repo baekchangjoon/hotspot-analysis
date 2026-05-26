@@ -4,7 +4,6 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
-import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -58,12 +57,21 @@ class CsvOutputWriterTest {
     @DisplayName("escapes commas in field values with double quotes")
     void shouldEscapeCommasInFieldValues(@TempDir Path tempDir) throws IOException {
         AnalysisResult result = new AnalysisResult(
-                List.of(new FileHotspot("path/with,comma.java", 1, 10, 10.0)),
+                List.of(new FileHotspot(
+                        "path/with,comma.java",
+                        /* loc */ 10, /* revisions */ 1,
+                        /* simpleScore */ 10.0, /* recencyDecay */ 0.5,
+                        /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 0.5)),
                 List.of(new MethodHotspot(
                         new MethodSignature("a.B", "m", List.of("int", "String")),
-                        "path/with,comma.java", 1, 5, 1, 5, 5.0)),
+                        "path/with,comma.java", 1, 5,
+                        /* loc */ 5, /* revisions */ 1,
+                        /* simpleScore */ 5.0, /* recencyDecay */ 0.5,
+                        /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 0.5)),
                 new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
-                        "LOCAL_GIT:/tmp", 1, 1, 1, ScoringConfig.Formula.SIMPLE));
+                        "LOCAL_GIT:/tmp", 1, 1, 1));
 
         writer.write(result, tempDir);
 
@@ -75,10 +83,15 @@ class CsvOutputWriterTest {
     @DisplayName("formats fractional scores with 4 decimal places")
     void shouldFormatFractionalScores(@TempDir Path tempDir) throws IOException {
         AnalysisResult result = new AnalysisResult(
-                List.of(new FileHotspot("A.java", 3, 7, 21.5)),
+                List.of(new FileHotspot(
+                        "A.java",
+                        /* loc */ 7, /* revisions */ 3,
+                        /* simpleScore */ 21.5, /* recencyDecay */ 1.0,
+                        /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 1.0)),
                 List.of(),
                 new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
-                        "LOCAL_GIT:/tmp", 1, 1, 0, ScoringConfig.Formula.SIMPLE));
+                        "LOCAL_GIT:/tmp", 1, 1, 0));
 
         writer.write(result, tempDir);
 

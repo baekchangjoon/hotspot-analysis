@@ -7,22 +7,27 @@ import java.util.Objects;
 
 /**
  * Hotspot result for a shared component (e.g. service, repository method) accessed by multiple APIs.
+ * Carries the four input factors plus both derived scores in canonical order.
  */
 public record SharedComponentHotspot(
         MethodSignature method,
-        int revisions,
         int loc,
-        double score,
+        int revisions,
+        double simpleScore,
+        double recencyDecay,
+        double cognitiveComplexity,
+        double coverageMultiplier,
+        double compositeScore,
         List<String> callingApis
 ) {
-
     public SharedComponentHotspot {
         Objects.requireNonNull(method, "method");
-        Objects.requireNonNull(callingApis, "callingApis");
-        if (revisions < 0 || loc < 0) {
-            throw new IllegalArgumentException(
-                    "revisions and loc must both be >= 0 (was " + revisions + " / " + loc + ")");
+        callingApis = callingApis == null ? List.of() : List.copyOf(callingApis);
+        if (loc < 0 || revisions < 0) {
+            throw new IllegalArgumentException("loc and revisions must be >= 0");
         }
-        callingApis = List.copyOf(callingApis);
+        if (coverageMultiplier <= 0) {
+            throw new IllegalArgumentException("coverageMultiplier must be > 0");
+        }
     }
 }

@@ -71,7 +71,7 @@ public class CsvOutputWriter implements OutputWriter {
                         + escape(file.path()) + ","
                         + file.revisions() + ","
                         + file.loc() + ","
-                        + formatScore(file.score()) + "\n");
+                        + formatScore(file.simpleScore()) + "\n");
             }
         }
     }
@@ -91,7 +91,7 @@ public class CsvOutputWriter implements OutputWriter {
                         + method.endLine() + ","
                         + method.revisions() + ","
                         + method.loc() + ","
-                        + formatScore(method.score()) + "\n");
+                        + formatScore(method.simpleScore()) + "\n");
             }
         }
     }
@@ -125,7 +125,7 @@ public class CsvOutputWriter implements OutputWriter {
                         + escape(api.controllerMethod().toCanonicalString()) + ","
                         + api.revisions() + ","
                         + api.loc() + ","
-                        + formatScore(api.score()) + ","
+                        + formatScore(api.simpleScore()) + ","
                         + escape(String.join(";", cgSigs)) + "\n");
             }
         }
@@ -140,7 +140,7 @@ public class CsvOutputWriter implements OutputWriter {
                         + escape(component.method().toCanonicalString()) + ","
                         + component.revisions() + ","
                         + component.loc() + ","
-                        + formatScore(component.score()) + ","
+                        + formatScore(component.simpleScore()) + ","
                         + escape(String.join(";", component.callingApis())) + "\n");
             }
         }

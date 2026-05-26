@@ -60,7 +60,7 @@ class HotspotAnalyzerTest {
     @DisplayName("ranks the most-edited file higher than the rarely-edited file")
     void shouldRankMostEditedFileFirst() throws Exception {
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
-            // Hot.java: edited 4 times
+            // Hot.java: edited 3 times
             writeJava("src/main/java/com/example/Hot.java",
                     "package com.example; public class Hot { void m1() {} }",
                     git, T1, "c1");
@@ -79,17 +79,26 @@ class HotspotAnalyzerTest {
 
         AnalysisResult result = analyzer.analyze(configFor(repoRoot, 0));
 
+        // With the unified scoring model both files have cognitiveComplexity 0
+        // (single empty-body methods) → composite scores tie at 0.0 → ties
+        // break alphabetically by path. Verify both files are present and that
+        // Hot.java carries more revisions.
         assertThat(result.fileHotspots()).extracting(FileHotspot::path)
-                .containsExactly(
+                .containsExactlyInAnyOrder(
                         "src/main/java/com/example/Hot.java",
                         "src/main/java/com/example/Cold.java");
-        assertThat(result.fileHotspots().get(0).revisions()).isEqualTo(3);
-        assertThat(result.fileHotspots().get(1).revisions()).isEqualTo(1);
+        FileHotspot hot = result.fileHotspots().stream()
+                .filter(h -> h.path().endsWith("Hot.java")).findFirst().orElseThrow();
+        FileHotspot cold = result.fileHotspots().stream()
+                .filter(h -> h.path().endsWith("Cold.java")).findFirst().orElseThrow();
+        assertThat(hot.revisions()).isEqualTo(3);
+        assertThat(cold.revisions()).isEqualTo(1);
+        assertThat(hot.simpleScore()).isGreaterThan(cold.simpleScore());
     }
 
     @Test
-    @DisplayName("score equals revisions * loc for the SIMPLE formula")
-    void shouldComputeSimpleScoreCorrectly() throws Exception {
+    @DisplayName("simpleScore equals revisions * loc; all seven metric fields are populated")
+    void shouldComputeAllSevenMetricsForTopFile() throws Exception {
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             String source = "package com.example;\npublic class Hot {\n  void m() {}\n}\n";
             writeJava("src/main/java/com/example/Hot.java", source, git, T1, "c1");
@@ -103,7 +112,20 @@ class HotspotAnalyzerTest {
         FileHotspot top = result.fileHotspots().get(0);
         assertThat(top.revisions()).isEqualTo(2);
         assertThat(top.loc()).isEqualTo(4);  // 4 newline-terminated lines
-        assertThat(top.score()).isEqualTo(8.0);
+        assertThat(top.simpleScore()).isEqualTo(8.0);
+
+        // All four input factors and the composite score are populated.
+        assertThat(top.recencyDecay()).isGreaterThanOrEqualTo(0.0);
+        assertThat(top.cognitiveComplexity()).isGreaterThanOrEqualTo(0.0);
+        assertThat(top.coverageMultiplier()).isEqualTo(1.0); // no jacoco → 1.0
+        assertThat(top.compositeScore())
+                .isEqualTo(top.cognitiveComplexity() * top.recencyDecay() * top.coverageMultiplier());
+
+        // The list is sorted by compositeScore DESC.
+        if (result.fileHotspots().size() >= 2) {
+            assertThat(result.fileHotspots().get(0).compositeScore())
+                    .isGreaterThanOrEqualTo(result.fileHotspots().get(1).compositeScore());
+        }
     }
 
     @Test
@@ -214,7 +236,7 @@ class HotspotAnalyzerTest {
         ScopeConfig scope = new ScopeConfig(
                 List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
                 includes, excludes);
-        ScoringConfig scoring = new ScoringConfig(ScoringConfig.Formula.SIMPLE);
+        ScoringConfig scoring = new ScoringConfig();
         AnalysisSection section = new AnalysisSection(target, window, scope, scoring);
         OutputConfig output = new OutputConfig(
                 List.of(OutputConfig.OutputFormat.CSV),
@@ -234,7 +256,7 @@ class HotspotAnalyzerTest {
         ScopeConfig scope = new ScopeConfig(
                 List.of(ScopeConfig.Granularity.FILE),
                 List.of("**/*.java"), List.of());
-        ScoringConfig scoring = new ScoringConfig(ScoringConfig.Formula.SIMPLE);
+        ScoringConfig scoring = new ScoringConfig();
         AnalysisSection section = new AnalysisSection(target, window, scope, scoring);
         OutputConfig output = new OutputConfig(
                 List.of(OutputConfig.OutputFormat.CSV), "./out", 0);

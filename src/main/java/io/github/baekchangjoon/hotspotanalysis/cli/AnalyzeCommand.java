@@ -137,7 +137,7 @@ public class AnalyzeCommand implements Callable<Integer> {
         if (!result.fileHotspots().isEmpty()) {
             FileHotspot top = result.fileHotspots().get(0);
             out.printf("  Top file:    %s (rev=%d, loc=%d, score=%.0f)%n",
-                    top.path(), top.revisions(), top.loc(), top.score());
+                    top.path(), top.revisions(), top.loc(), top.simpleScore());
         }
     }
 }

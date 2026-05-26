@@ -7,20 +7,21 @@ import java.util.Objects;
 /**
  * Per-method hotspot result. Carries the enclosing file path and the
  * declaration's line range so output writers can emit "go to source" hints.
+ * Carries the four input factors plus both derived scores in canonical order.
  */
 public record MethodHotspot(
         MethodSignature signature,
         String filePath,
         int startLine,
         int endLine,
-        int revisions,
         int loc,
-        double score,
-        Double decayedRevisions,
-        Double cognitiveComplexity,
-        Double coverage
+        int revisions,
+        double simpleScore,
+        double recencyDecay,
+        double cognitiveComplexity,
+        double coverageMultiplier,
+        double compositeScore
 ) {
-
     public MethodHotspot {
         Objects.requireNonNull(signature, "signature");
         Objects.requireNonNull(filePath, "filePath");
@@ -31,13 +32,14 @@ public record MethodHotspot(
             throw new IllegalArgumentException(
                     "invalid line range: [" + startLine + ", " + endLine + "]");
         }
-        if (revisions < 0 || loc < 0) {
+        if (loc < 0 || revisions < 0) {
             throw new IllegalArgumentException(
-                    "revisions and loc must both be >= 0 (was " + revisions + " / " + loc + ")");
+                    "loc and revisions must both be >= 0 (was " + loc + " / " + revisions + ")");
         }
-    }
-
-    public MethodHotspot(MethodSignature signature, String filePath, int startLine, int endLine, int revisions, int loc, double score) {
-        this(signature, filePath, startLine, endLine, revisions, loc, score, null, null, null);
+        if (simpleScore < 0 || recencyDecay < 0 || cognitiveComplexity < 0
+                || coverageMultiplier <= 0 || compositeScore < 0) {
+            throw new IllegalArgumentException(
+                    "metric values must be non-negative; coverageMultiplier must be > 0");
+        }
     }
 }
