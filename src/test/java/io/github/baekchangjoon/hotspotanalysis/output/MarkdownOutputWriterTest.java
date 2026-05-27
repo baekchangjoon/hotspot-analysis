@@ -127,6 +127,40 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true emits Line Coverage column on the API and Shared markdown tables")
+    void shouldEmitLineCoverageOnApiAndSharedMd(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResultWithCoverage(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        java.util.List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.MD),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true, true);
+
+        String md = Files.readString(tempDir.resolve("hotspots.md"));
+
+        // REST API Hotspots table: rightmost column is Line Coverage.
+        assertThat(md).contains("## REST API Hotspots");
+        assertThat(md).contains(
+                "| Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Call Graph | Line Coverage |");
+        assertThat(md).doesNotContain("Coverage Multiplier");
+
+        // Shared Components table.
+        assertThat(md).contains(
+                "| Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Calling APIs | Line Coverage |");
+
+        // Spot-check the values: API row carries 42.0% (lineCoverage=0.42),
+        // Shared row falls back to N/A (lineCoverage=null in fixture).
+        assertThat(md).contains("| 42.0% |");
+        assertThat(md).contains("| N/A |");
+
+        // Standalone api_report.md also gets the swapped layout.
+        String apiReport = Files.readString(tempDir.resolve("api_report.md"));
+        assertThat(apiReport).contains("Line Coverage |");
+        assertThat(apiReport).doesNotContain("Coverage Multiplier");
+    }
+
+    @Test
     @DisplayName("writes hotspots.md (combined) and api_report.md (standalone) when API analysis is enabled")
     void shouldWriteApiMarkdownFiles(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,

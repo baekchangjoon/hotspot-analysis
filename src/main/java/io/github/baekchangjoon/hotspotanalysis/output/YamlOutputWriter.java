@@ -209,11 +209,21 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("fqcn", a.controllerMethod().fullyQualifiedClassName());
         m.put("method", a.controllerMethod().methodName());
         m.put("parameters", a.controllerMethod().parameterTypes());
-        putMetricBlock(m, a.loc(), a.revisions(),
-                a.simpleScore(), a.recencyDecay(),
-                a.cognitiveComplexity(), a.coverageMultiplier(), a.compositeScore(),
-                a.lineCoverage(), excludeCoverage);
-        m.put("callGraph", signaturesAsList(a.callGraph()));
+        if (excludeCoverage) {
+            // lineCoverage must be the rightmost key, so it is appended
+            // after callGraph rather than inside the metric block.
+            putBaseMetricBlock(m, a.loc(), a.revisions(),
+                    a.simpleScore(), a.recencyDecay(), a.cognitiveComplexity());
+            m.put("compositeScore", asYamlNumber(a.compositeScore()));
+            m.put("callGraph", signaturesAsList(a.callGraph()));
+            m.put("lineCoverage", asCoverageValue(a.lineCoverage()));
+        } else {
+            putMetricBlock(m, a.loc(), a.revisions(),
+                    a.simpleScore(), a.recencyDecay(),
+                    a.cognitiveComplexity(), a.coverageMultiplier(), a.compositeScore(),
+                    a.lineCoverage(), false);
+            m.put("callGraph", signaturesAsList(a.callGraph()));
+        }
         return m;
     }
 
@@ -223,12 +233,37 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("fqcn", s.method().fullyQualifiedClassName());
         m.put("method", s.method().methodName());
         m.put("parameters", s.method().parameterTypes());
-        putMetricBlock(m, s.loc(), s.revisions(),
-                s.simpleScore(), s.recencyDecay(),
-                s.cognitiveComplexity(), s.coverageMultiplier(), s.compositeScore(),
-                s.lineCoverage(), excludeCoverage);
-        m.put("callingApis", s.callingApis());
+        if (excludeCoverage) {
+            putBaseMetricBlock(m, s.loc(), s.revisions(),
+                    s.simpleScore(), s.recencyDecay(), s.cognitiveComplexity());
+            m.put("compositeScore", asYamlNumber(s.compositeScore()));
+            m.put("callingApis", s.callingApis());
+            m.put("lineCoverage", asCoverageValue(s.lineCoverage()));
+        } else {
+            putMetricBlock(m, s.loc(), s.revisions(),
+                    s.simpleScore(), s.recencyDecay(),
+                    s.cognitiveComplexity(), s.coverageMultiplier(), s.compositeScore(),
+                    s.lineCoverage(), false);
+            m.put("callingApis", s.callingApis());
+        }
         return m;
+    }
+
+    /**
+     * Emits only the canonical 5-metric prefix (loc..cognitiveComplexity).
+     * Used for API/Shared rows in excludeCoverage mode where {@code compositeScore},
+     * {@code callGraph}/{@code callingApis}, and {@code lineCoverage} must
+     * appear after this block in that exact order.
+     */
+    private static void putBaseMetricBlock(Map<String, Object> m,
+                                           int loc, int revisions,
+                                           double simpleScore, double recencyDecay,
+                                           double cognitiveComplexity) {
+        m.put("loc", loc);
+        m.put("revisions", revisions);
+        m.put("simpleScore", asYamlNumber(simpleScore));
+        m.put("recencyDecay", asYamlNumber(recencyDecay));
+        m.put("cognitiveComplexity", asYamlNumber(cognitiveComplexity));
     }
 
     // -------------------------------------------------------------------------

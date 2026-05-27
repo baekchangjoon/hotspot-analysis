@@ -326,4 +326,43 @@ class YamlOutputWriterTest {
         List<Map<String, Object>> rows = (List<Map<String, Object>>) parsed.get("fileHotspots");
         assertThat(rows.get(0)).containsEntry("lineCoverage", "N/A");
     }
+
+    @Test
+    @DisplayName("excludeCoverage=true emits lineCoverage at rightmost on apiHotspots and sharedComponents rows")
+    @SuppressWarnings("unchecked")
+    void shouldEmitLineCoverageOnApiAndSharedRows(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResultWithCoverage(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.YAML),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true, true);
+
+        ObjectMapper parser = new ObjectMapper(new YAMLFactory())
+                .registerModule(new JavaTimeModule());
+
+        Map<String, Object> parsed = parser.readValue(
+                tempDir.resolve("hotspots.yml").toFile(), Map.class);
+
+        // API row: canonical key order ends in compositeScore, callGraph, lineCoverage.
+        Map<String, Object> apiRow = ((List<Map<String, Object>>) parsed.get("apiHotspots")).get(0);
+        assertThat(apiRow).containsKey("lineCoverage").doesNotContainKey("coverageMultiplier");
+        List<String> apiKeys = List.copyOf(apiRow.keySet());
+        assertThat(apiKeys).endsWith("compositeScore", "callGraph", "lineCoverage");
+        assertThat(apiRow).containsEntry("lineCoverage", 0.42);
+
+        // Shared row: rightmost key is lineCoverage; null coverage → "N/A".
+        Map<String, Object> sharedRow = ((List<Map<String, Object>>) parsed.get("sharedComponents")).get(0);
+        assertThat(sharedRow).containsKey("lineCoverage").doesNotContainKey("coverageMultiplier");
+        List<String> sharedKeys = List.copyOf(sharedRow.keySet());
+        assertThat(sharedKeys).endsWith("compositeScore", "callingApis", "lineCoverage");
+        assertThat(sharedRow).containsEntry("lineCoverage", "N/A");
+
+        // Standalone api_report.yml also gets the swapped layout.
+        Map<String, Object> standalone = parser.readValue(
+                tempDir.resolve("api_report.yml").toFile(), Map.class);
+        Map<String, Object> standaloneApi = ((List<Map<String, Object>>) standalone.get("apiHotspots")).get(0);
+        assertThat(standaloneApi).containsKey("lineCoverage").doesNotContainKey("coverageMultiplier");
+    }
 }
