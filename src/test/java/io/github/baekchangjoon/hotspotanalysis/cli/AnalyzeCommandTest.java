@@ -478,18 +478,18 @@ class AnalyzeCommandTest {
         // CSV: api_hotspots header carries line_coverage instead of coverage_multiplier.
         String apiCsv = Files.readString(outputDir.resolve("api_hotspots.csv"));
         assertThat(apiCsv).startsWith(
-                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                "simple_rank,composite_rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
                 + "cognitive_complexity,composite_score,line_coverage\n");
         // No JaCoCo report supplied → rightmost cell renders "N/A".
         assertThat(apiCsv.lines()
-                .filter(line -> line.startsWith("1,GET"))
+                .filter(line -> line.startsWith("1,1,GET"))
                 .findFirst().orElseThrow())
                 .endsWith(",N/A");
 
         // shared_components CSV: line_coverage at rightmost.
         String sharedCsv = Files.readString(outputDir.resolve("shared_components.csv"));
         assertThat(sharedCsv).startsWith(
-                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                "simple_rank,composite_rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
                 + "cognitive_complexity,composite_score,calling_apis,line_coverage\n");
 
         // YAML: api row carries lineCoverage; no coverageMultiplier.

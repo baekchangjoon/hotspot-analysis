@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -127,37 +128,50 @@ public class YamlOutputWriter implements OutputWriter {
     // -------------------------------------------------------------------------
 
     private List<Map<String, Object>> buildFileRows(List<FileHotspot> hotspots, boolean excludeCoverage) {
+        Map<FileHotspot, Integer> simpleRank = Rankings.rank(hotspots,
+                Comparator.comparingDouble(FileHotspot::simpleScore).reversed()
+                        .thenComparing(FileHotspot::path));
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
-        int rank = 1;
+        int compositeRank = 1;
         for (FileHotspot f : hotspots) {
-            rows.add(fileRow(rank++, f, excludeCoverage));
+            rows.add(fileRow(simpleRank.get(f), compositeRank++, f, excludeCoverage));
         }
         return rows;
     }
 
     private List<Map<String, Object>> buildMethodRows(List<MethodHotspot> hotspots, boolean excludeCoverage) {
+        Map<MethodHotspot, Integer> simpleRank = Rankings.rank(hotspots,
+                Comparator.comparingDouble(MethodHotspot::simpleScore).reversed()
+                        .thenComparing(h -> h.signature().toCanonicalString()));
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
-        int rank = 1;
+        int compositeRank = 1;
         for (MethodHotspot m : hotspots) {
-            rows.add(methodRow(rank++, m, excludeCoverage));
+            rows.add(methodRow(simpleRank.get(m), compositeRank++, m, excludeCoverage));
         }
         return rows;
     }
 
     private List<Map<String, Object>> buildApiRows(List<ApiHotspot> hotspots, boolean excludeCoverage) {
+        Map<ApiHotspot, Integer> simpleRank = Rankings.rank(hotspots,
+                Comparator.comparingDouble(ApiHotspot::simpleScore).reversed()
+                        .thenComparing(ApiHotspot::route)
+                        .thenComparing(ApiHotspot::httpMethod));
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
-        int rank = 1;
+        int compositeRank = 1;
         for (ApiHotspot a : hotspots) {
-            rows.add(apiRow(rank++, a, excludeCoverage));
+            rows.add(apiRow(simpleRank.get(a), compositeRank++, a, excludeCoverage));
         }
         return rows;
     }
 
     private List<Map<String, Object>> buildSharedRows(List<SharedComponentHotspot> hotspots, boolean excludeCoverage) {
+        Map<SharedComponentHotspot, Integer> simpleRank = Rankings.rank(hotspots,
+                Comparator.comparingDouble(SharedComponentHotspot::simpleScore).reversed()
+                        .thenComparing(c -> c.method().toCanonicalString()));
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
-        int rank = 1;
+        int compositeRank = 1;
         for (SharedComponentHotspot s : hotspots) {
-            rows.add(sharedRow(rank++, s, excludeCoverage));
+            rows.add(sharedRow(simpleRank.get(s), compositeRank++, s, excludeCoverage));
         }
         return rows;
     }
@@ -166,9 +180,10 @@ public class YamlOutputWriter implements OutputWriter {
     // Individual row factories — canonical key order guaranteed by LinkedHashMap
     // -------------------------------------------------------------------------
 
-    private static Map<String, Object> fileRow(int rank, FileHotspot f, boolean excludeCoverage) {
+    private static Map<String, Object> fileRow(int simpleRank, int compositeRank, FileHotspot f, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("rank", rank);
+        m.put("simpleRank", simpleRank);
+        m.put("compositeRank", compositeRank);
         m.put("path", f.path());
         m.put("loc", f.loc());
         m.put("revisions", f.revisions());
@@ -185,9 +200,10 @@ public class YamlOutputWriter implements OutputWriter {
         return m;
     }
 
-    private static Map<String, Object> methodRow(int rank, MethodHotspot mh, boolean excludeCoverage) {
+    private static Map<String, Object> methodRow(int simpleRank, int compositeRank, MethodHotspot mh, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("rank", rank);
+        m.put("simpleRank", simpleRank);
+        m.put("compositeRank", compositeRank);
         m.put("fqcn", mh.signature().fullyQualifiedClassName());
         m.put("method", mh.signature().methodName());
         m.put("parameters", mh.signature().parameterTypes());
@@ -201,9 +217,10 @@ public class YamlOutputWriter implements OutputWriter {
         return m;
     }
 
-    private static Map<String, Object> apiRow(int rank, ApiHotspot a, boolean excludeCoverage) {
+    private static Map<String, Object> apiRow(int simpleRank, int compositeRank, ApiHotspot a, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("rank", rank);
+        m.put("simpleRank", simpleRank);
+        m.put("compositeRank", compositeRank);
         m.put("httpMethod", a.httpMethod());
         m.put("route", a.route());
         m.put("fqcn", a.controllerMethod().fullyQualifiedClassName());
@@ -227,9 +244,10 @@ public class YamlOutputWriter implements OutputWriter {
         return m;
     }
 
-    private static Map<String, Object> sharedRow(int rank, SharedComponentHotspot s, boolean excludeCoverage) {
+    private static Map<String, Object> sharedRow(int simpleRank, int compositeRank, SharedComponentHotspot s, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("rank", rank);
+        m.put("simpleRank", simpleRank);
+        m.put("compositeRank", compositeRank);
         m.put("fqcn", s.method().fullyQualifiedClassName());
         m.put("method", s.method().methodName());
         m.put("parameters", s.method().parameterTypes());

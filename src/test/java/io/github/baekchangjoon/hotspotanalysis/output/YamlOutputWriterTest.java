@@ -66,7 +66,7 @@ class YamlOutputWriterTest {
         Map<String, Object> row = fileRows.get(0);
         // All canonical keys present
         assertThat(row).containsKeys(
-                "rank", "path", "loc", "revisions",
+                "simpleRank", "compositeRank", "path", "loc", "revisions",
                 "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore");
 
@@ -78,12 +78,12 @@ class YamlOutputWriterTest {
         // Canonical key order
         List<String> keys = List.copyOf(row.keySet());
         assertThat(keys).containsExactly(
-                "rank", "path", "loc", "revisions",
+                "simpleRank", "compositeRank", "path", "loc", "revisions",
                 "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore");
 
         // Spot-check values from sampleResult (first entry: Hot.java)
-        assertThat(row).containsEntry("rank", 1);
+        assertThat(row).containsEntry("compositeRank", 1).containsEntry("simpleRank", 1);
         assertThat(row).containsEntry("path", "src/main/java/com/example/Hot.java");
         assertThat(row).containsEntry("loc", 120);
         assertThat(row).containsEntry("revisions", 5);
@@ -105,7 +105,7 @@ class YamlOutputWriterTest {
         Map<String, Object> row = methodRows.get(0);
         // All canonical keys present
         assertThat(row).containsKeys(
-                "rank", "fqcn", "method", "parameters", "file", "startLine", "endLine",
+                "simpleRank", "compositeRank", "fqcn", "method", "parameters", "file", "startLine", "endLine",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore");
 
@@ -116,12 +116,12 @@ class YamlOutputWriterTest {
         // Canonical key order
         List<String> keys = List.copyOf(row.keySet());
         assertThat(keys).containsExactly(
-                "rank", "fqcn", "method", "parameters", "file", "startLine", "endLine",
+                "simpleRank", "compositeRank", "fqcn", "method", "parameters", "file", "startLine", "endLine",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore");
 
         // Spot-check values
-        assertThat(row).containsEntry("rank", 1);
+        assertThat(row).containsEntry("compositeRank", 1).containsEntry("simpleRank", 1);
         assertThat(row).containsEntry("fqcn", "com.example.Hot");
         assertThat(row).containsEntry("method", "doWork");
     }
@@ -179,7 +179,7 @@ class YamlOutputWriterTest {
         Map<String, Object> row = apiRows.get(0);
         // All canonical keys present
         assertThat(row).containsKeys(
-                "rank", "httpMethod", "route", "fqcn", "method", "parameters",
+                "simpleRank", "compositeRank", "httpMethod", "route", "fqcn", "method", "parameters",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore", "callGraph");
 
@@ -190,12 +190,12 @@ class YamlOutputWriterTest {
         // Canonical key order
         List<String> keys = List.copyOf(row.keySet());
         assertThat(keys).containsExactly(
-                "rank", "httpMethod", "route", "fqcn", "method", "parameters",
+                "simpleRank", "compositeRank", "httpMethod", "route", "fqcn", "method", "parameters",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore", "callGraph");
 
         // Spot-check values
-        assertThat(row).containsEntry("rank", 1);
+        assertThat(row).containsEntry("compositeRank", 1).containsEntry("simpleRank", 1);
         assertThat(row).containsEntry("httpMethod", "GET");
         assertThat(row).containsEntry("route", "/api/a");
         assertThat(row).containsEntry("fqcn", "com.example.MyController");
@@ -237,7 +237,7 @@ class YamlOutputWriterTest {
         Map<String, Object> row = sharedRows.get(0);
         // All canonical keys present
         assertThat(row).containsKeys(
-                "rank", "fqcn", "method", "parameters",
+                "simpleRank", "compositeRank", "fqcn", "method", "parameters",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore", "callingApis");
 
@@ -247,12 +247,12 @@ class YamlOutputWriterTest {
         // Canonical key order
         List<String> keys = List.copyOf(row.keySet());
         assertThat(keys).containsExactly(
-                "rank", "fqcn", "method", "parameters",
+                "simpleRank", "compositeRank", "fqcn", "method", "parameters",
                 "loc", "revisions", "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "coverageMultiplier", "compositeScore", "callingApis");
 
         // Spot-check values
-        assertThat(row).containsEntry("rank", 1);
+        assertThat(row).containsEntry("compositeRank", 1).containsEntry("simpleRank", 1);
         assertThat(row).containsEntry("fqcn", "com.example.MyService");
         assertThat(row).containsEntry("method", "commonMethod");
     }
@@ -291,7 +291,7 @@ class YamlOutputWriterTest {
 
         List<String> keys = List.copyOf(row.keySet());
         assertThat(keys).containsExactly(
-                "rank", "path", "loc", "revisions",
+                "simpleRank", "compositeRank", "path", "loc", "revisions",
                 "simpleScore", "recencyDecay", "cognitiveComplexity",
                 "compositeScore", "lineCoverage");
         assertThat(row).containsEntry("lineCoverage", 0.75);

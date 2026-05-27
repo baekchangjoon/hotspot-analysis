@@ -385,9 +385,13 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      <span class=\"count\" data-count-target=\"#file-hotspots\">")
                 .append(files.size()).append(" / ").append(files.size()).append("</span>\n");
         html.append("    </div>\n");
+        java.util.Map<FileHotspot, Integer> simpleRank = Rankings.rank(files,
+                java.util.Comparator.comparingDouble(FileHotspot::simpleScore).reversed()
+                        .thenComparing(FileHotspot::path));
         html.append("    <table id=\"file-hotspots\" class=\"sortable\">\n");
         html.append("      <thead><tr>");
-        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"number\">Simple Rank</th>");
+        html.append("<th data-sort-type=\"number\" aria-sort=\"ascending\">Composite Rank</th>");
         html.append("<th data-sort-type=\"string\">Path</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">LOC</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Revisions</th>");
@@ -403,14 +407,16 @@ public class HtmlOutputWriter implements OutputWriter {
         }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
-        int rank = 1;
+        int compositeRank = 1;
         for (FileHotspot f : files) {
+            int sRank = simpleRank.get(f);
             List<MethodHotspot> fileMethods = methodsByFile.getOrDefault(f.path(), java.util.List.of());
             String xrayToggle = " <span class=\"xray-toggle-icon\">▶</span>";
 
             html.append("        <tr class=\"file-row\" onclick=\"toggleXray(&#39;xray-")
-                .append(rank).append("&#39;, this)\" style=\"cursor: pointer;\">");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+                .append(compositeRank).append("&#39;, this)\" style=\"cursor: pointer;\">");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(sRank).append("\">").append(sRank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(compositeRank).append("\">").append(compositeRank).append("</td>");
             html.append("<td><code>").append(escape(f.path())).append("</code>").append(xrayToggle).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(f.loc()).append("\">").append(f.loc()).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(f.revisions()).append("\">").append(f.revisions()).append("</td>");
@@ -426,8 +432,8 @@ public class HtmlOutputWriter implements OutputWriter {
             }
             html.append("</tr>\n");
 
-            html.append("        <tr id=\"xray-").append(rank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
-            html.append("          <td colspan=\"9\" class=\"xray-container\">\n");
+            html.append("        <tr id=\"xray-").append(compositeRank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
+            html.append("          <td colspan=\"10\" class=\"xray-container\">\n");
             if (fileMethods.isEmpty()) {
                 html.append("            <p class=\"no-methods\">No methods analyzed in this file.</p>\n");
             } else {
@@ -483,7 +489,7 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("          </td>\n");
             html.append("        </tr>\n");
 
-            rank++;
+            compositeRank++;
         }
         html.append("      </tbody>\n");
         html.append("    </table>\n");
@@ -500,9 +506,13 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      <span class=\"count\" data-count-target=\"#method-hotspots\">")
                 .append(methods.size()).append(" / ").append(methods.size()).append("</span>\n");
         html.append("    </div>\n");
+        java.util.Map<MethodHotspot, Integer> simpleRank = Rankings.rank(methods,
+                java.util.Comparator.comparingDouble(MethodHotspot::simpleScore).reversed()
+                        .thenComparing(h -> h.signature().toCanonicalString()));
         html.append("    <table id=\"method-hotspots\" class=\"sortable\">\n");
         html.append("      <thead><tr>");
-        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"number\">Simple Rank</th>");
+        html.append("<th data-sort-type=\"number\" aria-sort=\"ascending\">Composite Rank</th>");
         html.append("<th data-sort-type=\"string\">FQCN</th>");
         html.append("<th data-sort-type=\"string\">Method</th>");
         html.append("<th data-sort-type=\"string\">Parameters</th>");
@@ -522,8 +532,9 @@ public class HtmlOutputWriter implements OutputWriter {
         }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
-        int rank = 1;
+        int compositeRank = 1;
         for (MethodHotspot m : methods) {
+            int sRank = simpleRank.get(m);
             String fqcn = m.signature().fullyQualifiedClassName();
             String name = m.signature().methodName();
             String params = String.join(", ", m.signature().parameterTypes());
@@ -532,7 +543,8 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("        <tr data-path=\"").append(escape(m.filePath()))
                     .append("\" data-start-line=\"").append(m.startLine())
                     .append("\" data-end-line=\"").append(m.endLine()).append("\">");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(sRank).append("\">").append(sRank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(compositeRank).append("\">").append(compositeRank).append("</td>");
             html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
             html.append("<td><code>").append(escape(name)).append("</code></td>");
             html.append("<td class=\"params\">").append(escape(params)).append("</td>");
@@ -551,7 +563,7 @@ public class HtmlOutputWriter implements OutputWriter {
                 html.append("<td class=\"num\" data-sort-value=\"").append(m.compositeScore()).append("\">").append(fmt(m.compositeScore())).append("</td>");
             }
             html.append("</tr>\n");
-            rank++;
+            compositeRank++;
         }
         html.append("      </tbody>\n");
         html.append("    </table>\n");
@@ -671,9 +683,14 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      <span class=\"count\" data-count-target=\"#api-hotspots\">")
                 .append(apis.size()).append(" / ").append(apis.size()).append("</span>\n");
         html.append("    </div>\n");
+        java.util.Map<ApiHotspot, Integer> simpleRank = Rankings.rank(apis,
+                java.util.Comparator.comparingDouble(ApiHotspot::simpleScore).reversed()
+                        .thenComparing(ApiHotspot::route)
+                        .thenComparing(ApiHotspot::httpMethod));
         html.append("    <table id=\"api-hotspots\" class=\"sortable\">\n");
         html.append("      <thead><tr>");
-        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"number\">Simple Rank</th>");
+        html.append("<th data-sort-type=\"number\" aria-sort=\"ascending\">Composite Rank</th>");
         html.append("<th data-sort-type=\"string\">HTTP Method</th>");
         html.append("<th data-sort-type=\"string\">Route</th>");
         html.append("<th data-sort-type=\"string\">FQCN</th>");
@@ -695,14 +712,16 @@ public class HtmlOutputWriter implements OutputWriter {
         }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
-        int rank = 1;
+        int compositeRank = 1;
         for (ApiHotspot api : apis) {
+            int sRank = simpleRank.get(api);
             String fqcn   = api.controllerMethod().fullyQualifiedClassName();
             String method = api.controllerMethod().methodName();
             String params = String.join(", ", api.controllerMethod().parameterTypes());
 
             html.append("        <tr>");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(sRank).append("\">").append(sRank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(compositeRank).append("\">").append(compositeRank).append("</td>");
             html.append("<td><span class=\"method-badge ").append(api.httpMethod().toLowerCase()).append("\">")
                     .append(escape(api.httpMethod())).append("</span></td>");
             html.append("<td><code>").append(escape(api.route())).append("</code></td>");
@@ -725,7 +744,7 @@ public class HtmlOutputWriter implements OutputWriter {
             }
 
             html.append("</tr>\n");
-            rank++;
+            compositeRank++;
         }
         html.append("      </tbody>\n");
         html.append("    </table>\n");
@@ -755,9 +774,13 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      <span class=\"count\" data-count-target=\"#shared-hotspots\">")
                 .append(components.size()).append(" / ").append(components.size()).append("</span>\n");
         html.append("    </div>\n");
+        java.util.Map<SharedComponentHotspot, Integer> simpleRank = Rankings.rank(components,
+                java.util.Comparator.comparingDouble(SharedComponentHotspot::simpleScore).reversed()
+                        .thenComparing(c -> c.method().toCanonicalString()));
         html.append("    <table id=\"shared-hotspots\" class=\"sortable\">\n");
         html.append("      <thead><tr>");
-        html.append("<th data-sort-type=\"number\">Rank</th>");
+        html.append("<th data-sort-type=\"number\">Simple Rank</th>");
+        html.append("<th data-sort-type=\"number\" aria-sort=\"ascending\">Composite Rank</th>");
         html.append("<th data-sort-type=\"string\">FQCN</th>");
         html.append("<th data-sort-type=\"string\">Method</th>");
         html.append("<th data-sort-type=\"string\">Parameters</th>");
@@ -777,14 +800,16 @@ public class HtmlOutputWriter implements OutputWriter {
         }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
-        int rank = 1;
+        int compositeRank = 1;
         for (SharedComponentHotspot c : components) {
+            int sRank = simpleRank.get(c);
             String fqcn   = c.method().fullyQualifiedClassName();
             String method = c.method().methodName();
             String params = String.join(", ", c.method().parameterTypes());
 
             html.append("        <tr>");
-            html.append("<td class=\"rank\" data-sort-value=\"").append(rank).append("\">").append(rank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(sRank).append("\">").append(sRank).append("</td>");
+            html.append("<td class=\"rank\" data-sort-value=\"").append(compositeRank).append("\">").append(compositeRank).append("</td>");
             html.append("<td><code>").append(escape(fqcn)).append("</code></td>");
             html.append("<td><code>").append(escape(method)).append("</code></td>");
             html.append("<td class=\"params\">").append(escape(params)).append("</td>");
@@ -804,7 +829,7 @@ public class HtmlOutputWriter implements OutputWriter {
             }
 
             html.append("</tr>\n");
-            rank++;
+            compositeRank++;
         }
         html.append("      </tbody>\n");
         html.append("    </table>\n");

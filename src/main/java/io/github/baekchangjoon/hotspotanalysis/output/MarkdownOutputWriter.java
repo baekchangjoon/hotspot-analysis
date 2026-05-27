@@ -14,8 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Writes the analysis result as a single human-readable {@code hotspots.md}
@@ -117,32 +119,31 @@ public class MarkdownOutputWriter implements OutputWriter {
 
     private static void appendFileHotspots(StringBuilder sb, List<FileHotspot> files, boolean excludeCoverage) {
         sb.append("## File Hotspots (").append(files.size()).append(" rows)\n\n");
+        Map<FileHotspot, Integer> simpleRank = Rankings.rank(files,
+                Comparator.comparingDouble(FileHotspot::simpleScore).reversed()
+                        .thenComparing(FileHotspot::path));
         if (excludeCoverage) {
-            sb.append("| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |\n");
-            sb.append("|---:|:---|---:|---:|---:|---:|---:|---:|---:|\n");
-            int rank = 1;
-            for (FileHotspot file : files) {
-                sb.append("| ").append(rank++).append(" | `").append(file.path()).append("` | ")
-                        .append(file.loc()).append(" | ")
-                        .append(file.revisions()).append(" | ")
-                        .append(fmt(file.simpleScore())).append(" | ")
-                        .append(fmt(file.recencyDecay())).append(" | ")
-                        .append(fmt(file.cognitiveComplexity())).append(" | ")
-                        .append(fmt(file.compositeScore())).append(" | ")
-                        .append(fmtCoverage(file.lineCoverage())).append(" |\n");
-            }
+            sb.append("| Simple Rank | Composite Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |\n");
+            sb.append("|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|\n");
         } else {
-            sb.append("| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |\n");
-            sb.append("|---:|:---|---:|---:|---:|---:|---:|---:|---:|\n");
-            int rank = 1;
-            for (FileHotspot file : files) {
-                sb.append("| ").append(rank++).append(" | `").append(file.path()).append("` | ")
-                        .append(file.loc()).append(" | ")
-                        .append(file.revisions()).append(" | ")
-                        .append(fmt(file.simpleScore())).append(" | ")
-                        .append(fmt(file.recencyDecay())).append(" | ")
-                        .append(fmt(file.cognitiveComplexity())).append(" | ")
-                        .append(fmt(file.coverageMultiplier())).append(" | ")
+            sb.append("| Simple Rank | Composite Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |\n");
+            sb.append("|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|\n");
+        }
+        int compositeRank = 1;
+        for (FileHotspot file : files) {
+            sb.append("| ").append(simpleRank.get(file)).append(" | ")
+                    .append(compositeRank++).append(" | `")
+                    .append(file.path()).append("` | ")
+                    .append(file.loc()).append(" | ")
+                    .append(file.revisions()).append(" | ")
+                    .append(fmt(file.simpleScore())).append(" | ")
+                    .append(fmt(file.recencyDecay())).append(" | ")
+                    .append(fmt(file.cognitiveComplexity())).append(" | ");
+            if (excludeCoverage) {
+                sb.append(fmt(file.compositeScore())).append(" | ")
+                        .append(fmtCoverage(file.lineCoverage())).append(" |\n");
+            } else {
+                sb.append(fmt(file.coverageMultiplier())).append(" | ")
                         .append(fmt(file.compositeScore())).append(" |\n");
             }
         }
@@ -151,44 +152,36 @@ public class MarkdownOutputWriter implements OutputWriter {
 
     private static void appendMethodHotspots(StringBuilder sb, List<MethodHotspot> methods, boolean excludeCoverage) {
         sb.append("## Method Hotspots (").append(methods.size()).append(" rows)\n\n");
+        Map<MethodHotspot, Integer> simpleRank = Rankings.rank(methods,
+                Comparator.comparingDouble(MethodHotspot::simpleScore).reversed()
+                        .thenComparing(h -> h.signature().toCanonicalString()));
         if (excludeCoverage) {
-            sb.append("| Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |\n");
-            sb.append("|---:|:---|:---|:---|:---|:---:|---:|---:|---:|---:|---:|---:|---:|\n");
-            int rank = 1;
-            for (MethodHotspot method : methods) {
-                String params = String.join(", ", method.signature().parameterTypes());
-                sb.append("| ").append(rank++).append(" | `")
-                        .append(method.signature().fullyQualifiedClassName()).append("` | `")
-                        .append(method.signature().methodName()).append("` | `")
-                        .append(params).append("` | `")
-                        .append(method.filePath()).append("` | ")
-                        .append(method.startLine()).append("-").append(method.endLine()).append(" | ")
-                        .append(method.loc()).append(" | ")
-                        .append(method.revisions()).append(" | ")
-                        .append(fmt(method.simpleScore())).append(" | ")
-                        .append(fmt(method.recencyDecay())).append(" | ")
-                        .append(fmt(method.cognitiveComplexity())).append(" | ")
-                        .append(fmt(method.compositeScore())).append(" | ")
-                        .append(fmtCoverage(method.lineCoverage())).append(" |\n");
-            }
+            sb.append("| Simple Rank | Composite Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |\n");
+            sb.append("|---:|---:|:---|:---|:---|:---|:---:|---:|---:|---:|---:|---:|---:|---:|\n");
         } else {
-            sb.append("| Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |\n");
-            sb.append("|---:|:---|:---|:---|:---|:---:|---:|---:|---:|---:|---:|---:|---:|\n");
-            int rank = 1;
-            for (MethodHotspot method : methods) {
-                String params = String.join(", ", method.signature().parameterTypes());
-                sb.append("| ").append(rank++).append(" | `")
-                        .append(method.signature().fullyQualifiedClassName()).append("` | `")
-                        .append(method.signature().methodName()).append("` | `")
-                        .append(params).append("` | `")
-                        .append(method.filePath()).append("` | ")
-                        .append(method.startLine()).append("-").append(method.endLine()).append(" | ")
-                        .append(method.loc()).append(" | ")
-                        .append(method.revisions()).append(" | ")
-                        .append(fmt(method.simpleScore())).append(" | ")
-                        .append(fmt(method.recencyDecay())).append(" | ")
-                        .append(fmt(method.cognitiveComplexity())).append(" | ")
-                        .append(fmt(method.coverageMultiplier())).append(" | ")
+            sb.append("| Simple Rank | Composite Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |\n");
+            sb.append("|---:|---:|:---|:---|:---|:---|:---:|---:|---:|---:|---:|---:|---:|---:|\n");
+        }
+        int compositeRank = 1;
+        for (MethodHotspot method : methods) {
+            String params = String.join(", ", method.signature().parameterTypes());
+            sb.append("| ").append(simpleRank.get(method)).append(" | ")
+                    .append(compositeRank++).append(" | `")
+                    .append(method.signature().fullyQualifiedClassName()).append("` | `")
+                    .append(method.signature().methodName()).append("` | `")
+                    .append(params).append("` | `")
+                    .append(method.filePath()).append("` | ")
+                    .append(method.startLine()).append("-").append(method.endLine()).append(" | ")
+                    .append(method.loc()).append(" | ")
+                    .append(method.revisions()).append(" | ")
+                    .append(fmt(method.simpleScore())).append(" | ")
+                    .append(fmt(method.recencyDecay())).append(" | ")
+                    .append(fmt(method.cognitiveComplexity())).append(" | ");
+            if (excludeCoverage) {
+                sb.append(fmt(method.compositeScore())).append(" | ")
+                        .append(fmtCoverage(method.lineCoverage())).append(" |\n");
+            } else {
+                sb.append(fmt(method.coverageMultiplier())).append(" | ")
                         .append(fmt(method.compositeScore())).append(" |\n");
             }
         }
@@ -197,21 +190,26 @@ public class MarkdownOutputWriter implements OutputWriter {
 
     private static void appendApiHotspots(StringBuilder sb, List<ApiHotspot> apis, boolean excludeCoverage) {
         sb.append("## REST API Hotspots (").append(apis.size()).append(" rows)\n\n");
+        Map<ApiHotspot, Integer> simpleRank = Rankings.rank(apis,
+                Comparator.comparingDouble(ApiHotspot::simpleScore).reversed()
+                        .thenComparing(ApiHotspot::route)
+                        .thenComparing(ApiHotspot::httpMethod));
         if (excludeCoverage) {
-            sb.append("| Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Call Graph | Line Coverage |\n");
-            sb.append("|---:|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|:---|---:|\n");
+            sb.append("| Simple Rank | Composite Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Call Graph | Line Coverage |\n");
+            sb.append("|---:|---:|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|:---|---:|\n");
         } else {
-            sb.append("| Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score | Call Graph |\n");
-            sb.append("|---:|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|:---|\n");
+            sb.append("| Simple Rank | Composite Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score | Call Graph |\n");
+            sb.append("|---:|---:|:---|:---|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|:---|\n");
         }
-        int rank = 1;
+        int compositeRank = 1;
         for (ApiHotspot api : apis) {
             String params = String.join(", ", api.controllerMethod().parameterTypes());
             List<String> cgSigs = new ArrayList<>();
             for (var sig : api.callGraph()) {
                 cgSigs.add("`" + sig.toCanonicalString() + "`");
             }
-            sb.append("| ").append(rank++).append(" | ")
+            sb.append("| ").append(simpleRank.get(api)).append(" | ")
+                    .append(compositeRank++).append(" | ")
                     .append(api.httpMethod()).append(" | `")
                     .append(api.route()).append("` | `")
                     .append(api.controllerMethod().fullyQualifiedClassName()).append("` | `")
@@ -237,21 +235,25 @@ public class MarkdownOutputWriter implements OutputWriter {
 
     private static void appendSharedComponents(StringBuilder sb, List<SharedComponentHotspot> components, boolean excludeCoverage) {
         sb.append("## Shared Components (").append(components.size()).append(" rows)\n\n");
+        Map<SharedComponentHotspot, Integer> simpleRank = Rankings.rank(components,
+                Comparator.comparingDouble(SharedComponentHotspot::simpleScore).reversed()
+                        .thenComparing(c -> c.method().toCanonicalString()));
         if (excludeCoverage) {
-            sb.append("| Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Calling APIs | Line Coverage |\n");
-            sb.append("|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|:---|---:|\n");
+            sb.append("| Simple Rank | Composite Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Calling APIs | Line Coverage |\n");
+            sb.append("|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|:---|---:|\n");
         } else {
-            sb.append("| Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score | Calling APIs |\n");
-            sb.append("|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|:---|\n");
+            sb.append("| Simple Rank | Composite Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score | Calling APIs |\n");
+            sb.append("|---:|---:|:---|:---|:---|---:|---:|---:|---:|---:|---:|---:|:---|\n");
         }
-        int rank = 1;
+        int compositeRank = 1;
         for (SharedComponentHotspot component : components) {
             String params = String.join(", ", component.method().parameterTypes());
             List<String> apis = new ArrayList<>();
             for (var api : component.callingApis()) {
                 apis.add("`" + api + "`");
             }
-            sb.append("| ").append(rank++).append(" | `")
+            sb.append("| ").append(simpleRank.get(component)).append(" | ")
+                    .append(compositeRank++).append(" | `")
                     .append(component.method().fullyQualifiedClassName()).append("` | `")
                     .append(component.method().methodName()).append("` | `")
                     .append(params).append("` | ")
