@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -21,9 +20,13 @@ import java.util.Locale;
  * Writes the analysis result as CSV files: {@code file_hotspots.csv},
  * {@code method_hotspots.csv}, and optionally API analysis files.
  *
- * <p>Column order follows the canonical 7-metric block:
+ * <p>Default column order follows the canonical 7-metric block:
  * {@code loc, revisions, simple_score, recency_decay, cognitive_complexity,
- * coverage_multiplier, composite_score}.</p>
+ * coverage_multiplier, composite_score}. When
+ * {@code scoring.excludeCoverage=true}, the {@code coverage_multiplier}
+ * column is replaced with a {@code line_coverage} column at the rightmost
+ * position (after {@code composite_score}), and the cell value is the raw
+ * line-coverage ratio (or {@code N/A} when no JaCoCo report was supplied).</p>
  */
 @Component
 public class CsvOutputWriter implements OutputWriter {
@@ -35,11 +38,17 @@ public class CsvOutputWriter implements OutputWriter {
 
     @Override
     public void write(AnalysisResult result, Path outputDir) {
-        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.CSV), outputDir.toString(), 0), false);
+        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.CSV), outputDir.toString(), 0), false, false);
     }
 
     @Override
     public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
+        write(result, outputDir, outputConfig, apiEnabled, false);
+    }
+
+    @Override
+    public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig,
+                      boolean apiEnabled, boolean excludeCoverage) {
         try {
             Files.createDirectories(outputDir);
 
@@ -49,113 +58,197 @@ public class CsvOutputWriter implements OutputWriter {
                                  outputConfig.apiLayout() == OutputConfig.ApiLayout.BOTH;
 
             if (!apiEnabled) {
-                writeFileHotspots(result, outputDir.resolve("file_hotspots.csv"));
-                writeMethodHotspots(result, outputDir.resolve("method_hotspots.csv"));
+                writeFileHotspots(result, outputDir.resolve("file_hotspots.csv"), excludeCoverage);
+                writeMethodHotspots(result, outputDir.resolve("method_hotspots.csv"), excludeCoverage);
                 return;
             }
 
             if (combined) {
-                writeFileHotspots(result, outputDir.resolve("file_hotspots.csv"));
-                writeMethodHotspots(result, outputDir.resolve("method_hotspots.csv"));
+                writeFileHotspots(result, outputDir.resolve("file_hotspots.csv"), excludeCoverage);
+                writeMethodHotspots(result, outputDir.resolve("method_hotspots.csv"), excludeCoverage);
             }
 
             if (standalone || combined) {
-                writeApiHotspots(result, outputDir.resolve("api_hotspots.csv"));
-                writeSharedComponents(result, outputDir.resolve("shared_components.csv"));
+                writeApiHotspots(result, outputDir.resolve("api_hotspots.csv"), excludeCoverage);
+                writeSharedComponents(result, outputDir.resolve("shared_components.csv"), excludeCoverage);
             }
         } catch (IOException e) {
             throw new OutputException("Failed to write CSV outputs to " + outputDir, e);
         }
     }
 
-    private void writeFileHotspots(AnalysisResult result, Path target) throws IOException {
+    private void writeFileHotspots(AnalysisResult result, Path target, boolean excludeCoverage) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,path,loc,revisions,simple_score,recency_decay,"
-                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
-            int rank = 1;
-            for (FileHotspot f : result.fileHotspots()) {
-                writer.write(rank++ + ","
-                        + escape(f.path()) + ","
-                        + f.loc() + ","
-                        + f.revisions() + ","
-                        + fmt(f.simpleScore()) + ","
-                        + fmt(f.recencyDecay()) + ","
-                        + fmt(f.cognitiveComplexity()) + ","
-                        + fmt(f.coverageMultiplier()) + ","
-                        + fmt(f.compositeScore()) + "\n");
+            if (excludeCoverage) {
+                writer.write("rank,path,loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,composite_score,line_coverage\n");
+                int rank = 1;
+                for (FileHotspot f : result.fileHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(f.path()) + ","
+                            + f.loc() + ","
+                            + f.revisions() + ","
+                            + fmt(f.simpleScore()) + ","
+                            + fmt(f.recencyDecay()) + ","
+                            + fmt(f.cognitiveComplexity()) + ","
+                            + fmt(f.compositeScore()) + ","
+                            + fmtCoverage(f.lineCoverage()) + "\n");
+                }
+            } else {
+                writer.write("rank,path,loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,coverage_multiplier,composite_score\n");
+                int rank = 1;
+                for (FileHotspot f : result.fileHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(f.path()) + ","
+                            + f.loc() + ","
+                            + f.revisions() + ","
+                            + fmt(f.simpleScore()) + ","
+                            + fmt(f.recencyDecay()) + ","
+                            + fmt(f.cognitiveComplexity()) + ","
+                            + fmt(f.coverageMultiplier()) + ","
+                            + fmt(f.compositeScore()) + "\n");
+                }
             }
         }
     }
 
-    private void writeMethodHotspots(AnalysisResult result, Path target) throws IOException {
+    private void writeMethodHotspots(AnalysisResult result, Path target, boolean excludeCoverage) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,fqcn,method,parameters,file,start_line,end_line,"
-                    + "loc,revisions,simple_score,recency_decay,"
-                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
-            int rank = 1;
-            for (MethodHotspot m : result.methodHotspots()) {
-                writer.write(rank++ + ","
-                        + escape(m.signature().fullyQualifiedClassName()) + ","
-                        + escape(m.signature().methodName()) + ","
-                        + escape(String.join(";", m.signature().parameterTypes())) + ","
-                        + escape(m.filePath()) + ","
-                        + m.startLine() + ","
-                        + m.endLine() + ","
-                        + m.loc() + ","
-                        + m.revisions() + ","
-                        + fmt(m.simpleScore()) + ","
-                        + fmt(m.recencyDecay()) + ","
-                        + fmt(m.cognitiveComplexity()) + ","
-                        + fmt(m.coverageMultiplier()) + ","
-                        + fmt(m.compositeScore()) + "\n");
+            if (excludeCoverage) {
+                writer.write("rank,fqcn,method,parameters,file,start_line,end_line,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,composite_score,line_coverage\n");
+                int rank = 1;
+                for (MethodHotspot m : result.methodHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(m.signature().fullyQualifiedClassName()) + ","
+                            + escape(m.signature().methodName()) + ","
+                            + escape(String.join(";", m.signature().parameterTypes())) + ","
+                            + escape(m.filePath()) + ","
+                            + m.startLine() + ","
+                            + m.endLine() + ","
+                            + m.loc() + ","
+                            + m.revisions() + ","
+                            + fmt(m.simpleScore()) + ","
+                            + fmt(m.recencyDecay()) + ","
+                            + fmt(m.cognitiveComplexity()) + ","
+                            + fmt(m.compositeScore()) + ","
+                            + fmtCoverage(m.lineCoverage()) + "\n");
+                }
+            } else {
+                writer.write("rank,fqcn,method,parameters,file,start_line,end_line,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,coverage_multiplier,composite_score\n");
+                int rank = 1;
+                for (MethodHotspot m : result.methodHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(m.signature().fullyQualifiedClassName()) + ","
+                            + escape(m.signature().methodName()) + ","
+                            + escape(String.join(";", m.signature().parameterTypes())) + ","
+                            + escape(m.filePath()) + ","
+                            + m.startLine() + ","
+                            + m.endLine() + ","
+                            + m.loc() + ","
+                            + m.revisions() + ","
+                            + fmt(m.simpleScore()) + ","
+                            + fmt(m.recencyDecay()) + ","
+                            + fmt(m.cognitiveComplexity()) + ","
+                            + fmt(m.coverageMultiplier()) + ","
+                            + fmt(m.compositeScore()) + "\n");
+                }
             }
         }
     }
 
-    private void writeApiHotspots(AnalysisResult result, Path target) throws IOException {
+    private void writeApiHotspots(AnalysisResult result, Path target, boolean excludeCoverage) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,http_method,route,fqcn,method,parameters,"
-                    + "loc,revisions,simple_score,recency_decay,"
-                    + "cognitive_complexity,coverage_multiplier,composite_score\n");
-            int rank = 1;
-            for (ApiHotspot api : result.apiHotspots()) {
-                writer.write(rank++ + ","
-                        + escape(api.httpMethod()) + ","
-                        + escape(api.route()) + ","
-                        + escape(api.controllerMethod().fullyQualifiedClassName()) + ","
-                        + escape(api.controllerMethod().methodName()) + ","
-                        + escape(String.join(";", api.controllerMethod().parameterTypes())) + ","
-                        + api.loc() + ","
-                        + api.revisions() + ","
-                        + fmt(api.simpleScore()) + ","
-                        + fmt(api.recencyDecay()) + ","
-                        + fmt(api.cognitiveComplexity()) + ","
-                        + fmt(api.coverageMultiplier()) + ","
-                        + fmt(api.compositeScore()) + "\n");
+            if (excludeCoverage) {
+                writer.write("rank,http_method,route,fqcn,method,parameters,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,composite_score,line_coverage\n");
+                int rank = 1;
+                for (ApiHotspot api : result.apiHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(api.httpMethod()) + ","
+                            + escape(api.route()) + ","
+                            + escape(api.controllerMethod().fullyQualifiedClassName()) + ","
+                            + escape(api.controllerMethod().methodName()) + ","
+                            + escape(String.join(";", api.controllerMethod().parameterTypes())) + ","
+                            + api.loc() + ","
+                            + api.revisions() + ","
+                            + fmt(api.simpleScore()) + ","
+                            + fmt(api.recencyDecay()) + ","
+                            + fmt(api.cognitiveComplexity()) + ","
+                            + fmt(api.compositeScore()) + ","
+                            + fmtCoverage(api.lineCoverage()) + "\n");
+                }
+            } else {
+                writer.write("rank,http_method,route,fqcn,method,parameters,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,coverage_multiplier,composite_score\n");
+                int rank = 1;
+                for (ApiHotspot api : result.apiHotspots()) {
+                    writer.write(rank++ + ","
+                            + escape(api.httpMethod()) + ","
+                            + escape(api.route()) + ","
+                            + escape(api.controllerMethod().fullyQualifiedClassName()) + ","
+                            + escape(api.controllerMethod().methodName()) + ","
+                            + escape(String.join(";", api.controllerMethod().parameterTypes())) + ","
+                            + api.loc() + ","
+                            + api.revisions() + ","
+                            + fmt(api.simpleScore()) + ","
+                            + fmt(api.recencyDecay()) + ","
+                            + fmt(api.cognitiveComplexity()) + ","
+                            + fmt(api.coverageMultiplier()) + ","
+                            + fmt(api.compositeScore()) + "\n");
+                }
             }
         }
     }
 
-    private void writeSharedComponents(AnalysisResult result, Path target) throws IOException {
+    private void writeSharedComponents(AnalysisResult result, Path target, boolean excludeCoverage) throws IOException {
         try (BufferedWriter writer = Files.newBufferedWriter(target, StandardCharsets.UTF_8)) {
-            writer.write("rank,fqcn,method,parameters,"
-                    + "loc,revisions,simple_score,recency_decay,"
-                    + "cognitive_complexity,coverage_multiplier,composite_score,"
-                    + "calling_apis\n");
-            int rank = 1;
-            for (SharedComponentHotspot component : result.sharedComponents()) {
-                writer.write(rank++ + ","
-                        + escape(component.method().fullyQualifiedClassName()) + ","
-                        + escape(component.method().methodName()) + ","
-                        + escape(String.join(";", component.method().parameterTypes())) + ","
-                        + component.loc() + ","
-                        + component.revisions() + ","
-                        + fmt(component.simpleScore()) + ","
-                        + fmt(component.recencyDecay()) + ","
-                        + fmt(component.cognitiveComplexity()) + ","
-                        + fmt(component.coverageMultiplier()) + ","
-                        + fmt(component.compositeScore()) + ","
-                        + escape(String.join(";", component.callingApis())) + "\n");
+            if (excludeCoverage) {
+                writer.write("rank,fqcn,method,parameters,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,composite_score,"
+                        + "calling_apis,line_coverage\n");
+                int rank = 1;
+                for (SharedComponentHotspot component : result.sharedComponents()) {
+                    writer.write(rank++ + ","
+                            + escape(component.method().fullyQualifiedClassName()) + ","
+                            + escape(component.method().methodName()) + ","
+                            + escape(String.join(";", component.method().parameterTypes())) + ","
+                            + component.loc() + ","
+                            + component.revisions() + ","
+                            + fmt(component.simpleScore()) + ","
+                            + fmt(component.recencyDecay()) + ","
+                            + fmt(component.cognitiveComplexity()) + ","
+                            + fmt(component.compositeScore()) + ","
+                            + escape(String.join(";", component.callingApis())) + ","
+                            + fmtCoverage(component.lineCoverage()) + "\n");
+                }
+            } else {
+                writer.write("rank,fqcn,method,parameters,"
+                        + "loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,coverage_multiplier,composite_score,"
+                        + "calling_apis\n");
+                int rank = 1;
+                for (SharedComponentHotspot component : result.sharedComponents()) {
+                    writer.write(rank++ + ","
+                            + escape(component.method().fullyQualifiedClassName()) + ","
+                            + escape(component.method().methodName()) + ","
+                            + escape(String.join(";", component.method().parameterTypes())) + ","
+                            + component.loc() + ","
+                            + component.revisions() + ","
+                            + fmt(component.simpleScore()) + ","
+                            + fmt(component.recencyDecay()) + ","
+                            + fmt(component.cognitiveComplexity()) + ","
+                            + fmt(component.coverageMultiplier()) + ","
+                            + fmt(component.compositeScore()) + ","
+                            + escape(String.join(";", component.callingApis())) + "\n");
+                }
             }
         }
     }
@@ -176,5 +269,17 @@ public class CsvOutputWriter implements OutputWriter {
             return Long.toString((long) v);
         }
         return String.format(Locale.ROOT, "%.4f", v);
+    }
+
+    /**
+     * Renders a raw line-coverage ratio in {@code [0.0, 1.0]} as a percentage
+     * with one decimal (e.g. {@code 83.3%}), or {@code N/A} when no JaCoCo
+     * data was available for the artifact.
+     */
+    private static String fmtCoverage(Double lineCoverage) {
+        if (lineCoverage == null) {
+            return "N/A";
+        }
+        return String.format(Locale.ROOT, "%.1f%%", lineCoverage * 100.0);
     }
 }

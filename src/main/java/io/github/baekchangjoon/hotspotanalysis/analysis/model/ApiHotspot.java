@@ -8,6 +8,10 @@ import java.util.Objects;
 /**
  * Per-REST-API hotspot result. Carries the four input factors plus both
  * derived scores in canonical order.
+ *
+ * <p>{@code lineCoverage} carries the raw line-coverage ratio in
+ * {@code [0.0, 1.0]} when a JaCoCo report is supplied, otherwise
+ * {@code null}.</p>
  */
 public record ApiHotspot(
         String httpMethod,
@@ -20,7 +24,8 @@ public record ApiHotspot(
         double cognitiveComplexity,
         double coverageMultiplier,
         double compositeScore,
-        List<MethodSignature> callGraph
+        List<MethodSignature> callGraph,
+        Double lineCoverage
 ) {
     public ApiHotspot {
         Objects.requireNonNull(httpMethod, "httpMethod");
@@ -39,5 +44,19 @@ public record ApiHotspot(
         if (coverageMultiplier <= 0) {
             throw new IllegalArgumentException("coverageMultiplier must be > 0");
         }
+        if (lineCoverage != null && (lineCoverage < 0.0 || lineCoverage > 1.0)) {
+            throw new IllegalArgumentException(
+                    "lineCoverage must be in [0.0, 1.0] (was " + lineCoverage + ")");
+        }
+    }
+
+    public ApiHotspot(String httpMethod, String route, MethodSignature controllerMethod,
+                      int loc, int revisions,
+                      double simpleScore, double recencyDecay,
+                      double cognitiveComplexity, double coverageMultiplier,
+                      double compositeScore, List<MethodSignature> callGraph) {
+        this(httpMethod, route, controllerMethod, loc, revisions,
+                simpleScore, recencyDecay, cognitiveComplexity,
+                coverageMultiplier, compositeScore, callGraph, null);
     }
 }

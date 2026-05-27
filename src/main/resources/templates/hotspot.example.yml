@@ -45,6 +45,12 @@ analysis:
     # applied to each commit. 90 days is the default; raise for slow-moving
     # legacy code, lower for fast-moving features.
     decayHalfLifeDays: 90
+    # Optional. When true, coverage is removed from the Composite Score
+    # (Composite = Cognitive Complexity x Recency Decay) and every report
+    # surfaces the raw line-coverage % in a rightmost column instead of
+    # the coverage-multiplier column. Use this when you want coverage as
+    # an observational metric rather than a scoring input. Default: false.
+    # excludeCoverage: false
 
   # Optional. When supplied, every file/method's Coverage Multiplier is
   # computed as 1 / (line_coverage + 0.1). Absent → multiplier defaults

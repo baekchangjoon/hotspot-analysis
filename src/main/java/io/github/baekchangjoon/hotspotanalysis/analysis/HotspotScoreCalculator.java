@@ -39,6 +39,21 @@ public class HotspotScoreCalculator {
         return cognitiveComplexity * recencyDecay * coverageMultiplier;
     }
 
+    /**
+     * Composite score variant used when {@code scoring.excludeCoverage=true}.
+     * Coverage is intentionally not folded into the score because the user
+     * wants the multiplier to be an observational metric, not a scoring input.
+     */
+    public double composite(double cognitiveComplexity, double recencyDecay) {
+        if (cognitiveComplexity < 0) {
+            throw new IllegalArgumentException("cognitiveComplexity must be >= 0");
+        }
+        if (recencyDecay < 0) {
+            throw new IllegalArgumentException("recencyDecay must be >= 0");
+        }
+        return cognitiveComplexity * recencyDecay;
+    }
+
     public double multiplier(OptionalDouble coverage) {
         if (coverage.isEmpty()) {
             return 1.0;

@@ -46,6 +46,21 @@ class HotspotScoreCalculatorTest {
     }
 
     @Test
+    void compositeTwoArgDropsCoverageTerm() {
+        // Same cc/decay as the three-arg test: 25 * 0.425 = 10.625
+        assertThat(calculator.composite(25.0, 0.425))
+                .isCloseTo(10.625, within(1e-9));
+    }
+
+    @Test
+    void compositeTwoArgRejectsNegativeInputs() {
+        assertThatThrownBy(() -> calculator.composite(-1, 0.5))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> calculator.composite(1.0, -0.5))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
     void multiplierReturnsOneWhenCoverageAbsent() {
         assertThat(calculator.multiplier(java.util.OptionalDouble.empty())).isEqualTo(1.0);
     }

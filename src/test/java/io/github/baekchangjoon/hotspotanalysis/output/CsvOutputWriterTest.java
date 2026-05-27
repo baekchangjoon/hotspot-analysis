@@ -101,6 +101,51 @@ class CsvOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true replaces coverage_multiplier with line_coverage at rightmost column")
+    void shouldEmitLineCoverageAtRightmostWhenExcludeCoverage(@TempDir Path tempDir) throws IOException {
+        AnalysisResult result = new AnalysisResult(
+                List.of(new FileHotspot(
+                        "Foo.java",
+                        /* loc */ 100, /* revisions */ 2,
+                        /* simpleScore */ 200.0, /* recencyDecay */ 1.5,
+                        /* cognitiveComplexity */ 4.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 6.0,
+                        /* lineCoverage */ 0.833)),
+                List.of(new MethodHotspot(
+                        new MethodSignature("a.B", "m", List.of()),
+                        "Foo.java", 1, 5,
+                        /* loc */ 5, /* revisions */ 1,
+                        /* simpleScore */ 5.0, /* recencyDecay */ 0.5,
+                        /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 0.5,
+                        /* lineCoverage */ null)),
+                new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
+                        "LOCAL_GIT:/tmp", 1, 1, 1));
+
+        writer.write(result, tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.CSV),
+                        tempDir.toString(), 0),
+                false, true);
+
+        String fileCsv = Files.readString(tempDir.resolve("file_hotspots.csv"));
+        assertThat(fileCsv).startsWith(
+                "rank,path,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,line_coverage\n");
+        assertThat(fileCsv).doesNotContain("coverage_multiplier");
+        // Composite Score precedes Line Coverage; coverage rendered as percentage with one decimal.
+        assertThat(fileCsv).contains("1,Foo.java,100,2,200,1.5000,4,6,83.3%\n");
+
+        String methodCsv = Files.readString(tempDir.resolve("method_hotspots.csv"));
+        assertThat(methodCsv).startsWith(
+                "rank,fqcn,method,parameters,file,start_line,end_line,"
+                + "loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,line_coverage\n");
+        // No JaCoCo data → N/A in the rightmost cell.
+        assertThat(methodCsv).contains(",1,5,0.5000,1,0.5000,N/A\n");
+    }
+
+    @Test
     @DisplayName("writes api_hotspots.csv and shared_components.csv when API analysis is enabled")
     void shouldWriteApiAndSharedComponentsCsv(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,

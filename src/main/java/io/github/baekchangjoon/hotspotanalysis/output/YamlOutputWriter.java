@@ -57,11 +57,17 @@ public class YamlOutputWriter implements OutputWriter {
 
     @Override
     public void write(AnalysisResult result, Path outputDir) {
-        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.YAML), outputDir.toString(), 0), false);
+        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.YAML), outputDir.toString(), 0), false, false);
     }
 
     @Override
     public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
+        write(result, outputDir, outputConfig, apiEnabled, false);
+    }
+
+    @Override
+    public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig,
+                      boolean apiEnabled, boolean excludeCoverage) {
         try {
             Files.createDirectories(outputDir);
 
@@ -72,18 +78,18 @@ public class YamlOutputWriter implements OutputWriter {
 
             if (!apiEnabled) {
                 yamlMapper.writerWithDefaultPrettyPrinter()
-                        .writeValue(outputDir.resolve("hotspots.yml").toFile(), buildCombined(result));
+                        .writeValue(outputDir.resolve("hotspots.yml").toFile(), buildCombined(result, excludeCoverage));
                 return;
             }
 
             if (combined) {
                 yamlMapper.writerWithDefaultPrettyPrinter()
-                        .writeValue(outputDir.resolve("hotspots.yml").toFile(), buildCombined(result));
+                        .writeValue(outputDir.resolve("hotspots.yml").toFile(), buildCombined(result, excludeCoverage));
             }
 
             if (standalone) {
                 yamlMapper.writerWithDefaultPrettyPrinter()
-                        .writeValue(outputDir.resolve("api_report.yml").toFile(), buildApiReport(result));
+                        .writeValue(outputDir.resolve("api_report.yml").toFile(), buildApiReport(result, excludeCoverage));
             }
         } catch (IOException e) {
             throw new OutputException("Failed to write YAML output to " + outputDir, e);
@@ -94,25 +100,25 @@ public class YamlOutputWriter implements OutputWriter {
     // Document builders
     // -------------------------------------------------------------------------
 
-    private Map<String, Object> buildCombined(AnalysisResult result) {
+    private Map<String, Object> buildCombined(AnalysisResult result, boolean excludeCoverage) {
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("meta", result.meta());
-        doc.put("fileHotspots", buildFileRows(result.fileHotspots()));
-        doc.put("methodHotspots", buildMethodRows(result.methodHotspots()));
+        doc.put("fileHotspots", buildFileRows(result.fileHotspots(), excludeCoverage));
+        doc.put("methodHotspots", buildMethodRows(result.methodHotspots(), excludeCoverage));
         if (!result.apiHotspots().isEmpty()) {
-            doc.put("apiHotspots", buildApiRows(result.apiHotspots()));
+            doc.put("apiHotspots", buildApiRows(result.apiHotspots(), excludeCoverage));
         }
         if (!result.sharedComponents().isEmpty()) {
-            doc.put("sharedComponents", buildSharedRows(result.sharedComponents()));
+            doc.put("sharedComponents", buildSharedRows(result.sharedComponents(), excludeCoverage));
         }
         return doc;
     }
 
-    private Map<String, Object> buildApiReport(AnalysisResult result) {
+    private Map<String, Object> buildApiReport(AnalysisResult result, boolean excludeCoverage) {
         Map<String, Object> doc = new LinkedHashMap<>();
         doc.put("meta", result.meta());
-        doc.put("apiHotspots", buildApiRows(result.apiHotspots()));
-        doc.put("sharedComponents", buildSharedRows(result.sharedComponents()));
+        doc.put("apiHotspots", buildApiRows(result.apiHotspots(), excludeCoverage));
+        doc.put("sharedComponents", buildSharedRows(result.sharedComponents(), excludeCoverage));
         return doc;
     }
 
@@ -120,38 +126,38 @@ public class YamlOutputWriter implements OutputWriter {
     // Row builders — one per hotspot type
     // -------------------------------------------------------------------------
 
-    private List<Map<String, Object>> buildFileRows(List<FileHotspot> hotspots) {
+    private List<Map<String, Object>> buildFileRows(List<FileHotspot> hotspots, boolean excludeCoverage) {
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
         int rank = 1;
         for (FileHotspot f : hotspots) {
-            rows.add(fileRow(rank++, f));
+            rows.add(fileRow(rank++, f, excludeCoverage));
         }
         return rows;
     }
 
-    private List<Map<String, Object>> buildMethodRows(List<MethodHotspot> hotspots) {
+    private List<Map<String, Object>> buildMethodRows(List<MethodHotspot> hotspots, boolean excludeCoverage) {
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
         int rank = 1;
         for (MethodHotspot m : hotspots) {
-            rows.add(methodRow(rank++, m));
+            rows.add(methodRow(rank++, m, excludeCoverage));
         }
         return rows;
     }
 
-    private List<Map<String, Object>> buildApiRows(List<ApiHotspot> hotspots) {
+    private List<Map<String, Object>> buildApiRows(List<ApiHotspot> hotspots, boolean excludeCoverage) {
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
         int rank = 1;
         for (ApiHotspot a : hotspots) {
-            rows.add(apiRow(rank++, a));
+            rows.add(apiRow(rank++, a, excludeCoverage));
         }
         return rows;
     }
 
-    private List<Map<String, Object>> buildSharedRows(List<SharedComponentHotspot> hotspots) {
+    private List<Map<String, Object>> buildSharedRows(List<SharedComponentHotspot> hotspots, boolean excludeCoverage) {
         List<Map<String, Object>> rows = new ArrayList<>(hotspots.size());
         int rank = 1;
         for (SharedComponentHotspot s : hotspots) {
-            rows.add(sharedRow(rank++, s));
+            rows.add(sharedRow(rank++, s, excludeCoverage));
         }
         return rows;
     }
@@ -160,7 +166,7 @@ public class YamlOutputWriter implements OutputWriter {
     // Individual row factories — canonical key order guaranteed by LinkedHashMap
     // -------------------------------------------------------------------------
 
-    private static Map<String, Object> fileRow(int rank, FileHotspot f) {
+    private static Map<String, Object> fileRow(int rank, FileHotspot f, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("rank", rank);
         m.put("path", f.path());
@@ -169,12 +175,17 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("simpleScore", asYamlNumber(f.simpleScore()));
         m.put("recencyDecay", asYamlNumber(f.recencyDecay()));
         m.put("cognitiveComplexity", asYamlNumber(f.cognitiveComplexity()));
-        m.put("coverageMultiplier", asYamlNumber(f.coverageMultiplier()));
-        m.put("compositeScore", asYamlNumber(f.compositeScore()));
+        if (excludeCoverage) {
+            m.put("compositeScore", asYamlNumber(f.compositeScore()));
+            m.put("lineCoverage", asCoverageValue(f.lineCoverage()));
+        } else {
+            m.put("coverageMultiplier", asYamlNumber(f.coverageMultiplier()));
+            m.put("compositeScore", asYamlNumber(f.compositeScore()));
+        }
         return m;
     }
 
-    private static Map<String, Object> methodRow(int rank, MethodHotspot mh) {
+    private static Map<String, Object> methodRow(int rank, MethodHotspot mh, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("rank", rank);
         m.put("fqcn", mh.signature().fullyQualifiedClassName());
@@ -185,11 +196,12 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("endLine", mh.endLine());
         putMetricBlock(m, mh.loc(), mh.revisions(),
                 mh.simpleScore(), mh.recencyDecay(),
-                mh.cognitiveComplexity(), mh.coverageMultiplier(), mh.compositeScore());
+                mh.cognitiveComplexity(), mh.coverageMultiplier(), mh.compositeScore(),
+                mh.lineCoverage(), excludeCoverage);
         return m;
     }
 
-    private static Map<String, Object> apiRow(int rank, ApiHotspot a) {
+    private static Map<String, Object> apiRow(int rank, ApiHotspot a, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("rank", rank);
         m.put("httpMethod", a.httpMethod());
@@ -199,12 +211,13 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("parameters", a.controllerMethod().parameterTypes());
         putMetricBlock(m, a.loc(), a.revisions(),
                 a.simpleScore(), a.recencyDecay(),
-                a.cognitiveComplexity(), a.coverageMultiplier(), a.compositeScore());
+                a.cognitiveComplexity(), a.coverageMultiplier(), a.compositeScore(),
+                a.lineCoverage(), excludeCoverage);
         m.put("callGraph", signaturesAsList(a.callGraph()));
         return m;
     }
 
-    private static Map<String, Object> sharedRow(int rank, SharedComponentHotspot s) {
+    private static Map<String, Object> sharedRow(int rank, SharedComponentHotspot s, boolean excludeCoverage) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("rank", rank);
         m.put("fqcn", s.method().fullyQualifiedClassName());
@@ -212,7 +225,8 @@ public class YamlOutputWriter implements OutputWriter {
         m.put("parameters", s.method().parameterTypes());
         putMetricBlock(m, s.loc(), s.revisions(),
                 s.simpleScore(), s.recencyDecay(),
-                s.cognitiveComplexity(), s.coverageMultiplier(), s.compositeScore());
+                s.cognitiveComplexity(), s.coverageMultiplier(), s.compositeScore(),
+                s.lineCoverage(), excludeCoverage);
         m.put("callingApis", s.callingApis());
         return m;
     }
@@ -221,19 +235,42 @@ public class YamlOutputWriter implements OutputWriter {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /** Appends the canonical 7-metric block to an existing map in order. */
+    /**
+     * Appends the canonical 7-metric block to an existing map in order. When
+     * {@code excludeCoverage=true} the {@code coverageMultiplier} key is
+     * dropped, {@code compositeScore} is emitted before the rightmost
+     * {@code lineCoverage} key.
+     */
     private static void putMetricBlock(Map<String, Object> m,
                                        int loc, int revisions,
                                        double simpleScore, double recencyDecay,
                                        double cognitiveComplexity, double coverageMultiplier,
-                                       double compositeScore) {
+                                       double compositeScore,
+                                       Double lineCoverage, boolean excludeCoverage) {
         m.put("loc", loc);
         m.put("revisions", revisions);
         m.put("simpleScore", asYamlNumber(simpleScore));
         m.put("recencyDecay", asYamlNumber(recencyDecay));
         m.put("cognitiveComplexity", asYamlNumber(cognitiveComplexity));
-        m.put("coverageMultiplier", asYamlNumber(coverageMultiplier));
-        m.put("compositeScore", asYamlNumber(compositeScore));
+        if (excludeCoverage) {
+            m.put("compositeScore", asYamlNumber(compositeScore));
+            m.put("lineCoverage", asCoverageValue(lineCoverage));
+        } else {
+            m.put("coverageMultiplier", asYamlNumber(coverageMultiplier));
+            m.put("compositeScore", asYamlNumber(compositeScore));
+        }
+    }
+
+    /**
+     * YAML representation for the raw line-coverage ratio. Emits the string
+     * {@code "N/A"} when no JaCoCo data was supplied, otherwise the ratio
+     * rounded to four decimals.
+     */
+    private static Object asCoverageValue(Double lineCoverage) {
+        if (lineCoverage == null) {
+            return "N/A";
+        }
+        return round4(lineCoverage);
     }
 
     /** Converts a list of {@link MethodSignature} to canonical strings for YAML sequences. */

@@ -23,6 +23,17 @@ public interface OutputWriter {
     void write(AnalysisResult result, Path outputDir);
 
     default void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
-        write(result, outputDir);
+        write(result, outputDir, outputConfig, apiEnabled, false);
+    }
+
+    /**
+     * Writes the report files. When {@code excludeCoverage=true}, the
+     * coverage-multiplier column is replaced with a raw line-coverage column
+     * at the rightmost position; otherwise the canonical 7-metric block is
+     * emitted unchanged.
+     */
+    default void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig,
+                       boolean apiEnabled, boolean excludeCoverage) {
+        write(result, outputDir, outputConfig, apiEnabled);
     }
 }

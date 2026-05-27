@@ -72,6 +72,61 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true emits Line Coverage column at rightmost position")
+    void shouldRenderLineCoverageAtRightmostWhenExcludeCoverage(@TempDir Path tempDir) throws IOException {
+        io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult result =
+                new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult(
+                        java.util.List.of(new io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot(
+                                "src/A.java",
+                                /* loc */ 50, /* revisions */ 2,
+                                /* simpleScore */ 100.0, /* recencyDecay */ 1.0,
+                                /* cognitiveComplexity */ 3.0, /* coverageMultiplier */ 1.0,
+                                /* compositeScore */ 3.0,
+                                /* lineCoverage */ 0.5)),
+                        java.util.List.of(),
+                        new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta(
+                                OutputWriterTestFixtures.FIXED_INSTANT, "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        writer.write(result, tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        java.util.List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.MD),
+                        tempDir.toString(), 0),
+                false, true);
+
+        String md = Files.readString(tempDir.resolve("hotspots.md"));
+        assertThat(md).contains(
+                "| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |");
+        assertThat(md).doesNotContain("Coverage Multiplier");
+        assertThat(md).contains("| 1 | `src/A.java` | 50 | 2 | 100 | 1 | 3 | 3 | 50.0% |");
+    }
+
+    @Test
+    @DisplayName("excludeCoverage=true renders N/A when JaCoCo data is absent")
+    void shouldRenderNAWhenLineCoverageMissing(@TempDir Path tempDir) throws IOException {
+        io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult result =
+                new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult(
+                        java.util.List.of(new io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot(
+                                "src/B.java",
+                                /* loc */ 1, /* revisions */ 1,
+                                /* simpleScore */ 1.0, /* recencyDecay */ 1.0,
+                                /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                                /* compositeScore */ 1.0,
+                                /* lineCoverage */ null)),
+                        java.util.List.of(),
+                        new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta(
+                                OutputWriterTestFixtures.FIXED_INSTANT, "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        writer.write(result, tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        java.util.List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.MD),
+                        tempDir.toString(), 0),
+                false, true);
+
+        String md = Files.readString(tempDir.resolve("hotspots.md"));
+        assertThat(md).contains("| 1 | `src/B.java` | 1 | 1 | 1 | 1 | 1 | 1 | N/A |");
+    }
+
+    @Test
     @DisplayName("writes hotspots.md (combined) and api_report.md (standalone) when API analysis is enabled")
     void shouldWriteApiMarkdownFiles(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,

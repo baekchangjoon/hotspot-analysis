@@ -142,16 +142,18 @@ public class HotspotAnalyzer {
             jacocoParser.parse(p);
         }
 
+        boolean excludeCoverage = Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
+
         List<FileHotspot> files = buildFileHotspots(
-                methodsByFile, fileRevisions, fileLoc, fileDecayed, jacocoParser, jacocoSupplied);
+                methodsByFile, fileRevisions, fileLoc, fileDecayed, jacocoParser, jacocoSupplied, excludeCoverage);
         List<MethodHotspot> methods = buildMethodHotspots(
-                methodsByFile, methodRevisions, methodDecayed, jacocoParser, jacocoSupplied);
+                methodsByFile, methodRevisions, methodDecayed, jacocoParser, jacocoSupplied, excludeCoverage);
 
         List<ApiHotspot> apiHotspots = new ArrayList<>();
         List<SharedComponentHotspot> sharedComponents = new ArrayList<>();
         if (config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled()) {
             buildApiAndShared(repoRoot, config, javaFiles, methodsByFile,
-                    methodRevisions, methodDecayed, jacocoParser, jacocoSupplied,
+                    methodRevisions, methodDecayed, jacocoParser, jacocoSupplied, excludeCoverage,
                     apiHotspots, sharedComponents);
         }
 
@@ -187,7 +189,8 @@ public class HotspotAnalyzer {
             Map<String, Integer> fileLoc,
             Map<String, Double> fileDecayed,
             io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
-            boolean jacocoSupplied) {
+            boolean jacocoSupplied,
+            boolean excludeCoverage) {
         List<FileHotspot> out = new ArrayList<>();
         for (Map.Entry<String, List<MethodInfo>> e : methodsByFile.entrySet()) {
             String path = e.getKey();
@@ -197,11 +200,16 @@ public class HotspotAnalyzer {
             double decayed = fileDecayed.getOrDefault(path, 0.0);
             double cc = 0.0;
             for (MethodInfo m : e.getValue()) cc += m.cognitiveComplexity();
-            double mult = scoreCalculator.multiplier(
-                    jacocoSupplied ? OptionalDouble.of(jacoco.getFileCoverage(path))
-                                   : OptionalDouble.empty());
-            double composite = scoreCalculator.composite(cc, decayed, mult);
-            out.add(new FileHotspot(path, loc, revisions, simple, decayed, cc, mult, composite));
+            Double rawCoverage = jacocoSupplied ? jacoco.getFileCoverage(path) : null;
+            double mult = excludeCoverage
+                    ? 1.0
+                    : scoreCalculator.multiplier(
+                            jacocoSupplied ? OptionalDouble.of(rawCoverage)
+                                           : OptionalDouble.empty());
+            double composite = excludeCoverage
+                    ? scoreCalculator.composite(cc, decayed)
+                    : scoreCalculator.composite(cc, decayed, mult);
+            out.add(new FileHotspot(path, loc, revisions, simple, decayed, cc, mult, composite, rawCoverage));
         }
         out.sort(Comparator.comparingDouble(FileHotspot::compositeScore).reversed()
                 .thenComparing(FileHotspot::path));
@@ -213,7 +221,8 @@ public class HotspotAnalyzer {
             Map<MethodSignature, Integer> methodRevisions,
             Map<MethodSignature, Double> methodDecayed,
             io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
-            boolean jacocoSupplied) {
+            boolean jacocoSupplied,
+            boolean excludeCoverage) {
         List<MethodHotspot> out = new ArrayList<>();
         for (Map.Entry<String, List<MethodInfo>> e : methodsByFile.entrySet()) {
             String path = e.getKey();
@@ -223,15 +232,21 @@ public class HotspotAnalyzer {
                 double simple = scoreCalculator.simple(revisions, loc);
                 double decayed = methodDecayed.getOrDefault(m.signature(), 0.0);
                 double cc = m.cognitiveComplexity();
-                double mult = scoreCalculator.multiplier(
-                        jacocoSupplied
-                                ? OptionalDouble.of(
-                                        jacoco.getMethodCoverage(path, m.startLine(), m.endLine()))
-                                : OptionalDouble.empty());
-                double composite = scoreCalculator.composite(cc, decayed, mult);
+                Double rawCoverage = jacocoSupplied
+                        ? jacoco.getMethodCoverage(path, m.startLine(), m.endLine())
+                        : null;
+                double mult = excludeCoverage
+                        ? 1.0
+                        : scoreCalculator.multiplier(
+                                jacocoSupplied
+                                        ? OptionalDouble.of(rawCoverage)
+                                        : OptionalDouble.empty());
+                double composite = excludeCoverage
+                        ? scoreCalculator.composite(cc, decayed)
+                        : scoreCalculator.composite(cc, decayed, mult);
                 out.add(new MethodHotspot(
                         m.signature(), path, m.startLine(), m.endLine(),
-                        loc, revisions, simple, decayed, cc, mult, composite));
+                        loc, revisions, simple, decayed, cc, mult, composite, rawCoverage));
             }
         }
         out.sort(Comparator.comparingDouble(MethodHotspot::compositeScore).reversed()
@@ -248,6 +263,7 @@ public class HotspotAnalyzer {
             Map<MethodSignature, Double> methodDecayed,
             io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacoco,
             boolean jacocoSupplied,
+            boolean excludeCoverage,
             List<ApiHotspot> apiOut,
             List<SharedComponentHotspot> sharedOut) {
 
@@ -307,14 +323,18 @@ public class HotspotAnalyzer {
             double simple = scoreCalculator.simple(revs, loc);
             double decayed = methodDecayed.getOrDefault(sharedSig, 0.0);
             double cc = methodCcs.getOrDefault(sharedSig, 0.0);
-            double mult = jacocoSupplied
-                    ? scoreCalculator.multiplier(
-                            OptionalDouble.of(methodCovs.getOrDefault(sharedSig, 0.0)))
-                    : 1.0;
-            double composite = scoreCalculator.composite(cc, decayed, mult);
+            Double rawCoverage = jacocoSupplied ? methodCovs.getOrDefault(sharedSig, 0.0) : null;
+            double mult = excludeCoverage
+                    ? 1.0
+                    : (jacocoSupplied
+                            ? scoreCalculator.multiplier(OptionalDouble.of(rawCoverage))
+                            : 1.0);
+            double composite = excludeCoverage
+                    ? scoreCalculator.composite(cc, decayed)
+                    : scoreCalculator.composite(cc, decayed, mult);
             List<String> callingApis = callingApisMap.getOrDefault(sharedSig, List.of());
             sharedOut.add(new SharedComponentHotspot(
-                    sharedSig, loc, revs, simple, decayed, cc, mult, composite, callingApis));
+                    sharedSig, loc, revs, simple, decayed, cc, mult, composite, callingApis, rawCoverage));
         }
         sharedOut.sort(Comparator.comparingDouble(SharedComponentHotspot::compositeScore).reversed()
                 .thenComparing(sc -> sc.method().toCanonicalString()));
@@ -355,10 +375,15 @@ public class HotspotAnalyzer {
                 }
 
                 double apiSimple = scoreCalculator.simple(apiRevs, apiLoc);
-                double mult = (jacocoSupplied && covCount > 0)
-                        ? scoreCalculator.multiplier(OptionalDouble.of(covSum / covCount))
-                        : 1.0;
-                double apiComposite = scoreCalculator.composite(apiCc, apiDecayed, mult);
+                Double avgCoverage = (jacocoSupplied && covCount > 0) ? covSum / covCount : null;
+                double mult = excludeCoverage
+                        ? 1.0
+                        : ((jacocoSupplied && covCount > 0)
+                                ? scoreCalculator.multiplier(OptionalDouble.of(avgCoverage))
+                                : 1.0);
+                double apiComposite = excludeCoverage
+                        ? scoreCalculator.composite(apiCc, apiDecayed)
+                        : scoreCalculator.composite(apiCc, apiDecayed, mult);
 
                 apiOut.add(new ApiHotspot(
                         mapping.httpMethod(),
@@ -371,7 +396,8 @@ public class HotspotAnalyzer {
                         apiCc,
                         mult,
                         apiComposite,
-                        filteredCallGraph));
+                        filteredCallGraph,
+                        avgCoverage));
             }
         }
         apiOut.sort(Comparator.comparingDouble(ApiHotspot::compositeScore).reversed()

@@ -89,7 +89,9 @@ public class AnalyzeCommand implements Callable<Integer> {
             AnalysisConfig config = configLoader.load(configPath);
             AnalysisResult result = analyzer.analyze(config);
             boolean apiEnabled = config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled();
-            outputDispatcher.dispatch(result, config.output(), apiEnabled);
+            boolean excludeCoverage = config.analysis().scoring() != null
+                    && Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
+            outputDispatcher.dispatch(result, config.output(), apiEnabled, excludeCoverage);
             if (!quiet) {
                 printSummary(out, result);
             }

@@ -414,6 +414,63 @@ class HtmlOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true replaces Coverage Multiplier header with Line Coverage at rightmost position")
+    void shouldRenderLineCoverageHeaderAtRightmostWhenExcludeCoverage(@TempDir Path tempDir) throws Exception {
+        AnalysisResult result = new AnalysisResult(
+                List.of(new FileHotspot(
+                        "X.java",
+                        /* loc */ 20, /* revisions */ 1,
+                        /* simpleScore */ 20.0, /* recencyDecay */ 1.0,
+                        /* cognitiveComplexity */ 2.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 2.0,
+                        /* lineCoverage */ 0.4)),
+                List.of(),
+                new AnalysisMeta(Instant.parse("2026-05-27T10:00:00Z"),
+                        "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML), tempDir.toString(), 0);
+        writer.write(result, tempDir, config, false, true);
+
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // Header: Line Coverage replaces Coverage Multiplier and sits to the right of Composite Score.
+        assertThat(html).contains(">Line Coverage<");
+        assertThat(html).doesNotContain(">Coverage Multiplier<");
+        int compositeIdx = html.indexOf(">Composite Score<");
+        int coverageIdx = html.indexOf(">Line Coverage<");
+        assertThat(compositeIdx).isPositive();
+        assertThat(coverageIdx).isPositive();
+        assertThat(coverageIdx).isGreaterThan(compositeIdx);
+
+        // Cell value: rendered as a percentage.
+        assertThat(html).contains("40.0%");
+    }
+
+    @Test
+    @DisplayName("excludeCoverage=true emits N/A in the Line Coverage cell when JaCoCo data missing")
+    void shouldRenderNAForMissingLineCoverage(@TempDir Path tempDir) throws Exception {
+        AnalysisResult result = new AnalysisResult(
+                List.of(new FileHotspot(
+                        "X.java",
+                        /* loc */ 20, /* revisions */ 1,
+                        /* simpleScore */ 20.0, /* recencyDecay */ 1.0,
+                        /* cognitiveComplexity */ 2.0, /* coverageMultiplier */ 1.0,
+                        /* compositeScore */ 2.0,
+                        /* lineCoverage */ null)),
+                List.of(),
+                new AnalysisMeta(Instant.parse("2026-05-27T10:00:00Z"),
+                        "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML), tempDir.toString(), 0);
+        writer.write(result, tempDir, config, false, true);
+
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+        assertThat(html).contains(">N/A<");
+    }
+
+    @Test
     @DisplayName("writes both combined and standalone HTML files when layout is BOTH")
     void shouldWriteBothHtmlFiles(@TempDir Path tempDir) throws Exception {
         OutputConfig config = new OutputConfig(

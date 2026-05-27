@@ -372,6 +372,56 @@ class ConfigLoaderTest {
     }
 
     @Test
+    @DisplayName("loads scoring.excludeCoverage=true from YAML")
+    void shouldLoadExcludeCoverageFlag(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: /tmp/some-repo
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["src/main/java/**/*.java"]
+                  scoring:
+                    excludeCoverage: true
+                output:
+                  formats: [csv]
+                  path: ./hotspot-report
+                  topN: 0
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(file);
+        assertThat(config.analysis().scoring().excludeCoverage()).isTrue();
+    }
+
+    @Test
+    @DisplayName("scoring.excludeCoverage defaults to false when omitted")
+    void shouldDefaultExcludeCoverageToFalse(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: /tmp/some-repo
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["src/main/java/**/*.java"]
+                output:
+                  formats: [csv]
+                  path: ./hotspot-report
+                  topN: 0
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(file);
+        assertThat(config.analysis().scoring().excludeCoverage()).isFalse();
+    }
+
+    @Test
     @DisplayName("rejects legacy scoring.formula key with friendly migration message")
     void rejectsLegacyScoringFormulaKeyWithFriendlyMessage(@TempDir Path tempDir) throws IOException {
         String yaml = """
