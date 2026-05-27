@@ -161,7 +161,7 @@ class HotspotCliE2ETest {
         String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
         String header = csv.lines().findFirst().orElseThrow();
         assertThat(header).isEqualTo(
-                "rank,path,loc,revisions,simple_score,recency_decay,"
+                "simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,"
                 + "cognitive_complexity,coverage_multiplier,composite_score");
 
         // YAML: camelCase canonical keys
@@ -244,10 +244,10 @@ class HotspotCliE2ETest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Hot.java row not found in CSV"));
 
-        // coverage_multiplier is at index 7 (0-based) in:
-        // rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score
+        // coverage_multiplier is at index 8 (0-based) in:
+        // simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score
         String[] cols = hotRow.split(",", -1);
-        String coverageMultiplier = cols[7];
+        String coverageMultiplier = cols[8];
         assertThat(coverageMultiplier).isNotEqualTo("1");
     }
 
@@ -320,7 +320,7 @@ class HotspotCliE2ETest {
         String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
         String header = csv.lines().findFirst().orElseThrow();
         assertThat(header).isEqualTo(
-                "rank,path,loc,revisions,simple_score,recency_decay,"
+                "simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,"
                 + "cognitive_complexity,composite_score,line_coverage");
         String hotRow = csv.lines()
                 .filter(line -> line.contains("Hot.java"))

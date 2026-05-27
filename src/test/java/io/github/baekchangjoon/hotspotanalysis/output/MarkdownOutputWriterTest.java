@@ -26,16 +26,16 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
-    @DisplayName("renders the file table with header, separator, and one row per hotspot")
+    @DisplayName("renders the file table with two-rank header, separator, and one row per hotspot")
     void shouldRenderFileTable(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
         assertThat(md).contains(
-                "| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
-        assertThat(md).contains("|---:|:---|---:|---:|---:|---:|---:|---:|---:|");
+                "| Simple Rank | Composite Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
+        assertThat(md).contains("|---:|---:|:---|---:|---:|---:|---:|---:|---:|---:|");
         assertThat(md).contains(
-                "| 1 | `src/main/java/com/example/Hot.java` | 120 | 5 | 600 | 4.2500 | 8 | 1 | 34 |");
+                "| 1 | 1 | `src/main/java/com/example/Hot.java` | 120 | 5 | 600 | 4.2500 | 8 | 1 | 34 |");
     }
 
     @Test
@@ -48,15 +48,15 @@ class MarkdownOutputWriterTest {
     }
 
     @Test
-    @DisplayName("renders the method table with canonical columns")
+    @DisplayName("renders the method table with two-rank header and canonical columns")
     void shouldRenderMethodTable(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
         assertThat(md).contains(
-                "| Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
+                "| Simple Rank | Composite Rank | FQCN | Method | Parameters | File | Lines | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Coverage Multiplier | Composite Score |");
         assertThat(md).contains(
-                "| 1 | `com.example.Hot` | `doWork` | `int, String` | "
+                "| 1 | 1 | `com.example.Hot` | `doWork` | `int, String` | "
                         + "`src/main/java/com/example/Hot.java` | 12-28 | 17 | 4 | 68 | 3.4000 | 6 | 1 | 20.4000 |");
     }
 
@@ -95,9 +95,9 @@ class MarkdownOutputWriterTest {
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
         assertThat(md).contains(
-                "| Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |");
+                "| Simple Rank | Composite Rank | Path | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Line Coverage |");
         assertThat(md).doesNotContain("Coverage Multiplier");
-        assertThat(md).contains("| 1 | `src/A.java` | 50 | 2 | 100 | 1 | 3 | 3 | 50.0% |");
+        assertThat(md).contains("| 1 | 1 | `src/A.java` | 50 | 2 | 100 | 1 | 3 | 3 | 50.0% |");
     }
 
     @Test
@@ -123,7 +123,7 @@ class MarkdownOutputWriterTest {
                 false, true);
 
         String md = Files.readString(tempDir.resolve("hotspots.md"));
-        assertThat(md).contains("| 1 | `src/B.java` | 1 | 1 | 1 | 1 | 1 | 1 | N/A |");
+        assertThat(md).contains("| 1 | 1 | `src/B.java` | 1 | 1 | 1 | 1 | 1 | 1 | N/A |");
     }
 
     @Test
@@ -142,12 +142,12 @@ class MarkdownOutputWriterTest {
         // REST API Hotspots table: rightmost column is Line Coverage.
         assertThat(md).contains("## REST API Hotspots");
         assertThat(md).contains(
-                "| Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Call Graph | Line Coverage |");
+                "| Simple Rank | Composite Rank | HTTP Method | Route | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Call Graph | Line Coverage |");
         assertThat(md).doesNotContain("Coverage Multiplier");
 
         // Shared Components table.
         assertThat(md).contains(
-                "| Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Calling APIs | Line Coverage |");
+                "| Simple Rank | Composite Rank | FQCN | Method | Parameters | LOC | Revisions | Simple Score | Recency Decay | Cognitive Complexity | Composite Score | Calling APIs | Line Coverage |");
 
         // Spot-check the values: API row carries 42.0% (lineCoverage=0.42),
         // Shared row falls back to N/A (lineCoverage=null in fixture).

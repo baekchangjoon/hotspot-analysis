@@ -59,13 +59,13 @@ class HtmlOutputWriterTest {
     }
 
     @Test
-    @DisplayName("file table has canonical 7-metric column headers in spec order")
+    @DisplayName("file table has Simple Rank + Composite Rank + 7-metric headers in spec order")
     void shouldRenderFileTableHeaders(@TempDir Path tempDir) throws Exception {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
         String html = Files.readString(tempDir.resolve("hotspots.html"));
 
-        // All canonical headers must appear
-        assertThat(html).contains(">Rank<");
+        assertThat(html).contains(">Simple Rank<");
+        assertThat(html).contains(">Composite Rank<");
         assertThat(html).contains(">Path<");
         assertThat(html).contains(">LOC<");
         assertThat(html).contains(">Revisions<");
@@ -74,9 +74,11 @@ class HtmlOutputWriterTest {
         assertThat(html).contains(">Cognitive Complexity<");
         assertThat(html).contains(">Coverage Multiplier<");
         assertThat(html).contains(">Composite Score<");
+        // Composite Rank carries the initial-sort marker.
+        assertThat(html).contains("aria-sort=\"ascending\">Composite Rank<");
 
-        // Order: Rank, Path, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
-        int rankIdx    = html.indexOf(">Rank<");
+        int sRankIdx   = html.indexOf(">Simple Rank<");
+        int cRankIdx   = html.indexOf(">Composite Rank<");
         int pathIdx    = html.indexOf(">Path<");
         int locIdx     = html.indexOf(">LOC<");
         int revIdx     = html.indexOf(">Revisions<");
@@ -85,7 +87,8 @@ class HtmlOutputWriterTest {
         int cogIdx     = html.indexOf(">Cognitive Complexity<");
         int covIdx     = html.indexOf(">Coverage Multiplier<");
         int compIdx    = html.indexOf(">Composite Score<");
-        assertThat(rankIdx).isLessThan(pathIdx);
+        assertThat(sRankIdx).isLessThan(cRankIdx);
+        assertThat(cRankIdx).isLessThan(pathIdx);
         assertThat(pathIdx).isLessThan(locIdx);
         assertThat(locIdx).isLessThan(revIdx);
         assertThat(revIdx).isLessThan(simpleIdx);
@@ -113,7 +116,7 @@ class HtmlOutputWriterTest {
         assertThat(methodTableStart).isGreaterThan(0);
         String methodSection = html.substring(methodTableStart);
 
-        int rankIdx    = methodSection.indexOf(">Rank<");
+        int rankIdx    = methodSection.indexOf(">Simple Rank<");
         int fqcnIdx    = methodSection.indexOf(">FQCN<");
         int methodIdx  = methodSection.indexOf(">Method<");
         int paramsIdx  = methodSection.indexOf(">Parameters<");
@@ -193,7 +196,7 @@ class HtmlOutputWriterTest {
         String apiSection = html.substring(apiTableStart);
 
         // Rank, HTTP Method, Route, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Call Graph
-        int rankIdx     = apiSection.indexOf(">Rank<");
+        int rankIdx     = apiSection.indexOf(">Simple Rank<");
         int httpIdx     = apiSection.indexOf(">HTTP Method<");
         int routeIdx    = apiSection.indexOf(">Route<");
         int fqcnIdx     = apiSection.indexOf(">FQCN<");
@@ -240,7 +243,7 @@ class HtmlOutputWriterTest {
         String sharedSection = html.substring(sharedTableStart);
 
         // Rank, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Calling APIs
-        int rankIdx     = sharedSection.indexOf(">Rank<");
+        int rankIdx     = sharedSection.indexOf(">Simple Rank<");
         int fqcnIdx     = sharedSection.indexOf(">FQCN<");
         int methodIdx   = sharedSection.indexOf(">Method<");
         int paramsIdx   = sharedSection.indexOf(">Parameters<");

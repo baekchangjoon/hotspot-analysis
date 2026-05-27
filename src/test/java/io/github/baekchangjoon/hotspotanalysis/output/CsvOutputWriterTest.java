@@ -21,7 +21,7 @@ class CsvOutputWriterTest {
     private final CsvOutputWriter writer = new CsvOutputWriter();
 
     @Test
-    @DisplayName("writes file_hotspots.csv with header and ranked rows")
+    @DisplayName("writes file_hotspots.csv with simple_rank,composite_rank header and ranked rows")
     void shouldWriteFileHotspotsCsv(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
@@ -29,15 +29,18 @@ class CsvOutputWriterTest {
         assertThat(csv).exists();
         String content = Files.readString(csv);
         assertThat(content).startsWith(
-                "rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
+                "simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,"
+                        + "cognitive_complexity,coverage_multiplier,composite_score\n");
+        // Hot.java tops both rankings (Simple=600, Composite=34) → Simple Rank=1, Composite Rank=1.
         assertThat(content).contains(
-                "1,src/main/java/com/example/Hot.java,120,5,600,4.2500,8,1,34\n");
+                "1,1,src/main/java/com/example/Hot.java,120,5,600,4.2500,8,1,34\n");
+        // Cold.java has Simple=30 (rank 2) and Composite=1.5 (rank 2).
         assertThat(content).contains(
-                "2,src/main/java/com/example/Cold.java,30,1,30,0.7500,2,1,1.5000\n");
+                "2,2,src/main/java/com/example/Cold.java,30,1,30,0.7500,2,1,1.5000\n");
     }
 
     @Test
-    @DisplayName("writes method_hotspots.csv with full method signature columns")
+    @DisplayName("writes method_hotspots.csv with two-rank header and full method signature columns")
     void shouldWriteMethodHotspotsCsv(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
 
@@ -45,12 +48,14 @@ class CsvOutputWriterTest {
         assertThat(csv).exists();
         String content = Files.readString(csv);
         assertThat(content).startsWith(
-                "rank,fqcn,method,parameters,file,start_line,end_line,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
+                "simple_rank,composite_rank,fqcn,method,parameters,file,start_line,end_line,"
+                        + "loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
+        // doWork(int, String): Simple=68 (rank 1), Composite=20.4 (rank 1).
         assertThat(content).contains(
-                "1,com.example.Hot,doWork,int;String,"
+                "1,1,com.example.Hot,doWork,int;String,"
                         + "src/main/java/com/example/Hot.java,12,28,17,4,68,3.4000,6,1,20.4000\n");
         assertThat(content).contains(
-                "2,com.example.Hot,doWork,,"
+                "2,2,com.example.Hot,doWork,,"
                         + "src/main/java/com/example/Hot.java,30,32,3,1,3,0.8500,2,1,1.7000\n");
     }
 
@@ -96,8 +101,9 @@ class CsvOutputWriterTest {
 
         writer.write(result, tempDir);
 
+        // Single row → simple_rank=1, composite_rank=1.
         assertThat(Files.readString(tempDir.resolve("file_hotspots.csv")))
-                .contains("1,A.java,7,3,21.5000,1,1,1,1\n");
+                .contains("1,1,A.java,7,3,21.5000,1,1,1,1\n");
     }
 
     @Test
@@ -130,17 +136,15 @@ class CsvOutputWriterTest {
 
         String fileCsv = Files.readString(tempDir.resolve("file_hotspots.csv"));
         assertThat(fileCsv).startsWith(
-                "rank,path,loc,revisions,simple_score,recency_decay,"
+                "simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,"
                 + "cognitive_complexity,composite_score,line_coverage\n");
         assertThat(fileCsv).doesNotContain("coverage_multiplier");
-        // Composite Score precedes Line Coverage; coverage rendered as percentage with one decimal.
-        assertThat(fileCsv).contains("1,Foo.java,100,2,200,1.5000,4,6,83.3%\n");
+        assertThat(fileCsv).contains("1,1,Foo.java,100,2,200,1.5000,4,6,83.3%\n");
 
         String methodCsv = Files.readString(tempDir.resolve("method_hotspots.csv"));
         assertThat(methodCsv).startsWith(
-                "rank,fqcn,method,parameters,file,start_line,end_line,"
-                + "loc,revisions,simple_score,recency_decay,"
-                + "cognitive_complexity,composite_score,line_coverage\n");
+                "simple_rank,composite_rank,fqcn,method,parameters,file,start_line,end_line,"
+                + "loc,revisions,simple_score,recency_decay,cognitive_complexity,composite_score,line_coverage\n");
         // No JaCoCo data → N/A in the rightmost cell.
         assertThat(methodCsv).contains(",1,5,0.5000,1,0.5000,N/A\n");
     }
@@ -158,21 +162,20 @@ class CsvOutputWriterTest {
 
         String apiCsv = Files.readString(tempDir.resolve("api_hotspots.csv"));
         assertThat(apiCsv).startsWith(
-                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
-                + "cognitive_complexity,composite_score,line_coverage\n");
+                "simple_rank,composite_rank,http_method,route,fqcn,method,parameters,"
+                + "loc,revisions,simple_score,recency_decay,cognitive_complexity,composite_score,line_coverage\n");
         assertThat(apiCsv).doesNotContain("coverage_multiplier");
         assertThat(apiCsv.lines()
-                .filter(line -> line.startsWith("1,GET,/api/a"))
+                .filter(line -> line.startsWith("1,1,GET,/api/a"))
                 .findFirst().orElseThrow())
                 .endsWith(",42.0%");
 
         String sharedCsv = Files.readString(tempDir.resolve("shared_components.csv"));
         assertThat(sharedCsv).startsWith(
-                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
-                + "cognitive_complexity,composite_score,calling_apis,line_coverage\n");
-        // SharedComponent has null lineCoverage in the fixture → N/A at rightmost.
+                "simple_rank,composite_rank,fqcn,method,parameters,"
+                + "loc,revisions,simple_score,recency_decay,cognitive_complexity,composite_score,calling_apis,line_coverage\n");
         assertThat(sharedCsv.lines()
-                .filter(line -> line.startsWith("1,"))
+                .filter(line -> line.startsWith("1,1,"))
                 .findFirst().orElseThrow())
                 .endsWith(",N/A");
     }
@@ -196,14 +199,47 @@ class CsvOutputWriterTest {
 
         String apiContent = Files.readString(apiCsv);
         assertThat(apiContent).startsWith(
-                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
+                "simple_rank,composite_rank,http_method,route,fqcn,method,parameters,"
+                + "loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score\n");
         assertThat(apiContent).contains(
-                "1,GET,/api/a,com.example.MyController,apiA,,120,5,600,4.2500,8,1,34\n");
+                "1,1,GET,/api/a,com.example.MyController,apiA,,120,5,600,4.2500,8,1,34\n");
 
         String sharedContent = Files.readString(sharedCsv);
         assertThat(sharedContent).startsWith(
-                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score,calling_apis\n");
+                "simple_rank,composite_rank,fqcn,method,parameters,"
+                + "loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score,calling_apis\n");
         assertThat(sharedContent).contains(
-                "1,com.example.MyService,commonMethod,,30,1,30,0.8500,2,1,1.7000,GET /api/a\n");
+                "1,1,com.example.MyService,commonMethod,,30,1,30,0.8500,2,1,1.7000,GET /api/a\n");
+    }
+
+    @Test
+    @DisplayName("simple_rank and composite_rank differ when a row's Simple Score and Composite Score rankings disagree")
+    void shouldDifferentiateSimpleAndCompositeRanksWhenOrdersDisagree(@TempDir Path tempDir) throws IOException {
+        // Two files where Composite Score and Simple Score rank them in opposite orders.
+        // A: simple=1000 (HIGH), composite=1.0 (LOW)
+        // B: simple=10   (LOW),  composite=100.0 (HIGH)
+        // The analyzer would output rows sorted by Composite Score DESC, so B first then A.
+        AnalysisResult result = new AnalysisResult(
+                List.of(
+                        new FileHotspot("B.java", 10, 1, 10.0, 1.0, 50.0, 1.0, 100.0),
+                        new FileHotspot("A.java", 100, 10, 1000.0, 0.01, 1.0, 1.0, 1.0)
+                ),
+                List.of(),
+                new AnalysisMeta(OutputWriterTestFixtures.FIXED_INSTANT,
+                        "LOCAL_GIT:/tmp", 1, 2, 0));
+
+        writer.write(result, tempDir);
+
+        String csv = Files.readString(tempDir.resolve("file_hotspots.csv"));
+        // First row = B.java (composite rank 1) but Simple Score is the smaller, so simple rank = 2.
+        assertThat(csv.lines()
+                .filter(l -> l.contains("B.java"))
+                .findFirst().orElseThrow())
+                .startsWith("2,1,B.java,");
+        // Second row = A.java (composite rank 2) but Simple Score is biggest, so simple rank = 1.
+        assertThat(csv.lines()
+                .filter(l -> l.contains("A.java"))
+                .findFirst().orElseThrow())
+                .startsWith("1,2,A.java,");
     }
 }
