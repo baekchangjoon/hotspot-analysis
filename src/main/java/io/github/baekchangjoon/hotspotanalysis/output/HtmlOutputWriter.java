@@ -28,11 +28,17 @@ public class HtmlOutputWriter implements OutputWriter {
 
     @Override
     public void write(AnalysisResult result, Path outputDir) {
-        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.HTML), outputDir.toString(), 0), false);
+        write(result, outputDir, new OutputConfig(List.of(OutputConfig.OutputFormat.HTML), outputDir.toString(), 0), false, false);
     }
 
     @Override
     public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
+        write(result, outputDir, outputConfig, apiEnabled, false);
+    }
+
+    @Override
+    public void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig,
+                      boolean apiEnabled, boolean excludeCoverage) {
         try {
             Files.createDirectories(outputDir);
 
@@ -42,18 +48,18 @@ public class HtmlOutputWriter implements OutputWriter {
                                  outputConfig.apiLayout() == OutputConfig.ApiLayout.BOTH;
 
             if (!apiEnabled) {
-                String body = renderCombined(result, false);
+                String body = renderCombined(result, false, excludeCoverage);
                 Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
                 return;
             }
 
             if (combined) {
-                String body = renderCombined(result, true);
+                String body = renderCombined(result, true, excludeCoverage);
                 Files.writeString(outputDir.resolve("hotspots.html"), body, StandardCharsets.UTF_8);
             }
 
             if (standalone) {
-                String body = renderStandalone(result);
+                String body = renderStandalone(result, excludeCoverage);
                 Files.writeString(outputDir.resolve("api_report.html"), body, StandardCharsets.UTF_8);
             }
         } catch (IOException e) {
@@ -61,7 +67,7 @@ public class HtmlOutputWriter implements OutputWriter {
         }
     }
 
-    private static String renderCombined(AnalysisResult result, boolean includeApi) {
+    private static String renderCombined(AnalysisResult result, boolean includeApi, boolean excludeCoverage) {
         StringBuilder html = new StringBuilder(32_768);
         html.append("<!DOCTYPE html>\n<html lang=\"en\">\n");
         appendHead(html);
@@ -81,20 +87,20 @@ public class HtmlOutputWriter implements OutputWriter {
 
         // Tab Content
         html.append("  <div id=\"files-tab\" class=\"tab-content active\">\n");
-        appendFileSection(html, result.fileHotspots(), result.methodHotspots());
+        appendFileSection(html, result.fileHotspots(), result.methodHotspots(), excludeCoverage);
         html.append("  </div>\n");
 
         html.append("  <div id=\"methods-tab\" class=\"tab-content\">\n");
-        appendMethodSection(html, result.methodHotspots());
+        appendMethodSection(html, result.methodHotspots(), excludeCoverage);
         html.append("  </div>\n");
 
         if (includeApi) {
             html.append("  <div id=\"apis-tab\" class=\"tab-content\">\n");
-            appendApiSection(html, result.apiHotspots());
+            appendApiSection(html, result.apiHotspots(), excludeCoverage);
             html.append("  </div>\n");
 
             html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
-            appendSharedSection(html, result.sharedComponents());
+            appendSharedSection(html, result.sharedComponents(), excludeCoverage);
             html.append("  </div>\n");
         }
 
@@ -103,7 +109,7 @@ public class HtmlOutputWriter implements OutputWriter {
         return html.toString();
     }
 
-    private static String renderStandalone(AnalysisResult result) {
+    private static String renderStandalone(AnalysisResult result, boolean excludeCoverage) {
         StringBuilder html = new StringBuilder(32_768);
         html.append("<!DOCTYPE html>\n<html lang=\"en\">\n");
         appendHead(html);
@@ -119,11 +125,11 @@ public class HtmlOutputWriter implements OutputWriter {
 
         // Tab Content
         html.append("  <div id=\"apis-tab\" class=\"tab-content active\">\n");
-        appendApiSection(html, result.apiHotspots());
+        appendApiSection(html, result.apiHotspots(), excludeCoverage);
         html.append("  </div>\n");
 
         html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
-        appendSharedSection(html, result.sharedComponents());
+        appendSharedSection(html, result.sharedComponents(), excludeCoverage);
         html.append("  </div>\n");
 
         appendScript(html);
@@ -365,7 +371,7 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(escape(value)).append("</code></td></tr>\n");
     }
 
-    private static void appendFileSection(StringBuilder html, List<FileHotspot> files, List<MethodHotspot> methodHotspots) {
+    private static void appendFileSection(StringBuilder html, List<FileHotspot> files, List<MethodHotspot> methodHotspots, boolean excludeCoverage) {
         java.util.Map<String, List<MethodHotspot>> methodsByFile = new java.util.HashMap<>();
         for (MethodHotspot mh : methodHotspots) {
             methodsByFile.computeIfAbsent(mh.filePath(), k -> new java.util.ArrayList<>()).add(mh);
@@ -380,7 +386,6 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(files.size()).append(" / ").append(files.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"file-hotspots\" class=\"sortable\">\n");
-        // Canonical columns: Rank, Path, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">Path</th>");
@@ -389,8 +394,13 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+        if (excludeCoverage) {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Line Coverage</th>");
+        } else {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+        }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
@@ -407,8 +417,13 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td class=\"num\" data-sort-value=\"").append(f.simpleScore()).append("\">").append(fmt(f.simpleScore())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(f.recencyDecay()).append("\">").append(fmt(f.recencyDecay())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(f.cognitiveComplexity()).append("\">").append(fmt(f.cognitiveComplexity())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(f.coverageMultiplier()).append("\">").append(fmt(f.coverageMultiplier())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(f.compositeScore()).append("\">").append(fmt(f.compositeScore())).append("</td>");
+            if (excludeCoverage) {
+                html.append("<td class=\"num\" data-sort-value=\"").append(f.compositeScore()).append("\">").append(fmt(f.compositeScore())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(coverageSortValue(f.lineCoverage())).append("\">").append(fmtCoverage(f.lineCoverage())).append("</td>");
+            } else {
+                html.append("<td class=\"num\" data-sort-value=\"").append(f.coverageMultiplier()).append("\">").append(fmt(f.coverageMultiplier())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(f.compositeScore()).append("\">").append(fmt(f.compositeScore())).append("</td>");
+            }
             html.append("</tr>\n");
 
             html.append("        <tr id=\"xray-").append(rank).append("\" class=\"xray-row\" style=\"display: none;\">\n");
@@ -421,7 +436,6 @@ public class HtmlOutputWriter implements OutputWriter {
 
                 html.append("            <div class=\"xray-title\">X-Ray Method Drill-Down for <code>").append(escape(f.path())).append("</code></div>\n");
                 html.append("            <table class=\"xray-table\">\n");
-                // Canonical X-Ray columns: Method Signature, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Share
                 html.append("              <thead><tr>");
                 html.append("<th>Method Signature</th>");
                 html.append("<th class=\"num\">LOC</th>");
@@ -429,9 +443,15 @@ public class HtmlOutputWriter implements OutputWriter {
                 html.append("<th class=\"num\">Simple Score</th>");
                 html.append("<th class=\"num\">Recency Decay</th>");
                 html.append("<th class=\"num\">Cognitive Complexity</th>");
-                html.append("<th class=\"num\">Coverage Multiplier</th>");
-                html.append("<th class=\"num\">Composite Score</th>");
-                html.append("<th class=\"num\">Share</th>");
+                if (excludeCoverage) {
+                    html.append("<th class=\"num\">Composite Score</th>");
+                    html.append("<th class=\"num\">Share</th>");
+                    html.append("<th class=\"num\">Line Coverage</th>");
+                } else {
+                    html.append("<th class=\"num\">Coverage Multiplier</th>");
+                    html.append("<th class=\"num\">Composite Score</th>");
+                    html.append("<th class=\"num\">Share</th>");
+                }
                 html.append("</tr></thead>\n");
                 html.append("              <tbody>\n");
                 for (MethodHotspot mh : fileMethods) {
@@ -446,9 +466,15 @@ public class HtmlOutputWriter implements OutputWriter {
                     html.append("<td class=\"num\">").append(fmt(mh.simpleScore())).append("</td>");
                     html.append("<td class=\"num\">").append(fmt(mh.recencyDecay())).append("</td>");
                     html.append("<td class=\"num\">").append(fmt(mh.cognitiveComplexity())).append("</td>");
-                    html.append("<td class=\"num\">").append(fmt(mh.coverageMultiplier())).append("</td>");
-                    html.append("<td class=\"num\">").append(fmt(mh.compositeScore())).append("</td>");
-                    html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
+                    if (excludeCoverage) {
+                        html.append("<td class=\"num\">").append(fmt(mh.compositeScore())).append("</td>");
+                        html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
+                        html.append("<td class=\"num\">").append(fmtCoverage(mh.lineCoverage())).append("</td>");
+                    } else {
+                        html.append("<td class=\"num\">").append(fmt(mh.coverageMultiplier())).append("</td>");
+                        html.append("<td class=\"num\">").append(fmt(mh.compositeScore())).append("</td>");
+                        html.append("<td class=\"num\">").append(String.format("%.1f%%", share)).append("</td>");
+                    }
                     html.append("</tr>\n");
                 }
                 html.append("              </tbody>\n");
@@ -464,7 +490,7 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  </section>\n");
     }
 
-    private static void appendMethodSection(StringBuilder html, List<MethodHotspot> methods) {
+    private static void appendMethodSection(StringBuilder html, List<MethodHotspot> methods, boolean excludeCoverage) {
         html.append("  <section>\n");
         html.append("    <h2>Method Hotspots (").append(methods.size()).append(" rows)</h2>\n");
         html.append("    <div class=\"toolbar\">\n");
@@ -475,7 +501,6 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(methods.size()).append(" / ").append(methods.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"method-hotspots\" class=\"sortable\">\n");
-        // Canonical columns: Rank, FQCN, Method, Parameters, File, Lines, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">FQCN</th>");
@@ -488,8 +513,13 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+        if (excludeCoverage) {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Line Coverage</th>");
+        } else {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+        }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
@@ -513,8 +543,13 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td class=\"num\" data-sort-value=\"").append(m.simpleScore()).append("\">").append(fmt(m.simpleScore())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(m.recencyDecay()).append("\">").append(fmt(m.recencyDecay())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(m.cognitiveComplexity()).append("\">").append(fmt(m.cognitiveComplexity())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(m.coverageMultiplier()).append("\">").append(fmt(m.coverageMultiplier())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(m.compositeScore()).append("\">").append(fmt(m.compositeScore())).append("</td>");
+            if (excludeCoverage) {
+                html.append("<td class=\"num\" data-sort-value=\"").append(m.compositeScore()).append("\">").append(fmt(m.compositeScore())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(coverageSortValue(m.lineCoverage())).append("\">").append(fmtCoverage(m.lineCoverage())).append("</td>");
+            } else {
+                html.append("<td class=\"num\" data-sort-value=\"").append(m.coverageMultiplier()).append("\">").append(fmt(m.coverageMultiplier())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(m.compositeScore()).append("\">").append(fmt(m.compositeScore())).append("</td>");
+            }
             html.append("</tr>\n");
             rank++;
         }
@@ -627,7 +662,7 @@ public class HtmlOutputWriter implements OutputWriter {
                 """);
     }
 
-    private static void appendApiSection(StringBuilder html, List<ApiHotspot> apis) {
+    private static void appendApiSection(StringBuilder html, List<ApiHotspot> apis, boolean excludeCoverage) {
         html.append("  <section>\n");
         html.append("    <h2>REST API Hotspots (").append(apis.size()).append(" rows)</h2>\n");
         html.append("    <div class=\"toolbar\">\n");
@@ -637,7 +672,6 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(apis.size()).append(" / ").append(apis.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"api-hotspots\" class=\"sortable\">\n");
-        // Canonical columns: Rank, HTTP Method, Route, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Call Graph
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">HTTP Method</th>");
@@ -650,9 +684,15 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
-        html.append("<th>Call Graph</th>");
+        if (excludeCoverage) {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th>Call Graph</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Line Coverage</th>");
+        } else {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th>Call Graph</th>");
+        }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
@@ -674,21 +714,15 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td class=\"num\" data-sort-value=\"").append(api.simpleScore()).append("\">").append(fmt(api.simpleScore())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(api.recencyDecay()).append("\">").append(fmt(api.recencyDecay())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(api.cognitiveComplexity()).append("\">").append(fmt(api.cognitiveComplexity())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(api.coverageMultiplier()).append("\">").append(fmt(api.coverageMultiplier())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(api.compositeScore()).append("\">").append(fmt(api.compositeScore())).append("</td>");
-
-            // Call Graph cell
-            html.append("<td>");
-            if (api.callGraph().isEmpty()) {
-                html.append("<span class=\"no-calls\">None</span>");
+            if (excludeCoverage) {
+                html.append("<td class=\"num\" data-sort-value=\"").append(api.compositeScore()).append("\">").append(fmt(api.compositeScore())).append("</td>");
+                appendCallGraphCell(html, api);
+                html.append("<td class=\"num\" data-sort-value=\"").append(coverageSortValue(api.lineCoverage())).append("\">").append(fmtCoverage(api.lineCoverage())).append("</td>");
             } else {
-                html.append("<details><summary>").append(api.callGraph().size()).append(" calls</summary><ul>");
-                for (var sig : api.callGraph()) {
-                    html.append("<li><code>").append(escape(sig.toCanonicalString())).append("</code></li>");
-                }
-                html.append("</ul></details>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(api.coverageMultiplier()).append("\">").append(fmt(api.coverageMultiplier())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(api.compositeScore()).append("\">").append(fmt(api.compositeScore())).append("</td>");
+                appendCallGraphCell(html, api);
             }
-            html.append("</td>");
 
             html.append("</tr>\n");
             rank++;
@@ -698,7 +732,21 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  </section>\n");
     }
 
-    private static void appendSharedSection(StringBuilder html, List<SharedComponentHotspot> components) {
+    private static void appendCallGraphCell(StringBuilder html, ApiHotspot api) {
+        html.append("<td>");
+        if (api.callGraph().isEmpty()) {
+            html.append("<span class=\"no-calls\">None</span>");
+        } else {
+            html.append("<details><summary>").append(api.callGraph().size()).append(" calls</summary><ul>");
+            for (var sig : api.callGraph()) {
+                html.append("<li><code>").append(escape(sig.toCanonicalString())).append("</code></li>");
+            }
+            html.append("</ul></details>");
+        }
+        html.append("</td>");
+    }
+
+    private static void appendSharedSection(StringBuilder html, List<SharedComponentHotspot> components, boolean excludeCoverage) {
         html.append("  <section>\n");
         html.append("    <h2>Shared Components (").append(components.size()).append(" rows)</h2>\n");
         html.append("    <div class=\"toolbar\">\n");
@@ -708,7 +756,6 @@ public class HtmlOutputWriter implements OutputWriter {
                 .append(components.size()).append(" / ").append(components.size()).append("</span>\n");
         html.append("    </div>\n");
         html.append("    <table id=\"shared-hotspots\" class=\"sortable\">\n");
-        // Canonical columns: Rank, FQCN, Method, Parameters, LOC, Revisions, Simple Score, Recency Decay, Cognitive Complexity, Coverage Multiplier, Composite Score, Calling APIs
         html.append("      <thead><tr>");
         html.append("<th data-sort-type=\"number\">Rank</th>");
         html.append("<th data-sort-type=\"string\">FQCN</th>");
@@ -719,9 +766,15 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("<th data-sort-type=\"number\" class=\"num\">Simple Score</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Recency Decay</th>");
         html.append("<th data-sort-type=\"number\" class=\"num\">Cognitive Complexity</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
-        html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
-        html.append("<th>Calling APIs</th>");
+        if (excludeCoverage) {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th>Calling APIs</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Line Coverage</th>");
+        } else {
+            html.append("<th data-sort-type=\"number\" class=\"num\">Coverage Multiplier</th>");
+            html.append("<th data-sort-type=\"number\" class=\"num\">Composite Score</th>");
+            html.append("<th>Calling APIs</th>");
+        }
         html.append("</tr></thead>\n");
         html.append("      <tbody>\n");
         int rank = 1;
@@ -740,21 +793,15 @@ public class HtmlOutputWriter implements OutputWriter {
             html.append("<td class=\"num\" data-sort-value=\"").append(c.simpleScore()).append("\">").append(fmt(c.simpleScore())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(c.recencyDecay()).append("\">").append(fmt(c.recencyDecay())).append("</td>");
             html.append("<td class=\"num\" data-sort-value=\"").append(c.cognitiveComplexity()).append("\">").append(fmt(c.cognitiveComplexity())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(c.coverageMultiplier()).append("\">").append(fmt(c.coverageMultiplier())).append("</td>");
-            html.append("<td class=\"num\" data-sort-value=\"").append(c.compositeScore()).append("\">").append(fmt(c.compositeScore())).append("</td>");
-
-            // Calling APIs cell
-            html.append("<td>");
-            if (c.callingApis().isEmpty()) {
-                html.append("<span class=\"no-calls\">None</span>");
+            if (excludeCoverage) {
+                html.append("<td class=\"num\" data-sort-value=\"").append(c.compositeScore()).append("\">").append(fmt(c.compositeScore())).append("</td>");
+                appendCallingApisCell(html, c);
+                html.append("<td class=\"num\" data-sort-value=\"").append(coverageSortValue(c.lineCoverage())).append("\">").append(fmtCoverage(c.lineCoverage())).append("</td>");
             } else {
-                html.append("<details><summary>").append(c.callingApis().size()).append(" APIs</summary><ul>");
-                for (var api : c.callingApis()) {
-                    html.append("<li><code>").append(escape(api)).append("</code></li>");
-                }
-                html.append("</ul></details>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(c.coverageMultiplier()).append("\">").append(fmt(c.coverageMultiplier())).append("</td>");
+                html.append("<td class=\"num\" data-sort-value=\"").append(c.compositeScore()).append("\">").append(fmt(c.compositeScore())).append("</td>");
+                appendCallingApisCell(html, c);
             }
-            html.append("</td>");
 
             html.append("</tr>\n");
             rank++;
@@ -762,6 +809,42 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("      </tbody>\n");
         html.append("    </table>\n");
         html.append("  </section>\n");
+    }
+
+    private static void appendCallingApisCell(StringBuilder html, SharedComponentHotspot c) {
+        html.append("<td>");
+        if (c.callingApis().isEmpty()) {
+            html.append("<span class=\"no-calls\">None</span>");
+        } else {
+            html.append("<details><summary>").append(c.callingApis().size()).append(" APIs</summary><ul>");
+            for (var api : c.callingApis()) {
+                html.append("<li><code>").append(escape(api)).append("</code></li>");
+            }
+            html.append("</ul></details>");
+        }
+        html.append("</td>");
+    }
+
+    /**
+     * Formats a raw line-coverage ratio in [0.0, 1.0] as a percentage with
+     * one decimal (e.g. {@code 83.3%}), or {@code N/A} when null.
+     */
+    private static String fmtCoverage(Double lineCoverage) {
+        if (lineCoverage == null) {
+            return "N/A";
+        }
+        return String.format(java.util.Locale.ROOT, "%.1f%%", lineCoverage * 100.0);
+    }
+
+    /**
+     * Sort key for the Line Coverage column: missing values sort below
+     * 0% rather than throwing parseFloat off in the client-side comparator.
+     */
+    private static String coverageSortValue(Double lineCoverage) {
+        if (lineCoverage == null) {
+            return "-1";
+        }
+        return Double.toString(lineCoverage);
     }
 
     private static String escape(String raw) {

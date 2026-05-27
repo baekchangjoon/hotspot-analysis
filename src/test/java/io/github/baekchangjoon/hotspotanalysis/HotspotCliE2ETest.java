@@ -252,6 +252,147 @@ class HotspotCliE2ETest {
     }
 
     @Test
+    @DisplayName("analyze with scoring.excludeCoverage=true emits line_coverage at rightmost column and drops the multiplier from composite")
+    void shouldEmitLineCoverageWhenExcludeCoverage(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Path outDir = tempDir.resolve("out");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    """
+                    package com.example;
+                    public class Hot {
+                      void m(int x) { if (x > 0) { int y = x + 1; } }
+                    }
+                    """,
+                    Instant.parse("2026-05-20T10:00:00Z"));
+        }
+
+        // Two-line JaCoCo report: line 3 covered, line 4 not. coverage = 0.5.
+        Path jacocoXml = tempDir.resolve("jacoco.xml");
+        Files.writeString(jacocoXml, """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+                <report name="t">
+                  <package name="com/example">
+                    <sourcefile name="Hot.java">
+                      <line nr="3" mi="0" ci="2"/>
+                      <line nr="4" mi="2" ci="0"/>
+                    </sourcefile>
+                  </package>
+                </report>
+                """);
+
+        Path configFile = tempDir.resolve("hotspot.yml");
+        Files.writeString(configFile, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    until: 2026-05-23
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                      - method
+                    include:
+                      - "**/*.java"
+                  scoring:
+                    decayHalfLifeDays: 90
+                    excludeCoverage: true
+                  jacocoReportPath: %s
+                output:
+                  formats:
+                    - CSV
+                    - YAML
+                    - MD
+                    - HTML
+                  path: %s
+                  topN: 0
+                """.formatted(repoRoot, jacocoXml, outDir));
+
+        application.run("analyze", "--config", configFile.toString(), "--quiet");
+        assertThat(application.getExitCode()).isZero();
+
+        // CSV header: line_coverage replaces coverage_multiplier at rightmost.
+        String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
+        String header = csv.lines().findFirst().orElseThrow();
+        assertThat(header).isEqualTo(
+                "rank,path,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,line_coverage");
+        String hotRow = csv.lines()
+                .filter(line -> line.contains("Hot.java"))
+                .findFirst().orElseThrow();
+        // Rightmost cell is the raw coverage percentage, not 1.6667.
+        assertThat(hotRow).endsWith(",50.0%");
+
+        // YAML: lineCoverage at end, no coverageMultiplier.
+        String yaml = Files.readString(outDir.resolve("hotspots.yml"));
+        assertThat(yaml).contains("lineCoverage:");
+        assertThat(yaml).doesNotContain("coverageMultiplier:");
+
+        // Markdown: rightmost column header is Line Coverage.
+        String md = Files.readString(outDir.resolve("hotspots.md"));
+        assertThat(md).contains("Line Coverage |");
+        assertThat(md).doesNotContain("Coverage Multiplier");
+
+        // HTML: header order Composite Score → Line Coverage.
+        String html = Files.readString(outDir.resolve("hotspots.html"));
+        int compositeIdx = html.indexOf(">Composite Score<");
+        int lineCovIdx = html.indexOf(">Line Coverage<");
+        assertThat(compositeIdx).isPositive();
+        assertThat(lineCovIdx).isGreaterThan(compositeIdx);
+    }
+
+    @Test
+    @DisplayName("analyze with scoring.excludeCoverage=true and no JaCoCo report renders N/A at line_coverage column")
+    void shouldEmitNAForLineCoverageWhenJacocoAbsent(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Path outDir = tempDir.resolve("out");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() {} }",
+                    Instant.parse("2026-05-20T10:00:00Z"));
+        }
+
+        Path configFile = tempDir.resolve("hotspot.yml");
+        Files.writeString(configFile, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    until: 2026-05-23
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                    include:
+                      - "**/*.java"
+                  scoring:
+                    excludeCoverage: true
+                output:
+                  formats:
+                    - CSV
+                  path: %s
+                  topN: 0
+                """.formatted(repoRoot, outDir));
+
+        application.run("analyze", "--config", configFile.toString(), "--quiet");
+        assertThat(application.getExitCode()).isZero();
+
+        String csv = Files.readString(outDir.resolve("file_hotspots.csv"));
+        String hotRow = csv.lines()
+                .filter(line -> line.contains("Hot.java"))
+                .findFirst().orElseThrow();
+        assertThat(hotRow).endsWith(",N/A");
+    }
+
+    @Test
     @DisplayName("hotspot init --output <file> writes a working sample (exit 0)")
     void shouldInitConfig(@TempDir Path tempDir) {
         Path target = tempDir.resolve("hotspot.yml");

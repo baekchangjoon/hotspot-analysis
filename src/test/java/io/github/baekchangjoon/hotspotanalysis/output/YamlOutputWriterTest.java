@@ -256,4 +256,74 @@ class YamlOutputWriterTest {
         assertThat(row).containsEntry("fqcn", "com.example.MyService");
         assertThat(row).containsEntry("method", "commonMethod");
     }
+
+    @Test
+    @DisplayName("excludeCoverage=true swaps coverageMultiplier for lineCoverage at the rightmost key")
+    @SuppressWarnings("unchecked")
+    void shouldEmitLineCoverageAtRightmostKeyWhenExcludeCoverage(@TempDir Path tempDir) throws IOException {
+        io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult result =
+                new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult(
+                        List.of(new io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot(
+                                "Y.java",
+                                /* loc */ 10, /* revisions */ 1,
+                                /* simpleScore */ 10.0, /* recencyDecay */ 1.0,
+                                /* cognitiveComplexity */ 2.0, /* coverageMultiplier */ 1.0,
+                                /* compositeScore */ 2.0,
+                                /* lineCoverage */ 0.75)),
+                        List.of(),
+                        new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta(
+                                OutputWriterTestFixtures.FIXED_INSTANT, "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        writer.write(result, tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.YAML),
+                        tempDir.toString(), 0),
+                false, true);
+
+        Map<String, Object> parsed = new ObjectMapper(new YAMLFactory())
+                .registerModule(new JavaTimeModule())
+                .readValue(tempDir.resolve("hotspots.yml").toFile(), Map.class);
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) parsed.get("fileHotspots");
+        Map<String, Object> row = rows.get(0);
+
+        assertThat(row).containsKey("lineCoverage");
+        assertThat(row).doesNotContainKey("coverageMultiplier");
+
+        List<String> keys = List.copyOf(row.keySet());
+        assertThat(keys).containsExactly(
+                "rank", "path", "loc", "revisions",
+                "simpleScore", "recencyDecay", "cognitiveComplexity",
+                "compositeScore", "lineCoverage");
+        assertThat(row).containsEntry("lineCoverage", 0.75);
+    }
+
+    @Test
+    @DisplayName("excludeCoverage=true emits the string \"N/A\" for lineCoverage when JaCoCo absent")
+    @SuppressWarnings("unchecked")
+    void shouldEmitNAForMissingLineCoverage(@TempDir Path tempDir) throws IOException {
+        io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult result =
+                new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult(
+                        List.of(new io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot(
+                                "Z.java",
+                                /* loc */ 1, /* revisions */ 1,
+                                /* simpleScore */ 1.0, /* recencyDecay */ 1.0,
+                                /* cognitiveComplexity */ 1.0, /* coverageMultiplier */ 1.0,
+                                /* compositeScore */ 1.0,
+                                /* lineCoverage */ null)),
+                        List.of(),
+                        new io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta(
+                                OutputWriterTestFixtures.FIXED_INSTANT, "LOCAL_GIT:/tmp", 1, 1, 0));
+
+        writer.write(result, tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.YAML),
+                        tempDir.toString(), 0),
+                false, true);
+
+        Map<String, Object> parsed = new ObjectMapper(new YAMLFactory())
+                .registerModule(new JavaTimeModule())
+                .readValue(tempDir.resolve("hotspots.yml").toFile(), Map.class);
+        List<Map<String, Object>> rows = (List<Map<String, Object>>) parsed.get("fileHotspots");
+        assertThat(rows.get(0)).containsEntry("lineCoverage", "N/A");
+    }
 }
