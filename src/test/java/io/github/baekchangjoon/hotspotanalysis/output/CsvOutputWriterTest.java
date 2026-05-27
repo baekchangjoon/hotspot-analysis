@@ -146,6 +146,38 @@ class CsvOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true emits line_coverage column on api_hotspots.csv and shared_components.csv")
+    void shouldEmitLineCoverageColumnOnApiAndSharedCsv(@TempDir Path tempDir) throws IOException {
+        writer.write(OutputWriterTestFixtures.sampleApiResultWithCoverage(), tempDir,
+                new io.github.baekchangjoon.hotspotanalysis.config.OutputConfig(
+                        List.of(io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.OutputFormat.CSV),
+                        tempDir.toString(),
+                        0,
+                        io.github.baekchangjoon.hotspotanalysis.config.OutputConfig.ApiLayout.BOTH),
+                true, true);
+
+        String apiCsv = Files.readString(tempDir.resolve("api_hotspots.csv"));
+        assertThat(apiCsv).startsWith(
+                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,line_coverage\n");
+        assertThat(apiCsv).doesNotContain("coverage_multiplier");
+        assertThat(apiCsv.lines()
+                .filter(line -> line.startsWith("1,GET,/api/a"))
+                .findFirst().orElseThrow())
+                .endsWith(",42.0%");
+
+        String sharedCsv = Files.readString(tempDir.resolve("shared_components.csv"));
+        assertThat(sharedCsv).startsWith(
+                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,calling_apis,line_coverage\n");
+        // SharedComponent has null lineCoverage in the fixture → N/A at rightmost.
+        assertThat(sharedCsv.lines()
+                .filter(line -> line.startsWith("1,"))
+                .findFirst().orElseThrow())
+                .endsWith(",N/A");
+    }
+
+    @Test
     @DisplayName("writes api_hotspots.csv and shared_components.csv when API analysis is enabled")
     void shouldWriteApiAndSharedComponentsCsv(@TempDir Path tempDir) throws IOException {
         writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir,

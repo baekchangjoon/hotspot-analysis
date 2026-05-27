@@ -386,6 +386,128 @@ class AnalyzeCommandTest {
         assertThat(standaloneHtml).doesNotContain("Method Hotspots");
     }
 
+    @Test
+    @DisplayName("API analysis with excludeCoverage=true emits line_coverage column on api/shared outputs")
+    void shouldRunApiAnalysisWithExcludeCoverage() throws Exception {
+        Path srcDir = repoRoot.resolve("src/main/java");
+        Path comExample = srcDir.resolve("com/example");
+        Path springDir = srcDir.resolve("org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.createDirectories(comExample);
+
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping {
+                    String[] value() default {};
+                    String[] path() default {};
+                }
+                """);
+
+        try (Git git = Git.open(repoRoot.toFile())) {
+            writeJava(git, "src/main/java/com/example/MyService.java",
+                    "package com.example; public class MyService { public void serve() {} }",
+                    Instant.parse("2026-01-10T10:00:00Z"));
+            writeJava(git, "src/main/java/com/example/MyController.java",
+                    """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    @RestController
+                    public class MyController {
+                        private MyService service = new MyService();
+                        @GetMapping("/test")
+                        public void getTest() {
+                            service.serve();
+                        }
+                    }
+                    """,
+                    Instant.parse("2026-01-11T10:00:00Z"));
+        }
+
+        Path buildClasses = repoRoot.resolve("build/classes/java/main");
+        compileJavaFiles(srcDir, buildClasses);
+
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    days: 3650
+                  scope:
+                    granularity:
+                      - file
+                      - method
+                    include:
+                      - "**/*.java"
+                  scoring:
+                    excludeCoverage: true
+                  apiAnalysis:
+                    enabled: true
+                    sharedComponentMode: both
+                    classpathDirectories:
+                      - "build/classes/java/main"
+                output:
+                  formats:
+                    - CSV
+                    - YAML
+                    - MD
+                    - HTML
+                  path: %s
+                  topN: 0
+                  apiLayout: both
+                """.formatted(repoRoot, outputDir);
+        Path configFile = tempDir.resolve("hotspot-api-exclude-coverage.yml");
+        Files.writeString(configFile, yaml);
+
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(new StringWriter()));
+        int exit = cli.execute("--config", configFile.toString());
+
+        assertThat(exit).isZero();
+
+        // CSV: api_hotspots header carries line_coverage instead of coverage_multiplier.
+        String apiCsv = Files.readString(outputDir.resolve("api_hotspots.csv"));
+        assertThat(apiCsv).startsWith(
+                "rank,http_method,route,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,line_coverage\n");
+        // No JaCoCo report supplied → rightmost cell renders "N/A".
+        assertThat(apiCsv.lines()
+                .filter(line -> line.startsWith("1,GET"))
+                .findFirst().orElseThrow())
+                .endsWith(",N/A");
+
+        // shared_components CSV: line_coverage at rightmost.
+        String sharedCsv = Files.readString(outputDir.resolve("shared_components.csv"));
+        assertThat(sharedCsv).startsWith(
+                "rank,fqcn,method,parameters,loc,revisions,simple_score,recency_decay,"
+                + "cognitive_complexity,composite_score,calling_apis,line_coverage\n");
+
+        // YAML: api row carries lineCoverage; no coverageMultiplier.
+        String apiYaml = Files.readString(outputDir.resolve("api_report.yml"));
+        assertThat(apiYaml).contains("lineCoverage:");
+        assertThat(apiYaml).doesNotContain("coverageMultiplier:");
+
+        // Markdown standalone shows the new column too.
+        assertThat(Files.readString(outputDir.resolve("api_report.md")))
+                .contains("Line Coverage |")
+                .doesNotContain("Coverage Multiplier");
+
+        // HTML standalone reflects the swap.
+        assertThat(Files.readString(outputDir.resolve("api_report.html")))
+                .contains(">Line Coverage<")
+                .doesNotContain(">Coverage Multiplier<");
+    }
+
     private Path writeApiConfig(String repoPath, String outPath, List<String> formats, String apiLayout, List<String> classpathDirs) throws Exception {
         String formatsYaml = formats.stream()
                 .map(f -> "    - " + f)

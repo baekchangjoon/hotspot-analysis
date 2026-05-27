@@ -471,6 +471,34 @@ class HtmlOutputWriterTest {
     }
 
     @Test
+    @DisplayName("excludeCoverage=true emits Line Coverage column on REST API and Shared Components tables")
+    void shouldEmitLineCoverageOnApiAndSharedSections(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML),
+                tempDir.toString(),
+                0,
+                OutputConfig.ApiLayout.BOTH);
+
+        writer.write(OutputWriterTestFixtures.sampleApiResultWithCoverage(), tempDir, config, true, true);
+
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        // Coverage Multiplier header gone, Line Coverage present.
+        assertThat(html).doesNotContain(">Coverage Multiplier<");
+        assertThat(html).contains(">Line Coverage<");
+
+        // REST API row: 42.0% rendered for lineCoverage=0.42.
+        assertThat(html).contains("42.0%");
+        // Shared row: lineCoverage=null in fixture → N/A in the rightmost cell.
+        assertThat(html).contains(">N/A<");
+
+        // Standalone api_report.html also reflects the swap.
+        String standalone = Files.readString(tempDir.resolve("api_report.html"));
+        assertThat(standalone).doesNotContain(">Coverage Multiplier<");
+        assertThat(standalone).contains(">Line Coverage<");
+    }
+
+    @Test
     @DisplayName("writes both combined and standalone HTML files when layout is BOTH")
     void shouldWriteBothHtmlFiles(@TempDir Path tempDir) throws Exception {
         OutputConfig config = new OutputConfig(

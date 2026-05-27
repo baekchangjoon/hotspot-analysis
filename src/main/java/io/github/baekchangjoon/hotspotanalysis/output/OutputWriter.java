@@ -23,7 +23,7 @@ public interface OutputWriter {
     void write(AnalysisResult result, Path outputDir);
 
     default void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig, boolean apiEnabled) {
-        write(result, outputDir, outputConfig, apiEnabled, false);
+        write(result, outputDir);
     }
 
     /**
@@ -31,6 +31,11 @@ public interface OutputWriter {
      * coverage-multiplier column is replaced with a raw line-coverage column
      * at the rightmost position; otherwise the canonical 7-metric block is
      * emitted unchanged.
+     *
+     * <p>The default implementation ignores {@code excludeCoverage} and
+     * delegates to the four-argument {@code write}, which in turn falls
+     * back to the two-argument writer. Concrete formats override this
+     * method to honour the flag.</p>
      */
     default void write(AnalysisResult result, Path outputDir, OutputConfig outputConfig,
                        boolean apiEnabled, boolean excludeCoverage) {

@@ -168,4 +168,56 @@ final class OutputWriterTestFixtures {
                 42, 2, 2);
         return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta);
     }
+
+    /**
+     * Variant of {@link #sampleApiResult()} that populates the
+     * {@code lineCoverage} field on every hotspot. Used exclusively by the
+     * writer tests that exercise the {@code excludeCoverage=true} API +
+     * Shared branches.
+     */
+    static AnalysisResult sampleApiResultWithCoverage() {
+        List<FileHotspot> files = List.of(
+                new FileHotspot(
+                        "src/main/java/com/example/MyController.java",
+                        120, 5, 600.0, 4.25, 8.0, 1.0, 34.0,
+                        /* lineCoverage */ 0.7),
+                new FileHotspot(
+                        "src/main/java/com/example/MyService.java",
+                        30, 1, 30.0, 0.75, 2.0, 1.0, 1.5,
+                        /* lineCoverage */ null));
+        List<MethodHotspot> methods = List.of(
+                new MethodHotspot(
+                        new MethodSignature("com.example.MyController", "apiA", List.of()),
+                        "src/main/java/com/example/MyController.java",
+                        12, 28, 17, 4, 68.0, 3.40, 6.0, 1.0, 20.4,
+                        /* lineCoverage */ 0.6),
+                new MethodHotspot(
+                        new MethodSignature("com.example.MyService", "commonMethod", List.of()),
+                        "src/main/java/com/example/MyService.java",
+                        30, 32, 3, 1, 3.0, 0.85, 2.0, 1.0, 1.7,
+                        /* lineCoverage */ null));
+
+        MethodSignature ctrlMethod = new MethodSignature("com.example.MyController", "apiA", List.of());
+        MethodSignature svcMethod = new MethodSignature("com.example.MyService", "commonMethod", List.of());
+
+        List<ApiHotspot> apiHotspots = List.of(
+                new ApiHotspot(
+                        "GET", "/api/a", ctrlMethod,
+                        120, 5, 600.0, 4.25, 8.0, 1.0, 34.0,
+                        List.of(svcMethod),
+                        /* lineCoverage */ 0.42));
+
+        List<SharedComponentHotspot> sharedComponents = List.of(
+                new SharedComponentHotspot(
+                        svcMethod,
+                        30, 1, 30.0, 0.85, 2.0, 1.0, 1.7,
+                        List.of("GET /api/a"),
+                        /* lineCoverage */ null));
+
+        AnalysisMeta meta = new AnalysisMeta(
+                FIXED_INSTANT,
+                "LOCAL_GIT:/tmp/example",
+                42, 2, 2);
+        return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta);
+    }
 }
