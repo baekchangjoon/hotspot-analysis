@@ -47,8 +47,8 @@
 | **LOC** | `LOC(controller) + Σ LOC(called)` |
 | **Recency Decay** | `D(controller) + Σ D(called)` |
 | **Cognitive Complexity** | `CC(controller) + Σ CC(called)` |
-| **Coverage** | 컨트롤러+피호출 메서드들의 **메서드 커버리지 평균**(JaCoCo 제공 시). 데이터 있는 메서드만 평균에 포함 |
-| **Coverage Multiplier** | 위 평균 커버리지로 `1/(avg+0.1)`, 미제공 시 1.0 |
+| **Coverage** | 컨트롤러+피호출 메서드들의 **라인 가중 커버리지**(JaCoCo 제공 시): `분자 = Σ 터치된 라인`, `분모 = Σ 실행가능 라인`. 비율의 단순 평균이 아님 — 작은 풀커버 메서드가 큰 미테스트 메서드를 상쇄하지 못하게(Simpson 역설 회피). 리포트에 데이터 없는 메서드는 0/0으로 기여 안 함 |
+| **Coverage Multiplier** | 위 라인 가중 커버리지로 `1/(cov+0.1)`, 미제공 시 1.0 |
 
 각 메서드 단위 요인(R/D/CC/coverage)은 [메서드 단위](method.md)와 동일하게
 구해진 값을 재사용합니다.
@@ -97,26 +97,27 @@ YAML(`api_report.yml` 또는 `hotspots.yml`의 `apiHotspots`)은 위 필드에 �
 `OrderService#place → InventoryService#reserve, PricingService#quote` 를 호출.
 
 ```
-# 메서드별 (예시값)
-create:  R=2 LOC=18 D=1.8 CC=3  cov=0.50
-place:   R=5 LOC=60 D=4.2 CC=14 cov=0.20
-reserve: R=3 LOC=40 D=2.1 CC=9  cov=0.00
-quote:   R=1 LOC=25 D=0.6 CC=5  cov=0.80   # quote가 2개 API에서 쓰이면 공유 컴포넌트
+# 메서드별 (예시값): cov = 터치된 라인 / 실행가능 라인
+create:  R=2 LOC=18 D=1.8 CC=3   cov=5/10
+place:   R=5 LOC=60 D=4.2 CC=14  cov=8/40
+reserve: R=3 LOC=40 D=2.1 CC=9   cov=0/25
+quote:   R=1 LOC=25 D=0.6 CC=5   cov=12/15   # quote가 2개 API에서 쓰이면 공유 컴포넌트
 
 # BOTH/CUMULATIVE 집계 (quote 포함)
 R_agg   = 2+5+3+1 = 11
 LOC_agg = 18+60+40+25 = 143
 D_agg   = 1.8+4.2+2.1+0.6 = 8.7
 CC_agg  = 3+14+9+5 = 31
-avg cov = (0.50+0.20+0.00+0.80)/4 = 0.375
-M       = 1/(0.375+0.10) = 2.105
+cov(라인 가중) = (5+8+0+12)/(10+40+25+15) = 25/90 ≈ 0.278
+   # 비율 평균이면 (0.50+0.20+0.00+0.80)/4 = 0.375 → 큰 미테스트 메서드가 가려짐
+M       = 1/(0.278+0.10) ≈ 2.646
 Simple    = 11 × 143 = 1573
-Composite = 31 × 8.7 × 2.105 ≈ 568
+Composite = 31 × 8.7 × 2.646 ≈ 714
 
 # SEPARATE 집계 (공유 컴포넌트 quote 제외)
 CC_agg' = 3+14+9 = 26 ;  D_agg' = 1.8+4.2+2.1 = 8.1
-avg cov'= (0.50+0.20+0.00)/3 = 0.233 → M' = 1/(0.333) ≈ 3.0
-Composite' = 26 × 8.1 × 3.0 ≈ 631   # quote의 높은 커버리지가 빠져 위험이 더 도드라짐
+cov'(라인 가중) = (5+8+0)/(10+40+25) = 13/75 ≈ 0.173 → M' = 1/(0.273) ≈ 3.66
+Composite' = 26 × 8.1 × 3.66 ≈ 771   # quote의 높은 커버리지가 빠져 위험이 더 도드라짐
 ```
 
 ## RestAssured 테스트 생성 입력으로 쓰기

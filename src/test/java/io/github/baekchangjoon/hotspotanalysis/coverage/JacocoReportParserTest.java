@@ -54,6 +54,45 @@ class JacocoReportParserTest {
     }
 
     @Test
+    @DisplayName("getMethodLineCounts returns covered/executable counts; no data -> (0,0)")
+    void shouldReturnLineCounts(@TempDir Path tempDir) throws Exception {
+        Path reportPath = tempDir.resolve("jacoco.xml");
+        Files.writeString(reportPath, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                            <line nr="6" mi="1" ci="0" mb="0" cb="0"/>
+                            <line nr="7" mi="0" ci="2" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(reportPath);
+
+        // Lines 5-7: 3 instrumented, 2 covered (5 and 7).
+        JacocoReportParser.LineCounts c = parser.getMethodLineCounts("com/example/Foo.java", 5, 7);
+        assertThat(c.executable()).isEqualTo(3);
+        assertThat(c.covered()).isEqualTo(2);
+
+        // Single missed line.
+        assertThat(parser.getMethodLineCounts("com/example/Foo.java", 6, 6))
+                .isEqualTo(new JacocoReportParser.LineCounts(0, 1));
+
+        // Out-of-range / no data -> (0,0), so line-weighted aggregates ignore it.
+        assertThat(parser.getMethodLineCounts("com/example/Foo.java", 20, 30))
+                .isEqualTo(new JacocoReportParser.LineCounts(0, 0));
+        assertThat(parser.getMethodLineCounts("Missing.java", 1, 10))
+                .isEqualTo(new JacocoReportParser.LineCounts(0, 0));
+
+        // getMethodCoverage stays consistent (covered/executable).
+        assertThat(parser.getMethodCoverage("com/example/Foo.java", 5, 7))
+                .isEqualTo(2.0 / 3.0);
+    }
+
+    @Test
     @DisplayName("should handle missing file and return 0.0 coverage")
     void shouldHandleMissingFile() {
         JacocoReportParser parser = new JacocoReportParser();

@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.TimeZone;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 class ApiHotspotCalculatorTest {
 
@@ -155,6 +156,105 @@ class ApiHotspotCalculatorTest {
         ApiHotspot apiACum = resultCumulative.apiHotspots().stream()
                 .filter(a -> a.route().equals("/api/a")).findFirst().orElseThrow();
         assertThat(apiACum.revisions()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("endpoint coverage is line-weighted across the call graph, not a mean of ratios")
+    void endpointCoverageIsLineWeighted() throws Exception {
+        Path springDir = repoRoot.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE) @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping { String[] value() default {}; String[] path() default {}; }
+                """);
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/WController.java", """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    @RestController
+                    public class WController {
+                        private final WService svc = new WService();
+                        @GetMapping("/api/w")
+                        public void get() {
+                            svc.small();
+                            svc.big();
+                        }
+                    }
+                    """, T1, "c1");
+            // small(): body line 4 covered. big(): body lines 7..14 (8 lines) missed.
+            writeJava(git, "src/main/java/com/example/WService.java", """
+                    package com.example;
+                    public class WService {
+                        public void small() {
+                            int a = 1;
+                        }
+                        public void big() {
+                            int b = 1;
+                            int c = 2;
+                            int d = 3;
+                            int e = 4;
+                            int f = 5;
+                            int g = 6;
+                            int h = 7;
+                            int i = 8;
+                        }
+                    }
+                    """, T1, "c2");
+        }
+        compileJavaFiles(repoRoot.resolve("src/main/java"), repoRoot.resolve("build/classes/java/main"));
+
+        // JaCoCo: small's 1 line covered, big's 8 lines all missed. Controller's
+        // own lines are absent from the report (contribute nothing).
+        Files.writeString(repoRoot.resolve("jacoco.xml"), """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="t">
+                  <package name="com/example">
+                    <sourcefile name="WService.java">
+                      <line nr="4"  mi="0" ci="1"/>
+                      <line nr="7"  mi="1" ci="0"/>
+                      <line nr="8"  mi="1" ci="0"/>
+                      <line nr="9"  mi="1" ci="0"/>
+                      <line nr="10" mi="1" ci="0"/>
+                      <line nr="11" mi="1" ci="0"/>
+                      <line nr="12" mi="1" ci="0"/>
+                      <line nr="13" mi="1" ci="0"/>
+                      <line nr="14" mi="1" ci="0"/>
+                    </sourcefile>
+                  </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        ApiAnalysisConfig apiConfig = new ApiAnalysisConfig(
+                true, ApiAnalysisConfig.SharedComponentMode.BOTH, List.of("build/classes/java/main"));
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(), apiConfig, "jacoco.xml");
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0, OutputConfig.ApiLayout.BOTH);
+
+        AnalysisResult result = analyzer.analyze(new AnalysisConfig(section, output));
+
+        ApiHotspot api = result.apiHotspots().stream()
+                .filter(a -> a.route().equals("/api/w")).findFirst().orElseThrow();
+
+        // Line-weighted: covered=1, executable=9 -> 1/9 ≈ 0.111.
+        // A mean of per-method ratios would be (0.0 + 1.0 + 0.0)/3 ≈ 0.333 — the
+        // big untested method would be masked. Assert we're at the weighted value.
+        assertThat(api.lineCoverage()).isCloseTo(1.0 / 9.0, within(1e-6));
+        assertThat(api.lineCoverage()).isLessThan(0.2); // would fail under mean-of-ratios (~0.33)
     }
 
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {

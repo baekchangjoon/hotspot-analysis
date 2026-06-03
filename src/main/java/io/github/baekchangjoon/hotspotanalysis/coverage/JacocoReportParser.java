@@ -68,27 +68,37 @@ public class JacocoReportParser {
         return (double) covered / lines.size();
     }
 
-    public double getMethodCoverage(String filePath, int startLine, int endLine) {
+    /**
+     * Covered and instrumented (executable) line counts within a method's line
+     * range. {@code executable} is 0 when the file/method has no coverage data,
+     * which lets callers line-weight aggregates without that method dragging the
+     * result toward 0.
+     */
+    public record LineCounts(int covered, int executable) {}
+
+    public LineCounts getMethodLineCounts(String filePath, int startLine, int endLine) {
         String normalizedPath = normalizePath(filePath);
         Map<Integer, Boolean> lines = findCoverageForPath(normalizedPath);
         if (lines == null || lines.isEmpty()) {
-            return 0.0;
+            return new LineCounts(0, 0);
         }
-        int totalExecutableLines = 0;
-        int coveredLines = 0;
+        int executable = 0;
+        int covered = 0;
         for (int i = startLine; i <= endLine; i++) {
-            Boolean covered = lines.get(i);
-            if (covered != null) {
-                totalExecutableLines++;
-                if (covered) {
-                    coveredLines++;
+            Boolean isCovered = lines.get(i);
+            if (isCovered != null) {
+                executable++;
+                if (isCovered) {
+                    covered++;
                 }
             }
         }
-        if (totalExecutableLines == 0) {
-            return 0.0;
-        }
-        return (double) coveredLines / totalExecutableLines;
+        return new LineCounts(covered, executable);
+    }
+
+    public double getMethodCoverage(String filePath, int startLine, int endLine) {
+        LineCounts c = getMethodLineCounts(filePath, startLine, endLine);
+        return c.executable() == 0 ? 0.0 : (double) c.covered() / c.executable();
     }
 
     private Map<Integer, Boolean> findCoverageForPath(String normalizedPath) {
