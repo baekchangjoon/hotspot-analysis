@@ -1,6 +1,7 @@
 ---
 name: hotspot-analysis
 description: Use to produce a deterministic, reproducible, ranked prioritization of a Java codebase's REST API endpoints (and methods) for test generation — especially as the input that decides which RestAssured API tests to write first. Drives this repo's Java CLI over a local git working tree, combining recency-weighted git churn, SonarQube-style cognitive complexity, and JaCoCo coverage gap into a Composite Hotspot Score, and emits a machine-readable ranking (CSV/YAML/Markdown/HTML) plus a CI gating exit code. Method-level Java, hunk-accurate, no LLM guesswork. Based on Adam Tornhill's "Your Code as a Crime Scene".
+license: MIT
 ---
 
 # Hotspot analysis → test-generation prioritization (Java)
