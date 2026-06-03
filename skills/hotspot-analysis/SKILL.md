@@ -318,6 +318,10 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.2** — releases are now event-driven: every published release (incl. one
+  created by `gh skill publish`) auto-attaches `hotspot.jar` and builds the
+  Docker image, so a new release never breaks the download. `license` added to
+  frontmatter.
 - **0.1.1** — distribute the jar via GitHub Releases (version-stable
   `hotspot.jar` asset) + ghcr Docker image; a missing `jacocoReportPath` now
   warns and disables coverage instead of silently penalizing every artifact.

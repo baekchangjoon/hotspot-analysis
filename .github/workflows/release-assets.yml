@@ -1,0 +1,41 @@
+name: Release assets
+
+# Attach the runnable fat jar to EVERY published release, no matter how the
+# release was created (a manual `gh release create`, or `gh skill publish`).
+# This keeps the version-stable releases/latest/download/hotspot.jar URL valid
+# for every release, so creating a new release never breaks the download and
+# old releases can be deleted safely.
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build fat jar
+        run: ./gradlew bootJar -q
+
+      - name: Verify the jar runs
+        run: java -jar build/libs/hotspot-*.jar --version
+
+      - name: Attach jar to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          # Stable name (permanent download URL) + the versioned artifact.
+          cp build/libs/hotspot-*.jar hotspot.jar
+          gh release upload "$TAG" hotspot.jar build/libs/hotspot-*.jar \
+            --repo "${GITHUB_REPOSITORY}" --clobber
