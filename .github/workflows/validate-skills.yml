@@ -1,0 +1,47 @@
+name: validate skills
+
+# Spec/manifest validation gate. Runs on every PR to main and on merge, whenever
+# a skill or the plugin/marketplace manifests change. Read-only — never publishes.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - '.claude-plugin/**'
+      - '.github/workflows/validate-skills.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - '.claude-plugin/**'
+      - '.github/workflows/validate-skills.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: gh version
+        run: gh --version
+
+      # Agent Skills spec check (naming, name==dir, required frontmatter,
+      # allowed-tools is a string, license present). --dry-run never publishes.
+      - name: Validate skills against the Agent Skills spec
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh skill publish --dry-run
+
+      # Cheap sanity check that the plugin/marketplace manifests are valid JSON.
+      # (Full Claude-plugin manifest validation runs locally via `claude plugin validate`.)
+      - name: Sanity-check plugin / marketplace manifests
+        run: |
+          python3 - <<'PY'
+          import json
+          for f in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
+              json.load(open(f))
+              print(f"{f}: valid JSON")
+          PY
