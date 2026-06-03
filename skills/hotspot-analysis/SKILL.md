@@ -53,74 +53,76 @@ Target must be a directory containing a real `.git/` folder. Phase 1 runs
 
 ## Workflow
 
-Run from the `hotspot-analysis` project root (this skill's repo).
+Run from the `hotspot-analysis` project root (this skill's repo). A convenience
+wrapper, [`scripts/run-analysis.sh`](scripts/run-analysis.sh), builds the jar if
+it is missing and then runs `analyze`.
 
-### 1. Build the jar (once)
+1. **Build the jar (once).**
 
-```bash
-./gradlew clean build
-# → build/libs/hotspot-0.1.0-SNAPSHOT.jar
-```
+   ```bash
+   ./gradlew clean build
+   # → build/libs/hotspot-0.1.0-SNAPSHOT.jar
+   ```
 
-### 2. Generate a config
+2. **Generate a config.**
 
-```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
-```
+   ```bash
+   java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
+   ```
 
-### 3. Configure for endpoint prioritization
+3. **Configure for endpoint prioritization.** Point `analysis.target.path` at
+   the target repo, enable API analysis, and (if available) supply a JaCoCo
+   report. See **Config reference**. The key block:
 
-Point `analysis.target.path` at the target repo, enable API analysis, and (if
-available) supply a JaCoCo report. See **Config reference**. The key block:
+   ```yaml
+   analysis:
+     apiAnalysis:
+       enabled: true
+       sharedComponentMode: BOTH            # CUMULATIVE | SEPARATE | BOTH
+       classpathDirectories:                # optional but improves call-graph resolution
+         - build/libs
+     jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
+   output:
+     formats: [yaml, md, html]
+     apiLayout: BOTH                        # COMBINED | STANDALONE | BOTH
+     topN: 30
+   ```
 
-```yaml
-analysis:
-  apiAnalysis:
-    enabled: true
-    sharedComponentMode: BOTH            # CUMULATIVE | SEPARATE | BOTH
-    classpathDirectories:                # optional but improves call-graph resolution
-      - build/libs
-  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
-output:
-  formats: [yaml, md, html]
-  apiLayout: BOTH                        # COMBINED | STANDALONE | BOTH
-  topN: 30
-```
+4. **Analyze** (add `--strict` in CI).
 
-### 4. Analyze (add `--strict` in CI)
+   ```bash
+   java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config hotspot.yml --strict
+   # or: skills/hotspot-analysis/scripts/run-analysis.sh hotspot.yml --strict
+   ```
 
-```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config hotspot.yml --strict
-```
+   Outputs land in `output.path`. With API analysis on and `apiLayout: BOTH`:
 
-Outputs land in `output.path`. With API analysis on and `apiLayout: BOTH`:
+   ```
+   hotspot-report/
+   ├── api_report.yml        ← STANDALONE: apiHotspots + sharedComponents (agent input)
+   ├── hotspots.yml          ← COMBINED: file + method + api + shared in one doc
+   ├── hotspots.md / .html   ← human-readable
+   ├── file_hotspots.csv
+   └── method_hotspots.csv
+   ```
 
-```
-hotspot-report/
-├── api_report.yml        ← STANDALONE: apiHotspots + sharedComponents (agent input)
-├── hotspots.yml          ← COMBINED: file + method + api + shared in one doc
-├── hotspots.md / .html   ← human-readable
-├── file_hotspots.csv
-└── method_hotspots.csv
-```
+5. **Consume the ranking for RestAssured.** Read `api_report.yml` and iterate
+   `apiHotspots` in `compositeRank` order. Field-by-field schema:
+   [`references/api-report-schema.md`](references/api-report-schema.md). Each row
+   carries:
 
-### 5. Consume the ranking for RestAssured
+   | Field | Use for test generation |
+   |---|---|
+   | `httpMethod`, `route` | The request: `given()...when().<method>(route)` |
+   | `fqcn`, `method`, `parameters` | Controller signature → request body/param shape |
+   | `callGraph` | Reachable methods → which downstream logic the endpoint exercises |
+   | `coverageMultiplier` / `lineCoverage` | How under-tested the endpoint's logic is |
+   | `compositeRank` | **The order to write tests in** |
+   | `sharedComponents[]` | Methods many endpoints depend on — high-leverage to cover once |
 
-Read `api_report.yml` and iterate `apiHotspots` in `compositeRank` order. Each
-row carries:
-
-| Field | Use for test generation |
-|---|---|
-| `httpMethod`, `route` | The request: `given()...when().<method>(route)` |
-| `fqcn`, `method`, `parameters` | Controller signature → request body/param shape |
-| `callGraph` | Reachable methods → which downstream logic the endpoint exercises |
-| `coverageMultiplier` / `lineCoverage` | How under-tested the endpoint's logic is |
-| `compositeRank` | **The order to write tests in** |
-| `sharedComponents[]` | Methods many endpoints depend on — high-leverage to cover once |
-
-Generate tests highest-rank first, targeting the least-covered paths in each
-endpoint's call graph. **Do not fabricate the ranking — run the CLI and read the
-actual file.**
+   Generate tests highest-rank first, targeting the least-covered paths in each
+   endpoint's call graph. **Do not fabricate the ranking — run the CLI and read
+   the actual file.**
 
 ## How the score is computed
 
@@ -198,48 +200,79 @@ Env vars substitute as `${VAR_NAME}` in any string value; YAML comment lines
 
 Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--strict` empty result.
 
-## Troubleshooting
+## Decision rules (IF → THEN)
 
-**`apiHotspots` is empty** even though endpoints exist:
-- `apiAnalysis.enabled` must be `true`.
-- Controllers need `@RestController`/`@Controller` + a mapping annotation
-  (`@GetMapping`/`@PostMapping`/…/`@RequestMapping`).
-- Call graphs need symbol resolution — add dependency jars/class dirs to
-  `apiAnalysis.classpathDirectories` so cross-type calls resolve.
+- **IF** the user wants the order to write API tests in **THEN** read
+  `api_report.yml` and iterate `apiHotspots` by ascending `compositeRank`.
+- **IF** `apiHotspots` is empty but the app clearly has endpoints **THEN** check,
+  in order: `apiAnalysis.enabled: true`, controllers carry
+  `@RestController`/`@Controller` + a mapping annotation, and
+  `apiAnalysis.classpathDirectories` includes the dependency jars/classes so
+  cross-type calls resolve. Do **not** report "no endpoints".
+- **IF** every `coverageMultiplier` is `10` (or every `lineCoverage` is `0`)
+  **THEN** the JaCoCo report doesn't match the analyzed sources — supply a report
+  from the **same** build/module; do not conclude "nothing is tested".
+- **IF** the summary shows `Files: 0` **THEN** fix `scope.include` (single-module
+  needs `src/main/java/**/*.java`, multi-module needs `**/src/main/java/**/*.java`;
+  list both).
+- **IF** the summary shows `Commits: 0` **THEN** widen `window.days` or switch to
+  absolute `window.since`/`window.until` overlapping real activity.
+- **IF** `target.type` is `github` **THEN** clone the repo locally and re-run with
+  `target.type: local-git` (Phase 1 wires only `local-git` end-to-end).
+- **IF** running in CI **THEN** pass `--strict` so an empty result fails loudly.
+- **IF** you only need observational coverage, not coverage-driven scoring
+  **THEN** set `scoring.excludeCoverage: true` (Composite becomes `CC × Decay`).
 
-**`Files: 0`** — no source matched `scope.include`. Java NIO `**` does not match
-zero path segments; list both `src/main/java/**/*.java` and
-`**/src/main/java/**/*.java` (the collector deduplicates). Check:
+## Anti-patterns & pitfalls
+
+- **Don't fabricate or estimate the ranking.** Run the jar and read the actual
+  `api_report.yml`; the whole point is determinism, not a model guess.
+- **Don't treat an empty `apiHotspots` as "no endpoints."** It almost always
+  means `apiAnalysis` is off or the call graph couldn't resolve (missing
+  `classpathDirectories`).
+- **Don't feed a JaCoCo report from a different module/build.** Path mismatch
+  reads as 0% coverage → every multiplier maxes at 10 and the ranking is bogus.
+- **Don't run the jar on JDK < 21** — it's compiled for 21 (`UnsupportedClassVersionError`).
+- **Don't analyze generated or build output** — keep `**/generated/**`,
+  `**/build/**`, `**/target/**`, `**/test/**` in `scope.exclude`.
+- **Don't present the Composite Score as a verdict.** It's prioritization
+  evidence; surface the factors (churn, recency, complexity, coverage) so the
+  choice is explainable.
+- **Don't reorder by Simple Score when the goal is risk.** `compositeRank`, not
+  `simpleRank`, is the test-priority signal.
+
+## Testing
+
+The project's own suite exercises every layer (parser, scoring, output, E2E):
 
 ```bash
-git -C <repo> ls-files | grep -E 'src/main/java/.*\.java$' | head
+./gradlew test            # comprehensive; run before trusting a build
 ```
 
-**`Commits: 0`** — the window had no Java-touching commit. Switch to an absolute
-`window.since`/`window.until` overlapping real activity.
+Skill-level smoke check — analyze this very repo and assert a non-empty result:
 
-**Every coverage multiplier is 10** — JaCoCo was supplied but its paths don't
-match the analyzed files (so coverage reads as 0.0 → max penalty). Use a report
-from the **same** build/module as the target source.
+```bash
+bash -n skills/hotspot-analysis/scripts/run-analysis.sh   # wrapper syntax check
+./gradlew clean build -q
+java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o /tmp/h.yml -f
+# set analysis.target.path in /tmp/h.yml to this repo's absolute path, then:
+java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config /tmp/h.yml --strict
+echo "exit=$?"   # 0 = produced output; 3 = empty (misconfigured)
+```
 
-**`UnsupportedClassVersionError`** — the jar is compiled for Java 21; *running*
-needs JDK 21+. `export JAVA_HOME=$(/usr/libexec/java_home -v 21)` on macOS.
+A green `./gradlew test` plus a `0` exit on the smoke run means the skill's
+toolchain is sound end-to-end.
 
-**`github` target — `Authentication required`.** Phase 1 wires `local-git`
-end-to-end. Clone the GitHub repo locally and point `target.type: local-git` at it.
+## Changelog
 
-## Rules
-
-- Treat scores as **evidence to prioritize attention**, not a verdict. Surface
-  the factors (churn, recency, complexity, coverage) so the choice is explainable.
-- Don't fabricate output — run the CLI and read the actual `api_report.yml` rows.
-- Generate tests in `compositeRank` order; use `callGraph` + coverage to pick
-  which paths to assert first.
-- In CI, use `--strict` so a misconfigured run fails loudly instead of emitting
-  empty reports.
+- **0.1.0** — initial skill: file / method / REST API endpoint / shared-component
+  prioritization driving the Phase 1 CLI; RestAssured consumption guide;
+  `apiAnalysis` + JaCoCo + `--strict` exposed; per-granularity scoring docs.
 
 ## References
 
+- API report field schema: [`references/api-report-schema.md`](references/api-report-schema.md).
 - Scoring derivations: [`docs/scoring/`](../../docs/scoring/README.md).
+- Convenience wrapper: [`scripts/run-analysis.sh`](scripts/run-analysis.sh).
 - Project README and `docs/` (architecture, advanced techniques, theory).
 - Adam Tornhill, *Your Code as a Crime Scene*.
