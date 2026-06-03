@@ -52,6 +52,20 @@ analysis:
     # an observational metric rather than a scoring input. Default: false.
     # excludeCoverage: false
 
+  # Optional. REST API endpoint + shared-component granularities (Phase 2).
+  # When enabled, the analyzer walks the call graph from each Spring controller
+  # endpoint and ranks endpoints by aggregated Composite Score -- the priority
+  # input for RestAssured test generation. Off by default.
+  # apiAnalysis:
+  #   enabled: true
+  #   # CUMULATIVE | SEPARATE | BOTH -- how methods called by >=2 endpoints
+  #   # are aggregated/reported. Default: BOTH.
+  #   sharedComponentMode: BOTH
+  #   # Dirs with dependency jars/classes so cross-type calls resolve in the
+  #   # call graph. Improves accuracy; optional.
+  #   classpathDirectories:
+  #     - build/libs
+
   # Optional. When supplied, every file/method's Coverage Multiplier is
   # computed as 1 / (line_coverage + 0.1). Absent → multiplier defaults
   # to 1.0 (no coverage penalty).
@@ -62,6 +76,10 @@ output:
   # 'html' emits a self-contained hotspots.html that you can open in any
   # browser -- columns are sortable and rows are filterable.
   formats: [csv, yaml, md, html]
+  # COMBINED (api/shared tables go into hotspots.*) | STANDALONE (separate
+  # api_report.*) | BOTH. Only relevant when apiAnalysis.enabled=true.
+  # Default: BOTH.
+  # apiLayout: BOTH
   path: ./hotspot-report
   # 0 = all rows
   topN: 50

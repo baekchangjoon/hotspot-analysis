@@ -214,7 +214,13 @@ Commands:
 | `analysis.scope.include[]` | glob[] | At least one entry required |
 | `analysis.scope.exclude[]` | glob[] | Optional |
 | `analysis.scoring.decayHalfLifeDays` | integer ≥ 1 | Half-life for recency decay; default 90 days |
+| `analysis.scoring.excludeCoverage` | boolean | When `true`, Composite = CC × Decay and reports show raw line-coverage instead of the multiplier; default `false` |
+| `analysis.apiAnalysis.enabled` | boolean | Turn on the REST API endpoint + shared-component granularities; default `false` |
+| `analysis.apiAnalysis.sharedComponentMode` | `CUMULATIVE` \| `SEPARATE` \| `BOTH` | How methods shared by ≥2 endpoints are aggregated/reported; default `BOTH` |
+| `analysis.apiAnalysis.classpathDirectories[]` | string[] | Dirs with dependency jars/classes to improve call-graph symbol resolution |
+| `analysis.jacocoReportPath` | string | JaCoCo XML report path; enables the coverage multiplier `1/(coverage+0.1)`. Absent → multiplier 1.0 |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | At least one |
+| `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | Where API/shared tables go: into `hotspots.*`, a standalone `api_report.*`, or both; default `BOTH` |
 | `output.path` | string | Output directory |
 | `output.topN` | integer ≥ 0 | `0` means "all rows" |
 
@@ -241,6 +247,11 @@ Every report now carries **two scores** and **four input factors** side by side,
 Rows are sorted by **Composite Score DESC** (ties broken by path / canonical signature).
 
 CSVs split per granularity (9 columns for files, 14 for methods); YAML/MD/HTML bundle every granularity into one document.
+
+> Per-granularity derivations — how Revisions / Recency Decay / Cognitive
+> Complexity / Coverage are measured and combined for **file / method / REST API
+> endpoint / shared component** — are in [`docs/scoring/`](docs/scoring/README.md),
+> with source references and worked examples.
 
 ---
 

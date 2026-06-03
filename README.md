@@ -211,7 +211,13 @@ Commands:
 | `analysis.scope.include[]` | glob[] | 최소 한 개 필요 |
 | `analysis.scope.exclude[]` | glob[] | 선택 |
 | `analysis.scoring.decayHalfLifeDays` | integer ≥ 1 | 최근성 감쇠 반감기; 기본 90일 |
+| `analysis.scoring.excludeCoverage` | boolean | `true`면 Composite = CC × Decay, 리포트는 배수 대신 원시 line-coverage 표시; 기본 `false` |
+| `analysis.apiAnalysis.enabled` | boolean | REST API 엔드포인트 + 공유 컴포넌트 단위 활성화; 기본 `false` |
+| `analysis.apiAnalysis.sharedComponentMode` | `CUMULATIVE` \| `SEPARATE` \| `BOTH` | 2개 이상 엔드포인트가 공유하는 메서드의 집계/리포트 방식; 기본 `BOTH` |
+| `analysis.apiAnalysis.classpathDirectories[]` | string[] | 콜그래프 심볼 해석을 돕는 의존성 jar/클래스 디렉터리 |
+| `analysis.jacocoReportPath` | string | JaCoCo XML 리포트 경로; 커버리지 배수 `1/(coverage+0.1)` 활성화. 없으면 배수 1.0 |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | 최소 한 개 |
+| `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | API/공유 테이블 위치: `hotspots.*`에 통합, 독립 `api_report.*`, 또는 둘 다; 기본 `BOTH` |
 | `output.path` | string | 출력 디렉터리 |
 | `output.topN` | integer ≥ 0 | `0`은 "모든 행" |
 
@@ -238,6 +244,11 @@ Commands:
 행은 **Composite Score 내림차순**으로 정렬됩니다(동점은 경로 / 표준 시그니처로 처리).
 
 CSV는 단위별로 분리(파일 9열, 메서드 14열); YAML/MD/HTML은 모든 단위를 한 문서에 묶습니다.
+
+> 단위별 산출 방식 — **파일 / 메서드 / REST API 엔드포인트 / 공유 컴포넌트**마다
+> Revisions / Recency Decay / Cognitive Complexity / Coverage를 어떻게 측정하고
+> 결합하는지 — 는 [`docs/scoring/`](docs/scoring/README.md)에 소스 근거와 워크드
+> 예시까지 정리돼 있습니다.
 
 ---
 
