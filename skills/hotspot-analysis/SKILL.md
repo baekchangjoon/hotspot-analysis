@@ -63,13 +63,13 @@ The steps below show the explicit form.
    ```bash
    JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"   # prints the jar path
    # manual alternative (no clone needed):
-   #   curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
+   #   curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
    #   JAR=hotspot.jar
    # from-source alternative (needs the repo + a JDK):  ./gradlew bootJar
    ```
 
    No JDK at all? Use the Docker image, mounting the target repo at `/work`:
-   `docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 analyze --config /work/hotspot.yml`
+   `docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest analyze --config /work/hotspot.yml`
 
 2. **Generate a config.**
 
@@ -317,6 +317,9 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.1** — distribute the jar via GitHub Releases (version-stable
+  `hotspot.jar` asset) + ghcr Docker image; a missing `jacocoReportPath` now
+  warns and disables coverage instead of silently penalizing every artifact.
 - **0.1.0** — initial skill: file / method / REST API endpoint / shared-component
   prioritization driving the Phase 1 CLI; RestAssured consumption guide;
   `apiAnalysis` + JaCoCo + `--strict` exposed; per-granularity scoring docs.

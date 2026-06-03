@@ -45,7 +45,7 @@ class HotspotCommandTest {
         assertThat(exit).isZero();
         assertThat(out.toString())
                 .contains("hotspot")
-                .contains("0.1.0");
+                .containsPattern("\\d+\\.\\d+\\.\\d+");  // version-agnostic
     }
 
     @Test

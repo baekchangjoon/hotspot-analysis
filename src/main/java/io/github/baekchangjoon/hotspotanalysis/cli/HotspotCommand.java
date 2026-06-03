@@ -20,7 +20,7 @@ import picocli.CommandLine.Spec;
 @Command(
         name = "hotspot",
         mixinStandardHelpOptions = true,
-        version = "hotspot 0.1.0",
+        version = "hotspot 0.1.1",
         description = "Hotspot analysis CLI for Java codebases.",
         synopsisHeading = "%nUsage: ",
         descriptionHeading = "%nDescription:%n  ",

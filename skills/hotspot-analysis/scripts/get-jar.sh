@@ -3,16 +3,16 @@
 # Resolution order (first hit wins):
 #   1. a local dev build under build/libs/        (developers)
 #   2. a cached download                          (repeat runs)
-#   3. download the pinned GitHub Release asset    (the common case — no build)
+#   3. download the latest release asset           (the common case — no build)
 #   4. build from source with ./gradlew           (offline fallback, needs JDK)
 #
-# All progress/log output goes to stderr so `JAR=$(get-jar.sh)` stays clean.
-# Requires JDK 21+ on PATH to RUN the jar (whatever path produced it).
+# The release attaches a version-stable asset named `hotspot.jar`, so this URL
+# never changes across patch releases. All progress/log output goes to stderr
+# so `JAR=$(get-jar.sh)` stays clean. Requires JDK 21+ on PATH to RUN the jar.
 set -euo pipefail
 
-VERSION="0.1.0"
 REPO="baekchangjoon/hotspot-analysis"
-ASSET="hotspot-${VERSION}.jar"
+ASSET="hotspot.jar"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/hotspot-analysis"
 
@@ -25,11 +25,11 @@ if [ -n "$local_jar" ]; then echo "$local_jar"; exit 0; fi
 # 2) cached download
 if [ -f "$CACHE/$ASSET" ]; then echo "$CACHE/$ASSET"; exit 0; fi
 
-# 3) download the released asset (no build needed)
+# 3) download the latest released asset (no build needed)
 mkdir -p "$CACHE"
-url="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
+url="https://github.com/${REPO}/releases/latest/download/${ASSET}"
 if command -v gh >/dev/null 2>&1 \
-   && gh release download "v${VERSION}" -R "$REPO" --pattern "$ASSET" --dir "$CACHE" >&2 2>/dev/null; then
+   && gh release download -R "$REPO" --pattern "$ASSET" --dir "$CACHE" >&2 2>/dev/null; then
   echo "$CACHE/$ASSET"; exit 0
 fi
 if command -v curl >/dev/null 2>&1 && curl -fsSL "$url" -o "$CACHE/$ASSET"; then

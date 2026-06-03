@@ -25,8 +25,8 @@ in CSV / YAML / Markdown.
 ## Install as a Claude Code skill
 
 This repo is also a **Claude Code plugin marketplace**. The bundled
-`hotspot-analysis` skill teaches an agent to build, configure, run, and
-interpret the CLI for you. Inside Claude Code:
+`hotspot-analysis` skill teaches an agent to fetch, configure, run, and
+interpret the CLI for you (it auto-downloads the released jar — no build). Inside Claude Code:
 
 ```text
 /plugin marketplace add baekchangjoon/hotspot-analysis
@@ -47,8 +47,8 @@ git clone https://github.com/baekchangjoon/hotspot-analysis
 cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
-> The skill drives this project's CLI, so you still need the repo checked out
-> (for `./gradlew build`) to produce the jar it runs.
+> No build needed — the skill's `scripts/get-jar.sh` downloads the released jar
+> (only a JDK 21 runtime is required). For no JDK at all, use the Docker path above.
 
 ---
 
@@ -83,15 +83,15 @@ Download the self-contained runnable jar from the
 (only a JDK 21 runtime is required):
 
 ```bash
-curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
+curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
 ```
 
 > To build from source instead (optional): `./gradlew bootJar` →
-> `build/libs/hotspot-0.1.0.jar`. Swap `hotspot.jar` below for that path.
+> `build/libs/hotspot-*.jar`. Swap `hotspot.jar` below for that path.
 
 > **No JDK — Docker.** Mount the target repo at `/work`:
 > ```bash
-> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 \
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest \
 >   analyze --config /work/hotspot.yml
 > ```
 
@@ -143,9 +143,11 @@ analysis:
     classpathDirectories:           # improves call-graph symbol resolution (optional)
       - build/libs
 
-  # JaCoCo XML report (optional). When supplied, enables the coverage
-  # multiplier 1/(coverage+0.1).
-  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
+  # JaCoCo XML report (optional). Uncomment ONLY when you actually have a
+  # report. Coverage then feeds the score (multiplier 1/(coverage+0.1)).
+  # Pointing at a non-existent path prints a warning and proceeds without
+  # coverage (scores stay correct).
+  # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # Case-insensitive: csv | yaml | md | html (multiple allowed)

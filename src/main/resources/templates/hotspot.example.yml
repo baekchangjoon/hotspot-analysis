@@ -66,10 +66,11 @@ analysis:
   #   classpathDirectories:
   #     - build/libs
 
-  # Optional. When supplied, every file/method's Coverage Multiplier is
-  # computed as 1 / (line_coverage + 0.1). Absent → multiplier defaults
-  # to 1.0 (no coverage penalty).
-  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
+  # Optional. Uncomment ONLY when you actually have a JaCoCo XML report.
+  # When supplied, every file/method's Coverage Multiplier is computed as
+  # 1 / (line_coverage + 0.1). Absent → multiplier 1.0 (no coverage penalty).
+  # A path that does not exist prints a warning and proceeds without coverage.
+  # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # csv | yaml | md | html (multiple allowed, case-insensitive)
