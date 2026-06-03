@@ -318,6 +318,9 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.3** — one-click `release` button + skills-validation CI gate + tag
+  protection; the button reliably fans out to jar/image via `workflow_call`
+  (a GITHUB_TOKEN-created release doesn't re-trigger event workflows).
 - **0.1.2** — releases are now event-driven: every published release (incl. one
   created by `gh skill publish`) auto-attaches `hotspot.jar` and builds the
   Docker image, so a new release never breaks the download. `license` added to
