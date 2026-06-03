@@ -8,6 +8,7 @@
   },
   "homepage": "https://github.com/baekchangjoon/hotspot-analysis",
   "repository": "https://github.com/baekchangjoon/hotspot-analysis",
+  "license": "MIT",
   "keywords": [
     "hotspot",
     "code-analysis",

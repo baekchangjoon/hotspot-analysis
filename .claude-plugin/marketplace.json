@@ -21,7 +21,8 @@
         "cognitive-complexity",
         "code-coverage"
       ],
-      "homepage": "https://github.com/baekchangjoon/hotspot-analysis"
+      "homepage": "https://github.com/baekchangjoon/hotspot-analysis",
+      "license": "MIT"
     }
   ]
 }
