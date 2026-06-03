@@ -1,0 +1,22 @@
+{
+  "name": "hotspot-analysis",
+  "description": "Rank Java source files and methods by a Composite Hotspot Score that combines recency-weighted git revisions, cognitive complexity, and JaCoCo coverage gap — so testing and refactoring effort lands where the historical evidence says bugs are most likely to live. Based on Adam Tornhill's 'Your Code as a Crime Scene'. Bundles a skill that drives the project's Java CLI (build → init config → analyze → interpret CSV/YAML/Markdown/HTML reports).",
+  "version": "0.1.0",
+  "author": {
+    "name": "baekchangjoon",
+    "url": "https://github.com/baekchangjoon"
+  },
+  "homepage": "https://github.com/baekchangjoon/hotspot-analysis",
+  "repository": "https://github.com/baekchangjoon/hotspot-analysis",
+  "keywords": [
+    "hotspot",
+    "code-analysis",
+    "technical-debt",
+    "your-code-as-a-crime-scene",
+    "java",
+    "git-history",
+    "cognitive-complexity",
+    "code-coverage",
+    "agent-skills"
+  ]
+}
