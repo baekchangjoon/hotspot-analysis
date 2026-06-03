@@ -76,17 +76,23 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 ## Quick start
 
-### 1. Build
+### 1. Get the jar (no build needed)
+
+Download the self-contained runnable jar from the
+[latest Release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)
+(only a JDK 21 runtime is required):
 
 ```bash
-./gradlew clean build
-# → build/libs/hotspot-0.1.0-SNAPSHOT.jar
+curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
 ```
+
+> To build from source instead (optional): `./gradlew bootJar` →
+> `build/libs/hotspot-0.1.0.jar`. Swap `hotspot.jar` below for that path.
 
 ### 2. Generate a sample config
 
 ```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
+java -jar hotspot.jar init -o hotspot.yml
 ```
 
 ### 3. Edit `hotspot.yml`
@@ -146,7 +152,7 @@ output:
 ### 4. Run analysis
 
 ```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config hotspot.yml
+java -jar hotspot.jar analyze --config hotspot.yml
 ```
 
 Outputs:
