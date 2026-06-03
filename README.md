@@ -16,6 +16,36 @@ in CSV / YAML / Markdown.
 
 ---
 
+## Install as a Claude Code skill
+
+This repo is also a **Claude Code plugin marketplace**. The bundled
+`hotspot-analysis` skill teaches an agent to build, configure, run, and
+interpret the CLI for you. Inside Claude Code:
+
+```text
+/plugin marketplace add baekchangjoon/hotspot-analysis
+/plugin install hotspot-analysis@hotspot-analysis
+/reload-plugins
+```
+
+Then just ask, e.g. *"find the hotspots in this Java repo"* — the model invokes
+the skill, which drives the workflow below.
+
+### Skill only (without the plugin)
+
+Any [Agent Skills](https://agentskills.io)-compatible agent (Claude Code,
+Claude.ai, Cursor, Gemini CLI, …) can use the skill folder directly:
+
+```bash
+git clone https://github.com/baekchangjoon/hotspot-analysis
+cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
+```
+
+> The skill drives this project's CLI, so you still need the repo checked out
+> (for `./gradlew build`) to produce the jar it runs.
+
+---
+
 ## Features
 
 - **Two granularities** — file-level and method-level hotspots, sorted by score.

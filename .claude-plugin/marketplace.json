@@ -1,0 +1,27 @@
+{
+  "name": "hotspot-analysis",
+  "description": "Agent skill to rank Java files and methods by a Composite Hotspot Score (recency-weighted churn × cognitive complexity × coverage gap) so testing and refactoring effort goes where bugs are most likely to live.",
+  "owner": {
+    "name": "baekchangjoon",
+    "url": "https://github.com/baekchangjoon"
+  },
+  "plugins": [
+    {
+      "name": "hotspot-analysis",
+      "source": "./",
+      "description": "Drives the hotspot-analysis Java CLI to score a local git repository's Java files and methods by a Composite Hotspot Score (recency-weighted revisions × cognitive complexity × coverage gap) and emit CSV/YAML/Markdown/HTML reports. Based on Adam Tornhill's 'Your Code as a Crime Scene'.",
+      "version": "0.1.0",
+      "category": "development",
+      "tags": [
+        "hotspot",
+        "code-analysis",
+        "technical-debt",
+        "java",
+        "git-history",
+        "cognitive-complexity",
+        "code-coverage"
+      ],
+      "homepage": "https://github.com/baekchangjoon/hotspot-analysis"
+    }
+  ]
+}
