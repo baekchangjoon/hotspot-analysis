@@ -1,7 +1,7 @@
 # `api_report.yml` / hotspot report — field schema
 
 Field reference for the machine-readable output an agent consumes. Derivations
-(how each number is computed) are in [`docs/scoring/`](../../../docs/scoring/README.md).
+(how each number is computed) are in [`docs/scoring/`](../../../docs/scoring/README.en.md).
 
 Produced when `analysis.apiAnalysis.enabled: true`. With `output.apiLayout`:
 `STANDALONE` → `api_report.yml`; `COMBINED` → merged into `hotspots.yml`;

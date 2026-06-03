@@ -1,5 +1,7 @@
 # 고도화 기법 동작 검증 보고서
 
+> 🌐 **한국어** (현재 문서) · [English](advanced-techniques-verification.en.md)
+
 > Subject: `docs/hotspot-advanced-spec.md` 에 정의된 4가지 고도화 기법
 > (Recency Decay / Cognitive Complexity / Coverage Gap / X-Ray + COMPOSITE)
 > 의 구현이 명세 수식과 일치하는지 확인.

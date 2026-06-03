@@ -1,5 +1,7 @@
 # 스코어링 레퍼런스
 
+> 🌐 **한국어** (현재 문서) · [English](README.en.md)
+
 hotspot-analysis가 **네 가지 입력 요인**(Revisions, Recency Decay, Cognitive
 Complexity, Coverage)을 어떻게 측정하고, 이를 어떻게 **두 가지 점수**(Simple,
 Composite)로 계산하는지를 단위(granularity)별로 설명합니다.

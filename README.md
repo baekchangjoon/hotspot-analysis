@@ -5,6 +5,10 @@
 [![CI](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 [![Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/jacoco.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 [![Branch Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/branches.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](build.gradle.kts)
+[![Skill](https://img.shields.io/badge/Skill-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Gemini%20CLI-blueviolet)](https://agentskills.io)
+[![Docs](https://img.shields.io/badge/Docs-KO%20%7C%20EN-green)](README.en.md)
 
 > Java 소스 파일과 메서드를 **복합 핫스팟 점수(Composite Hotspot Score)** 로
 > 순위화합니다. 최근성 가중 변경 횟수, 인지 복잡도, 커버리지 공백을 결합해
@@ -116,10 +120,23 @@ analysis:
 
   scoring:
     decayHalfLifeDays: 90   # 최근성 감쇠 반감기(일)
+    # excludeCoverage: false  # true면 Composite = CC × Decay (커버리지는 관측용)
+
+  # REST API 엔드포인트 핫스팟 (Spring 컨트롤러를 콜그래프 따라 집계).
+  # RestAssured 테스트 생성 우선순위 입력. Spring 앱이면 켜세요.
+  apiAnalysis:
+    enabled: true
+    sharedComponentMode: BOTH       # CUMULATIVE | SEPARATE | BOTH
+    classpathDirectories:           # 콜그래프 심볼 해석 향상(선택)
+      - build/libs
+
+  # JaCoCo XML 리포트(선택). 주면 커버리지 배수 1/(coverage+0.1) 활성화.
+  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # 대소문자 무시: csv | yaml | md | html (여러 개 허용)
   formats: [csv, yaml, md, html]
+  apiLayout: BOTH       # COMBINED(hotspots.*에 통합) | STANDALONE(api_report.*) | BOTH
   path: ./hotspot-report
   topN: 20            # 0 = 무제한
 ```

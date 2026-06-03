@@ -1,5 +1,7 @@
 # API Hotspot 분석, 쉽게 이해하기
 
+> 🌐 **한국어** (현재 문서) · [English](api-hotspot-explained.en.md)
+
 > **누구를 위한 문서?** Java 백엔드 한두 해 다뤄본 분 / 핫스팟 분석 도구를 처음 접하는 주니어 엔지니어
 > **읽는 데 걸리는 시간:** 10분
 > **선수 지식:** Spring 컨트롤러(`@RestController`, `@GetMapping`)가 무엇인지 정도

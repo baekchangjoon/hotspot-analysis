@@ -1,3 +1,5 @@
+> 🌐 **한국어** (현재 문서) · [English](hotspot-analysis.en.md)
+
 ## 1. Adam Tornhill 소개
 
 "Adam Tornhill has a Bachelor of Science degree in Electrical Engineering from The Faculty of Engineering at Lund University. Adam obtained this degree from 1994 to 1997. Later, they pursued a Bachelor of Social Science in Psychology at Kristianstad University, completing it from 2007 to 2010. Continuing their education, Adam Tornhill earned a Master of Arts (M.A.) degree in Psychology from Kristianstad University, where they studied from 2010 to 2013."

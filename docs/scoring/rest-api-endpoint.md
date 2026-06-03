@@ -1,5 +1,7 @@
 # REST API 엔드포인트 단위 (rest-api-endpoint)
 
+> 🌐 **한국어** (현재 문서) · [English](rest-api-endpoint.en.md)
+
 공통 요인·점수 정의는 [스코어링 레퍼런스](README.md)를 먼저 보세요. 이 문서는
 **API 엔드포인트 단위**가 콜그래프를 따라 요인을 어떻게 **집계**하는지를 다룹니다.
 

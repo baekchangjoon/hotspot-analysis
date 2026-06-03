@@ -5,6 +5,10 @@
 [![CI](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml/badge.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 [![Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/jacoco.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
 [![Branch Coverage](https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/badges/.github/badges/branches.svg)](https://github.com/baekchangjoon/hotspot-analysis/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](build.gradle.kts)
+[![Skill](https://img.shields.io/badge/Skill-Claude%20Code%20%7C%20Cursor%20%7C%20Codex%20%7C%20Gemini%20CLI-blueviolet)](https://agentskills.io)
+[![Docs](https://img.shields.io/badge/Docs-KO%20%7C%20EN-green)](README.md)
 
 > Rank Java source files and methods by a **Composite Hotspot Score** that
 > combines recency-weighted revisions, cognitive complexity, and coverage gap —
@@ -117,10 +121,24 @@ analysis:
 
   scoring:
     decayHalfLifeDays: 90   # half-life for recency decay (days)
+    # excludeCoverage: false  # true → Composite = CC × Decay (coverage observational)
+
+  # REST API endpoint hotspots (aggregates Spring controllers along the call graph).
+  # The priority input for RestAssured test generation. Turn on for Spring apps.
+  apiAnalysis:
+    enabled: true
+    sharedComponentMode: BOTH       # CUMULATIVE | SEPARATE | BOTH
+    classpathDirectories:           # improves call-graph symbol resolution (optional)
+      - build/libs
+
+  # JaCoCo XML report (optional). When supplied, enables the coverage
+  # multiplier 1/(coverage+0.1).
+  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # Case-insensitive: csv | yaml | md | html (multiple allowed)
   formats: [csv, yaml, md, html]
+  apiLayout: BOTH       # COMBINED (into hotspots.*) | STANDALONE (api_report.*) | BOTH
   path: ./hotspot-report
   topN: 20            # 0 = unlimited
 ```
@@ -250,7 +268,7 @@ CSVs split per granularity (9 columns for files, 14 for methods); YAML/MD/HTML b
 
 > Per-granularity derivations — how Revisions / Recency Decay / Cognitive
 > Complexity / Coverage are measured and combined for **file / method / REST API
-> endpoint / shared component** — are in [`docs/scoring/`](docs/scoring/README.md),
+> endpoint / shared component** — are in [`docs/scoring/`](docs/scoring/README.en.md),
 > with source references and worked examples.
 
 ---

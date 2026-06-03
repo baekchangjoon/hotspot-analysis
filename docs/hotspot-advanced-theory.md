@@ -1,5 +1,7 @@
 # Hotspot Analysis 기법 고도화 및 구현성 검토 보고서
 
+> 🌐 **한국어** (현재 문서) · [English](hotspot-advanced-theory.en.md)
+
 ## 1. 개요
 Hotspot Analysis는 소스 코드의 복잡도(Complexity)와 변경 빈도(Change Frequency)를 결합하여 코드베이스의 위험 영역을 식별하는 Behavioral Code Analysis 기법입니다. 본 문서에서는 기본적인 `Revisions × LOC` 공식을 넘어 업계(예: CodeScene 등)에서 활용되는 고도화 기법들을 요약하고, 이를 현재 `hotspot-analysis` 프로젝트에 추가로 도입할 때의 기술적 타당성을 검토합니다.
 
