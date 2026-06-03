@@ -89,6 +89,12 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 > To build from source instead (optional): `./gradlew bootJar` →
 > `build/libs/hotspot-0.1.0.jar`. Swap `hotspot.jar` below for that path.
 
+> **No JDK — Docker.** Mount the target repo at `/work`:
+> ```bash
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 \
+>   analyze --config /work/hotspot.yml
+> ```
+
 ### 2. Generate a sample config
 
 ```bash

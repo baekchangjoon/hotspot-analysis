@@ -68,6 +68,9 @@ The steps below show the explicit form.
    # from-source alternative (needs the repo + a JDK):  ./gradlew bootJar
    ```
 
+   No JDK at all? Use the Docker image, mounting the target repo at `/work`:
+   `docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 analyze --config /work/hotspot.yml`
+
 2. **Generate a config.**
 
    ```bash
