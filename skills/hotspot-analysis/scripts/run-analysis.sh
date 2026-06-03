@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 # Thin convenience wrapper around the hotspot-analysis CLI.
-# Builds the jar if it is missing, then runs `analyze` with the given config.
+# Resolves the jar (downloads the released fat jar if needed — see get-jar.sh),
+# then runs `analyze` with the given config.
 #
 # Usage:
 #   scripts/run-analysis.sh <config.yml> [extra analyze args...]
 #   scripts/run-analysis.sh hotspot.yml --strict
 #
-# Requires JDK 21+ on PATH to RUN the jar (Gradle auto-provisions 21 to build it).
+# Requires JDK 21+ on PATH to RUN the jar.
 set -euo pipefail
 
-# Repo root = three levels up from this script (skills/hotspot-analysis/scripts/).
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-JAR="$ROOT/build/libs/hotspot-0.1.0-SNAPSHOT.jar"
-
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG="${1:?usage: run-analysis.sh <config.yml> [extra analyze args...]}"
 shift
 
-if [ ! -f "$JAR" ]; then
-  echo "jar not found, building: $JAR" >&2
-  (cd "$ROOT" && ./gradlew clean build -q)
-fi
-
+JAR="$("$HERE/get-jar.sh")"
 exec java -jar "$JAR" analyze --config "$CONFIG" "$@"

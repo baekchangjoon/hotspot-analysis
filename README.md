@@ -75,17 +75,22 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 ## 빠른 시작
 
-### 1. 빌드
+### 1. jar 받기 (빌드 불필요)
+
+[최신 Release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)에서
+self-contained 실행 jar를 내려받습니다(JDK 21 런타임만 있으면 됨):
 
 ```bash
-./gradlew clean build
-# → build/libs/hotspot-0.1.0-SNAPSHOT.jar
+curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
 ```
+
+> 소스에서 빌드하려면(선택): `./gradlew bootJar` → `build/libs/hotspot-0.1.0.jar`.
+> 아래 예시의 `hotspot.jar`를 그 경로로 바꾸세요.
 
 ### 2. 샘플 설정 생성
 
 ```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
+java -jar hotspot.jar init -o hotspot.yml
 ```
 
 ### 3. `hotspot.yml` 편집
@@ -144,7 +149,7 @@ output:
 ### 4. 분석 실행
 
 ```bash
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config hotspot.yml
+java -jar hotspot.jar analyze --config hotspot.yml
 ```
 
 출력:

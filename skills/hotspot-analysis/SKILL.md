@@ -45,7 +45,7 @@ Target must be a directory containing a real `.git/` folder. Phase 1 runs
 
 | Need | Requirement |
 |---|---|
-| Build the jar | Any JDK 17+ on `PATH` (Gradle auto-provisions the Java 21 toolchain) |
+| Get the jar | Nothing to build — `scripts/get-jar.sh` downloads the released fat jar (cached). Building from source instead needs any JDK 17+. |
 | **Run the jar** | **JDK 21+ on `PATH`** — verify `java -version` reports 21 or later |
 | Analysis target | A directory with a `.git/` folder |
 | API analysis (recommended) | `apiAnalysis.enabled: true`; ideally `classpathDirectories` for symbol resolution |
@@ -53,21 +53,25 @@ Target must be a directory containing a real `.git/` folder. Phase 1 runs
 
 ## Workflow
 
-Run from the `hotspot-analysis` project root (this skill's repo). A convenience
-wrapper, [`scripts/run-analysis.sh`](scripts/run-analysis.sh), builds the jar if
-it is missing and then runs `analyze`.
+A convenience wrapper, [`scripts/run-analysis.sh`](scripts/run-analysis.sh),
+resolves the jar (downloading the released fat jar if needed) and runs `analyze`.
+The steps below show the explicit form.
 
-1. **Build the jar (once).**
+1. **Get the jar.** No build required — the resolver downloads the released fat
+   jar to a cache (or reuses a local build, or builds from source as a fallback):
 
    ```bash
-   ./gradlew clean build
-   # → build/libs/hotspot-0.1.0-SNAPSHOT.jar
+   JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"   # prints the jar path
+   # manual alternative (no clone needed):
+   #   curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
+   #   JAR=hotspot.jar
+   # from-source alternative (needs the repo + a JDK):  ./gradlew bootJar
    ```
 
 2. **Generate a config.**
 
    ```bash
-   java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o hotspot.yml
+   java -jar "$JAR" init -o hotspot.yml
    ```
 
 3. **Configure for endpoint prioritization.** Point `analysis.target.path` at
@@ -93,8 +97,9 @@ it is missing and then runs `analyze`.
 4. **Analyze** (add `--strict` in CI).
 
    ```bash
-   java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config hotspot.yml --strict
-   # or: skills/hotspot-analysis/scripts/run-analysis.sh hotspot.yml --strict
+   java -jar "$JAR" analyze --config hotspot.yml --strict
+   # or, in one shot (resolves the jar for you):
+   #   skills/hotspot-analysis/scripts/run-analysis.sh hotspot.yml --strict
    ```
 
    Outputs land in `output.path`. With API analysis on and `apiLayout: BOTH`:
@@ -296,11 +301,11 @@ The project's own suite exercises every layer (parser, scoring, output, E2E):
 Skill-level smoke check — analyze this very repo and assert a non-empty result:
 
 ```bash
-bash -n skills/hotspot-analysis/scripts/run-analysis.sh   # wrapper syntax check
-./gradlew clean build -q
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o /tmp/h.yml -f
+bash -n skills/hotspot-analysis/scripts/get-jar.sh skills/hotspot-analysis/scripts/run-analysis.sh
+JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"   # resolves/downloads the jar
+java -jar "$JAR" init -o /tmp/h.yml -f
 # set analysis.target.path in /tmp/h.yml to this repo's absolute path, then:
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config /tmp/h.yml --strict
+java -jar "$JAR" analyze --config /tmp/h.yml --strict
 echo "exit=$?"   # 0 = produced output; 3 = empty (misconfigured)
 ```
 
@@ -317,6 +322,7 @@ toolchain is sound end-to-end.
 
 - API report field schema: [`references/api-report-schema.md`](references/api-report-schema.md).
 - Scoring derivations: [`docs/scoring/`](../../docs/scoring/README.en.md).
-- Convenience wrapper: [`scripts/run-analysis.sh`](scripts/run-analysis.sh).
+- Jar resolver / wrapper: [`scripts/get-jar.sh`](scripts/get-jar.sh) · [`scripts/run-analysis.sh`](scripts/run-analysis.sh).
+- Prebuilt jar: [GitHub Releases](https://github.com/baekchangjoon/hotspot-analysis/releases/latest).
 - Project README and `docs/` (architecture, advanced techniques, theory).
 - Adam Tornhill, *Your Code as a Crime Scene*.

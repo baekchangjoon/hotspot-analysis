@@ -6,7 +6,7 @@ plugins {
 }
 
 group = "io.github.baekchangjoon"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.0"
 description = "Hotspot analysis CLI for Java codebases"
 
 java {
