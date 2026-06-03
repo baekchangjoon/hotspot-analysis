@@ -230,6 +230,9 @@ analysis:
 output:
   formats: [csv, yaml, md, html]   # case-insensitive; ≥1 required
   apiLayout: BOTH          # COMBINED (into hotspots.*) | STANDALONE (api_report.*) | BOTH
+  coverageBreakdown: false # true → also write coverage_breakdown.yml: the audit
+                           # trail behind every coverage number (per-file counts;
+                           # per-endpoint per-method covered/executable lines)
   path: ./hotspot-report
   topN: 30                 # 0 = all rows
 ```

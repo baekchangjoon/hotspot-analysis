@@ -255,6 +255,35 @@ class ApiHotspotCalculatorTest {
         // big untested method would be masked. Assert we're at the weighted value.
         assertThat(api.lineCoverage()).isCloseTo(1.0 / 9.0, within(1e-6));
         assertThat(api.lineCoverage()).isLessThan(0.2); // would fail under mean-of-ratios (~0.33)
+
+        // The calculation trace must reproduce the final value from raw counts.
+        var bd = result.coverageBreakdown();
+        assertThat(bd).isNotNull();
+        var apiBd = bd.apis().stream()
+                .filter(a -> a.route().equals("/api/w")).findFirst().orElseThrow();
+        assertThat(apiBd.coveredLines()).isEqualTo(1);
+        assertThat(apiBd.executableLines()).isEqualTo(9);
+        assertThat(apiBd.lineCoverage()).isCloseTo(1.0 / 9.0, within(1e-9));
+        assertThat(apiBd.methods()).anySatisfy(m -> {
+            assertThat(m.signature()).contains("WService#small");
+            assertThat(m.coveredLines()).isEqualTo(1);
+            assertThat(m.executableLines()).isEqualTo(1);
+        });
+        assertThat(apiBd.methods()).anySatisfy(m -> {
+            assertThat(m.signature()).contains("WService#big");
+            assertThat(m.coveredLines()).isEqualTo(0);
+            assertThat(m.executableLines()).isEqualTo(8);
+        });
+        assertThat(apiBd.methods()).anySatisfy(m -> {
+            assertThat(m.signature()).contains("WController#get");
+            assertThat(m.note()).contains("no coverage data");
+        });
+        // File-level counts back the file report's coverage.
+        assertThat(bd.files()).anySatisfy(f -> {
+            assertThat(f.path()).endsWith("WService.java");
+            assertThat(f.coveredLines()).isEqualTo(1);
+            assertThat(f.executableLines()).isEqualTo(9);
+        });
     }
 
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {

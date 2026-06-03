@@ -6,13 +6,18 @@ import java.util.Objects;
 /**
  * Top-level immutable result of a hotspot analysis run. Both lists are sorted
  * by descending score, and limited by {@code output.topN} if it was set.
+ *
+ * <p>{@code coverageBreakdown} carries the calculation trace behind every
+ * coverage number (per-file and per-endpoint line counts); it is {@code null}
+ * when no JaCoCo report was supplied.</p>
  */
 public record AnalysisResult(
         List<FileHotspot> fileHotspots,
         List<MethodHotspot> methodHotspots,
         List<ApiHotspot> apiHotspots,
         List<SharedComponentHotspot> sharedComponents,
-        AnalysisMeta meta
+        AnalysisMeta meta,
+        CoverageBreakdown coverageBreakdown
 ) {
 
     public AnalysisResult {
@@ -36,8 +41,18 @@ public record AnalysisResult(
     public AnalysisResult(
             List<FileHotspot> fileHotspots,
             List<MethodHotspot> methodHotspots,
+            List<ApiHotspot> apiHotspots,
+            List<SharedComponentHotspot> sharedComponents,
             AnalysisMeta meta
     ) {
-        this(fileHotspots, methodHotspots, List.of(), List.of(), meta);
+        this(fileHotspots, methodHotspots, apiHotspots, sharedComponents, meta, null);
+    }
+
+    public AnalysisResult(
+            List<FileHotspot> fileHotspots,
+            List<MethodHotspot> methodHotspots,
+            AnalysisMeta meta
+    ) {
+        this(fileHotspots, methodHotspots, List.of(), List.of(), meta, null);
     }
 }

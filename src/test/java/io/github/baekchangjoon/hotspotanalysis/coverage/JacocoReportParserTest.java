@@ -90,6 +90,12 @@ class JacocoReportParserTest {
         // getMethodCoverage stays consistent (covered/executable).
         assertThat(parser.getMethodCoverage("com/example/Foo.java", 5, 7))
                 .isEqualTo(2.0 / 3.0);
+
+        // Whole-file counts back the file-level breakdown.
+        assertThat(parser.getFileLineCounts("com/example/Foo.java"))
+                .isEqualTo(new JacocoReportParser.LineCounts(2, 3));
+        assertThat(parser.getFileLineCounts("Missing.java"))
+                .isEqualTo(new JacocoReportParser.LineCounts(0, 0));
     }
 
     @Test

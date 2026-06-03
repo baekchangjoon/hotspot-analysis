@@ -54,5 +54,13 @@ public class OutputDispatcher {
             }
             writer.write(result, outputDir, outputConfig, apiEnabled, excludeCoverage);
         }
+        // Opt-in calculation trace; only meaningful when a JaCoCo report fed
+        // the run (result carries a breakdown then).
+        if (Boolean.TRUE.equals(outputConfig.coverageBreakdown())
+                && result.coverageBreakdown() != null) {
+            breakdownWriter.write(result.coverageBreakdown(), outputDir);
+        }
     }
+
+    private final CoverageBreakdownWriter breakdownWriter = new CoverageBreakdownWriter();
 }

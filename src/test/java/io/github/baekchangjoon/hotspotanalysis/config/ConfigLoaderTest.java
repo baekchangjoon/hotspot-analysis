@@ -326,6 +326,7 @@ class ConfigLoaderTest {
                 .isEqualTo(ApiAnalysisConfig.SharedComponentMode.BOTH);
         assertThat(config.analysis().apiAnalysis().classpathDirectories()).isEmpty();
         assertThat(config.output().apiLayout()).isEqualTo(OutputConfig.ApiLayout.BOTH);
+        assertThat(config.output().coverageBreakdown()).isFalse();
     }
 
     @Test
@@ -352,6 +353,7 @@ class ConfigLoaderTest {
                   path: ./out
                   topN: 10
                   apiLayout: standalone
+                  coverageBreakdown: true
                 """;
         Path file = writeYaml(tempDir, yaml);
 
@@ -363,6 +365,7 @@ class ConfigLoaderTest {
         assertThat(config.analysis().apiAnalysis().classpathDirectories())
                 .containsExactly("target/classes", "lib/classes");
         assertThat(config.output().apiLayout()).isEqualTo(OutputConfig.ApiLayout.STANDALONE);
+        assertThat(config.output().coverageBreakdown()).isTrue();
     }
 
     private static Path writeYaml(Path dir, String content) throws IOException {

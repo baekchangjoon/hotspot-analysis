@@ -248,6 +248,7 @@ Commands:
 | `analysis.jacocoReportPath` | string | JaCoCo XML 리포트 경로; 커버리지 배수 `1/(coverage+0.1)` 활성화. 없으면 배수 1.0 |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | 최소 한 개 |
 | `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | API/공유 테이블 위치: `hotspots.*`에 통합, 독립 `api_report.*`, 또는 둘 다; 기본 `BOTH` |
+| `output.coverageBreakdown` | boolean | `true`면(+JaCoCo 제공 시) 모든 커버리지 수치의 계산 근거 — 파일별 counted 라인, 엔드포인트별 메서드 기여(covered/실행가능 라인) — 를 `coverage_breakdown.yml`로 출력; 기본 `false` |
 | `output.path` | string | 출력 디렉터리 |
 | `output.topN` | integer ≥ 0 | `0`은 "모든 행" |
 

@@ -253,6 +253,7 @@ Commands:
 | `analysis.jacocoReportPath` | string | JaCoCo XML report path; enables the coverage multiplier `1/(coverage+0.1)`. Absent → multiplier 1.0 |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | At least one |
 | `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | Where API/shared tables go: into `hotspots.*`, a standalone `api_report.*`, or both; default `BOTH` |
+| `output.coverageBreakdown` | boolean | When `true` (and a JaCoCo report is supplied), also writes `coverage_breakdown.yml` — the calculation trace behind every coverage number (per-file counts; per-endpoint per-method covered/executable lines); default `false` |
 | `output.path` | string | Output directory |
 | `output.topN` | integer ≥ 0 | `0` means "all rows" |
 

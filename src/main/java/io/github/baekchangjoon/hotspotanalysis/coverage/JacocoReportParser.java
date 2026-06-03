@@ -58,14 +58,19 @@ public class JacocoReportParser {
         }
     }
 
-    public double getFileCoverage(String filePath) {
+    public LineCounts getFileLineCounts(String filePath) {
         String normalizedPath = normalizePath(filePath);
         Map<Integer, Boolean> lines = findCoverageForPath(normalizedPath);
         if (lines == null || lines.isEmpty()) {
-            return 0.0;
+            return new LineCounts(0, 0);
         }
-        long covered = lines.values().stream().filter(b -> b).count();
-        return (double) covered / lines.size();
+        int covered = (int) lines.values().stream().filter(b -> b).count();
+        return new LineCounts(covered, lines.size());
+    }
+
+    public double getFileCoverage(String filePath) {
+        LineCounts c = getFileLineCounts(filePath);
+        return c.executable() == 0 ? 0.0 : (double) c.covered() / c.executable();
     }
 
     /**

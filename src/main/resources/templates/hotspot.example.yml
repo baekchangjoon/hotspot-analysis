@@ -81,6 +81,11 @@ output:
   # api_report.*) | BOTH. Only relevant when apiAnalysis.enabled=true.
   # Default: BOTH.
   # apiLayout: BOTH
+  # Optional. When true (and a JaCoCo report is supplied), also writes
+  # coverage_breakdown.yml -- the calculation trace behind every coverage
+  # number: per-file covered/executable line counts, and per-endpoint
+  # per-method contributions. Default: false.
+  # coverageBreakdown: true
   path: ./hotspot-report
   # 0 = all rows
   topN: 50
