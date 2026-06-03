@@ -1,20 +1,20 @@
 name: release
 
 # One-click release. Run from the Actions tab (Run workflow) with a semver tag.
-# It validates the Agent Skills spec, checks the code version matches the tag,
-# then `gh skill publish` creates the tag + a GitHub release with auto notes.
-# Publishing that release fires release-assets.yml (attaches hotspot.jar) and
-# docker.yml (builds the multi-arch ghcr image) — so one click ships the jar,
-# the image, and the listing.
+# Validates the Agent Skills spec, checks the code version matches the tag, then
+# `gh skill publish` creates the tag + a GitHub release with auto notes.
+#
+# A release CREATED by GITHUB_TOKEN does NOT emit an event that triggers other
+# workflows (GitHub recursion guard), so this workflow CALLS release-assets and
+# docker explicitly (workflow_call) — the button always ships jar + image.
+# The release.published auto-fan-out still covers releases made by a real user
+# (CLI `gh skill publish` / the UI).
 #
 # Notes:
 # - publish CREATES the tag, so always use a NEW version. The protect-release-tags
 #   ruleset blocks deleting/rewriting an existing tag (immutable releases).
 # - Bump the code version (build.gradle.kts + manifests) to match the tag first;
-#   the version-match step below fails fast otherwise.
-# - publish also tries to add the `agent-skills` topic; it already exists, so that
-#   step is a no-op. (Editing topics needs more than contents:write; if a future
-#   run errors there, supply a PAT secret instead of github.token.)
+#   the version-match step fails fast otherwise.
 
 on:
   workflow_dispatch:
@@ -28,8 +28,11 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  publish:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.v.outputs.tag }}
+      version: ${{ steps.v.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -39,6 +42,7 @@ jobs:
         run: gh --version
 
       - name: Validate version and match it to the code
+        id: v
         env:
           VERSION: ${{ inputs.version }}
         run: |
@@ -51,6 +55,8 @@ jobs:
             echo "::error::build.gradle.kts version ($code_ver) != tag ($VERSION). Bump the code version first."
             exit 1
           fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Validate skills against the Agent Skills spec
         env:
@@ -62,3 +68,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ inputs.version }}
         run: gh skill publish --tag "$VERSION"
+
+  # A GITHUB_TOKEN-created release doesn't fan out via the release event, so call
+  # the asset/image workflows directly. (The release.published triggers on those
+  # workflows still cover real-user-created releases.)
+  assets:
+    needs: publish
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release-assets.yml
+    with:
+      tag: ${{ needs.publish.outputs.tag }}
+
+  image:
+    needs: publish
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      version: ${{ needs.publish.outputs.version }}
