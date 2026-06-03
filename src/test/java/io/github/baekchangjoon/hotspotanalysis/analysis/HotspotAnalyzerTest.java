@@ -195,6 +195,41 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("missing jacocoReportPath → coverage disabled (multiplier 1.0), not a 10x penalty")
+    void shouldNotPenalizeWhenJacocoReportMissing() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Hot.java",
+                    "package com.example;\npublic class Hot {\n  int m(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, T1, "c1");
+        }
+
+        // jacocoReportPath points at a file that does not exist — the common
+        // beginner mistake of copying the sample config verbatim. The analyzer
+        // must NOT treat every artifact as 0% covered (multiplier 10); it should
+        // disable coverage (multiplier 1.0) and warn.
+        TargetConfig target = new TargetConfig(
+                TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(),
+                null, "build/reports/jacoco/does-not-exist.xml");
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0);
+
+        AnalysisResult result = analyzer.analyze(new AnalysisConfig(section, output));
+
+        assertThat(result.fileHotspots()).isNotEmpty();
+        assertThat(result.fileHotspots())
+                .allSatisfy(f -> assertThat(f.coverageMultiplier()).isEqualTo(1.0));
+        assertThat(result.methodHotspots())
+                .allSatisfy(m -> assertThat(m.coverageMultiplier()).isEqualTo(1.0));
+    }
+
+    @Test
     @DisplayName("rejects github target with a clear remediation message in Phase 1")
     void shouldRejectGithubTargetInPhase1() {
         AnalysisConfig githubConfig = githubTargetConfig();

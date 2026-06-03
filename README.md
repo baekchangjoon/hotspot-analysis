@@ -24,8 +24,8 @@
 ## Claude Code 스킬로 설치
 
 이 저장소는 **Claude Code 플러그인 마켓플레이스**이기도 합니다. 번들된
-`hotspot-analysis` 스킬이 에이전트에게 CLI를 빌드·설정·실행·해석하는 방법을
-가르칩니다. Claude Code 안에서:
+`hotspot-analysis` 스킬이 에이전트에게 CLI를 받아·설정·실행·해석하는 방법을
+가르칩니다(릴리스 jar 자동 다운로드, 빌드 불필요). Claude Code 안에서:
 
 ```text
 /plugin marketplace add baekchangjoon/hotspot-analysis
@@ -46,8 +46,8 @@ git clone https://github.com/baekchangjoon/hotspot-analysis
 cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
-> 이 스킬은 본 프로젝트의 CLI를 구동하므로, 스킬이 실행할 jar를 만들려면
-> (`./gradlew build`) 저장소 체크아웃이 여전히 필요합니다.
+> 스킬의 `scripts/get-jar.sh`가 릴리스 jar를 자동으로 내려받으므로 빌드는 필요
+> 없습니다(JDK 21 런타임만 필요). JDK 없이 쓰려면 위 Docker 경로를 쓰세요.
 
 ---
 
@@ -81,15 +81,15 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 self-contained 실행 jar를 내려받습니다(JDK 21 런타임만 있으면 됨):
 
 ```bash
-curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot-0.1.0.jar -o hotspot.jar
+curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
 ```
 
-> 소스에서 빌드하려면(선택): `./gradlew bootJar` → `build/libs/hotspot-0.1.0.jar`.
+> 소스에서 빌드하려면(선택): `./gradlew bootJar` → `build/libs/hotspot-*.jar`.
 > 아래 예시의 `hotspot.jar`를 그 경로로 바꾸세요.
 
 > **JDK 없이 — Docker.** 분석 대상 저장소를 `/work`에 마운트해 실행합니다:
 > ```bash
-> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 \
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest \
 >   analyze --config /work/hotspot.yml
 > ```
 
@@ -141,8 +141,10 @@ analysis:
     classpathDirectories:           # 콜그래프 심볼 해석 향상(선택)
       - build/libs
 
-  # JaCoCo XML 리포트(선택). 주면 커버리지 배수 1/(coverage+0.1) 활성화.
-  jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
+  # JaCoCo XML 리포트(선택). 실제 리포트가 있을 때만 주석을 해제하세요.
+  # 커버리지가 점수에 반영됩니다(배수 1/(coverage+0.1)). 존재하지 않는 경로를
+  # 가리키면 커버리지 없이 진행한다는 경고가 출력됩니다(점수는 왜곡되지 않음).
+  # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
   # 대소문자 무시: csv | yaml | md | html (여러 개 허용)

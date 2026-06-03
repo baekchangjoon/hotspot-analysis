@@ -139,7 +139,19 @@ public class HotspotAnalyzer {
         if (jacocoSupplied) {
             Path p = Path.of(config.analysis().jacocoReportPath());
             if (!p.isAbsolute()) p = repoRoot.resolve(p);
-            jacocoParser.parse(p);
+            if (!java.nio.file.Files.isRegularFile(p)) {
+                // A missing report must not silently mark every artifact as 0%
+                // covered (which would inflate every coverage multiplier to its
+                // 1/0.1 = 10 maximum). Warn and proceed as if no coverage was
+                // supplied, so the scores stay trustworthy.
+                System.err.println("WARNING: analysis.jacocoReportPath is set but no file exists at "
+                        + p + " — proceeding WITHOUT coverage (multiplier = 1.0). "
+                        + "Generate a JaCoCo XML report (e.g. './gradlew test jacocoTestReport') "
+                        + "or remove analysis.jacocoReportPath.");
+                jacocoSupplied = false;
+            } else {
+                jacocoParser.parse(p);
+            }
         }
 
         boolean excludeCoverage = Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());

@@ -33,7 +33,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" build/libs/hotspot-*.jar \
+          # Attach a version-stable copy named hotspot.jar so the
+          # releases/latest/download/hotspot.jar URL is permanent, plus the
+          # versioned artifact for provenance.
+          cp build/libs/hotspot-*.jar hotspot.jar
+          gh release create "${GITHUB_REF_NAME}" build/libs/hotspot-*.jar hotspot.jar \
             --repo "${GITHUB_REPOSITORY}" \
             --title "${GITHUB_REF_NAME}" \
             --generate-notes
