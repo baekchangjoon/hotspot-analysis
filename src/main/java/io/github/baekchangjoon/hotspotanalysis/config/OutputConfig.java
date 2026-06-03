@@ -14,12 +14,16 @@ public record OutputConfig(
         @NotEmpty(message = "output.formats must not be empty") List<OutputFormat> formats,
         @NotBlank(message = "output.path must not be blank") String path,
         @Min(value = 0, message = "output.topN must be >= 0 (0 means all rows)") int topN,
-        ApiLayout apiLayout
+        ApiLayout apiLayout,
+        Boolean coverageBreakdown
 ) {
 
     public OutputConfig {
         if (apiLayout == null) {
             apiLayout = ApiLayout.BOTH;
+        }
+        if (coverageBreakdown == null) {
+            coverageBreakdown = Boolean.FALSE;
         }
         if (formats != null) {
             formats = List.copyOf(formats);
@@ -27,7 +31,11 @@ public record OutputConfig(
     }
 
     public OutputConfig(List<OutputFormat> formats, String path, int topN) {
-        this(formats, path, topN, ApiLayout.BOTH);
+        this(formats, path, topN, ApiLayout.BOTH, Boolean.FALSE);
+    }
+
+    public OutputConfig(List<OutputFormat> formats, String path, int topN, ApiLayout apiLayout) {
+        this(formats, path, topN, apiLayout, Boolean.FALSE);
     }
 
     public enum ApiLayout {

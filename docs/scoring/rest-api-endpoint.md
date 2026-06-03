@@ -53,6 +53,10 @@
 각 메서드 단위 요인(R/D/CC/coverage)은 [메서드 단위](method.md)와 동일하게
 구해진 값을 재사용합니다.
 
+> **검산 파일:** `output.coverageBreakdown: true`면 이 집계의 계산 근거 —
+> 메서드별 covered/실행가능 라인, 무데이터·SEPARATE 제외 표시 — 가
+> `coverage_breakdown.yml`로 함께 출력됩니다(파일 단위 counts 포함).
+
 ### 공유 컴포넌트 제외 규칙 (`sharedComponentMode`)
 
 2개 이상 엔드포인트가 공통으로 호출하는 메서드는 [공유 컴포넌트](shared-component.md)

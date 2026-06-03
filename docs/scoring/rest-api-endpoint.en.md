@@ -48,6 +48,11 @@ Each factor of an endpoint = **the controller method value + the sum of the valu
 | **Coverage** | **Line-weighted coverage** over the controller + callee methods (when provided by JaCoCo): `numerator = Σ covered lines`, `denominator = Σ executable lines`. Not a mean of per-method ratios — a tiny fully-covered helper can't offset a large untested method (avoids Simpson's paradox). Methods with no data contribute 0/0 (nothing) |
 | **Coverage Multiplier** | `1/(cov+0.1)` from the line-weighted coverage above; 1.0 when not provided |
 
+> **Audit file:** with `output.coverageBreakdown: true`, the calculation trace
+> behind this aggregate — per-method covered/executable lines, with no-data and
+> SEPARATE-excluded methods marked — is also written to `coverage_breakdown.yml`
+> (plus per-file counts).
+
 Each per-method factor (R/D/CC/coverage) reuses the values computed exactly as in the
 [method unit](method.en.md).
 
