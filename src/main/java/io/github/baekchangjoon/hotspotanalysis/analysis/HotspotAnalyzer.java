@@ -9,6 +9,7 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.SharedComponentHot
 import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.TargetConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ApiAnalysisConfig;
+import io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
@@ -61,6 +62,9 @@ import java.util.Set;
  */
 @Component
 public class HotspotAnalyzer {
+
+    private static final JacocoReportParser.LineCounts ZERO_COVERAGE =
+            new JacocoReportParser.LineCounts(0, 0);
 
     private final VcsProviderFactory providerFactory;
     private final JavaSourceCollector sourceCollector;
@@ -288,6 +292,7 @@ public class HotspotAnalyzer {
         Map<MethodSignature, Integer> locMap = new HashMap<>();
         Map<MethodSignature, Double> methodCcs = new HashMap<>();
         Map<MethodSignature, Double> methodCovs = new HashMap<>();
+        Map<MethodSignature, JacocoReportParser.LineCounts> methodLineCounts = new HashMap<>();
         Map<MethodSignature, List<ApiMappingInfo>> apiMappingsMap = new HashMap<>();
         for (Map.Entry<String, List<MethodInfo>> entry : methodsByFile.entrySet()) {
             String path = entry.getKey();
@@ -297,6 +302,8 @@ public class HotspotAnalyzer {
                 if (jacocoSupplied) {
                     methodCovs.put(m.signature(),
                             jacoco.getMethodCoverage(path, m.startLine(), m.endLine()));
+                    methodLineCounts.put(m.signature(),
+                            jacoco.getMethodLineCounts(path, m.startLine(), m.endLine()));
                 }
                 if (m.apiMappings() != null && !m.apiMappings().isEmpty()) {
                     apiMappingsMap.put(m.signature(), m.apiMappings());
@@ -363,9 +370,14 @@ public class HotspotAnalyzer {
                 double apiDecayed = methodDecayed.getOrDefault(controllerMethod, 0.0);
                 double apiCc = methodCcs.getOrDefault(controllerMethod, 0.0);
 
-                double covSum = jacocoSupplied
-                        ? methodCovs.getOrDefault(controllerMethod, 0.0) : 0.0;
-                int covCount = jacocoSupplied ? 1 : 0;
+                // Line-weighted coverage over the call graph: sum covered and
+                // instrumented lines across all methods, then divide once. A
+                // simple mean of per-method ratios would let a tiny fully-covered
+                // helper offset a large untested method (Simpson's paradox).
+                JacocoReportParser.LineCounts ctrlCov = jacocoSupplied
+                        ? methodLineCounts.getOrDefault(controllerMethod, ZERO_COVERAGE) : ZERO_COVERAGE;
+                int coveredSum = ctrlCov.covered();
+                int execSum = ctrlCov.executable();
 
                 List<MethodSignature> filteredCallGraph = new ArrayList<>();
                 for (MethodSignature calledMethod : entry.getValue()) {
@@ -379,20 +391,21 @@ public class HotspotAnalyzer {
                         apiDecayed += methodDecayed.getOrDefault(calledMethod, 0.0);
                         apiCc += methodCcs.getOrDefault(calledMethod, 0.0);
                         if (jacocoSupplied) {
-                            covSum += methodCovs.getOrDefault(calledMethod, 0.0);
-                            covCount++;
+                            JacocoReportParser.LineCounts c =
+                                    methodLineCounts.getOrDefault(calledMethod, ZERO_COVERAGE);
+                            coveredSum += c.covered();
+                            execSum += c.executable();
                         }
                     }
                     filteredCallGraph.add(calledMethod);
                 }
 
                 double apiSimple = scoreCalculator.simple(apiRevs, apiLoc);
-                Double avgCoverage = (jacocoSupplied && covCount > 0) ? covSum / covCount : null;
-                double mult = excludeCoverage
+                Double avgCoverage = (jacocoSupplied && execSum > 0)
+                        ? (double) coveredSum / execSum : null;
+                double mult = excludeCoverage || avgCoverage == null
                         ? 1.0
-                        : ((jacocoSupplied && covCount > 0)
-                                ? scoreCalculator.multiplier(OptionalDouble.of(avgCoverage))
-                                : 1.0);
+                        : scoreCalculator.multiplier(OptionalDouble.of(avgCoverage));
                 double apiComposite = excludeCoverage
                         ? scoreCalculator.composite(apiCc, apiDecayed)
                         : scoreCalculator.composite(apiCc, apiDecayed, mult);
