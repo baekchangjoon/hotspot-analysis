@@ -87,6 +87,12 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 > 소스에서 빌드하려면(선택): `./gradlew bootJar` → `build/libs/hotspot-0.1.0.jar`.
 > 아래 예시의 `hotspot.jar`를 그 경로로 바꾸세요.
 
+> **JDK 없이 — Docker.** 분석 대상 저장소를 `/work`에 마운트해 실행합니다:
+> ```bash
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 \
+>   analyze --config /work/hotspot.yml
+> ```
+
 ### 2. 샘플 설정 생성
 
 ```bash

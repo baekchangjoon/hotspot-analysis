@@ -1,0 +1,13 @@
+.git
+.gradle
+build
+*-hotspot-report
+hotspot-report
+node_modules
+.idea
+*.iml
+.DS_Store
+CLAUDE.md
+CLAUDE.md.bak
+AGENTS.md
+.remember
