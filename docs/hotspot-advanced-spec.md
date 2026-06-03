@@ -1,5 +1,7 @@
 # Hotspot Analysis 고도화 상세 명세 및 계산 공식
 
+> 🌐 **한국어** (현재 문서) · [English](hotspot-advanced-spec.en.md)
+
 > **v0.2 note.** Starting v0.2, all four factors described below
 > (Recency Decay, Cognitive Complexity, Coverage Multiplier, X-Ray) are
 > always computed — there is no longer a `formula: simple|composite`

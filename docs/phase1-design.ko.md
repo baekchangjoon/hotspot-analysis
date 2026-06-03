@@ -1,27 +1,27 @@
 # Phase 1 Design — Hotspot Analysis Prototype (CLI)
 
-> 🌐 [한국어](phase1-design.ko.md) · **English** (this page)
+> 🌐 **한국어** (현재 문서) · [English](phase1-design.md)
 
-> Status: Draft (confirmed 2026-05-21)
-> Scope: Phase 1 — CLI prototype with constrained scope
-> Owner: Baek
-> See also: [`./hotspot-analysis.md`](./hotspot-analysis.md) (theory & background)
+> 상태: Draft (2026-05-21 확정)
+> 범위: Phase 1 — 제한된 범위의 CLI 프로토타입
+> 담당자: Baek
+> 함께 보기: [`./hotspot-analysis.md`](./hotspot-analysis.md) (이론 및 배경)
 
 ## 0. Goals and Non-goals
 
 ### Goals
-- Java 21 + Spring Boot 3 based CLI that calculates hotspot scores for a Java codebase.
-- Two granularities: file level and method level.
-- Output: CSV, YAML, Markdown (single run can emit multiple formats).
-- VCS adapters: `LocalGitProvider` (JGit) and `GithubProvider` (kohsuke `github-api`).
-- Driven by a YAML configuration file.
+- Java 코드베이스에 대한 핫스팟 점수를 계산하는 Java 21 + Spring Boot 3 기반 CLI.
+- 두 가지 granularity: 파일 수준과 메서드 수준.
+- 출력: CSV, YAML, Markdown (한 번의 실행에서 여러 포맷을 동시에 출력 가능).
+- VCS 어댑터: `LocalGitProvider` (JGit)와 `GithubProvider` (kohsuke `github-api`).
+- YAML 설정 파일로 구동.
 
-### Non-goals (deferred to Phase 2+)
-- Bot commit filtering (Dependabot, Renovate, etc.)
-- Test coverage integration (JaCoCo / SonarQube).
-- Combinatorial test design (pairwise / N-wise) — only parameter metadata is extracted in Phase 1.
-- Non-Java languages (Python, TypeScript).
-- Visualization (D3 circle packing) — Phase 4.
+### Non-goals (Phase 2+ 로 연기)
+- 봇 커밋 필터링 (Dependabot, Renovate 등)
+- 테스트 커버리지 통합 (JaCoCo / SonarQube).
+- 조합 테스트 설계 (pairwise / N-wise) — Phase 1 에서는 파라미터 메타데이터만 추출.
+- 비 Java 언어 (Python, TypeScript).
+- 시각화 (D3 circle packing) — Phase 4.
 
 ---
 
@@ -29,17 +29,17 @@
 
 | Item | Decision | Rationale |
 |---|---|---|
-| Language / runtime | Java 21 LTS | Spring Boot 3 baseline, virtual threads available |
-| Framework | Spring Boot 3.3.x | Per user requirement; DI consistency |
-| CLI framework | Picocli 4.7.x + `picocli-spring-boot-starter` | Official Spring integration |
-| Build tool | Gradle 8.x + Kotlin DSL | Faster incremental builds (~70%) than Maven |
-| Java AST | JavaParser 3.26.x + Symbol Solver | 99%+ accuracy for Java semantics |
-| Git library | JGit 6.10.x | Avoid shelling out to `git`; testable |
-| GitHub API client | `org.kohsuke:github-api` 1.x | Mature, used by Jenkins ecosystem |
-| Test stack | JUnit 5 + AssertJ + Mockito + WireMock | De-facto standard |
-| YAML | SnakeYAML + Jackson YAML | Spring Boot bundled |
-| CSV | Apache Commons CSV | RFC 4180 compliance |
-| Markdown | Mustache (`spullara/mustache.java`) | Template separation |
+| Language / runtime | Java 21 LTS | Spring Boot 3 기준, virtual threads 사용 가능 |
+| Framework | Spring Boot 3.3.x | 사용자 요구사항에 따름; DI 일관성 |
+| CLI framework | Picocli 4.7.x + `picocli-spring-boot-starter` | 공식 Spring 통합 |
+| Build tool | Gradle 8.x + Kotlin DSL | Maven 대비 더 빠른 증분 빌드 (~70%) |
+| Java AST | JavaParser 3.26.x + Symbol Solver | Java 시맨틱에 대해 99%+ 정확도 |
+| Git library | JGit 6.10.x | `git` 셸 호출 회피; 테스트 가능 |
+| GitHub API client | `org.kohsuke:github-api` 1.x | 성숙함, Jenkins 생태계에서 사용됨 |
+| Test stack | JUnit 5 + AssertJ + Mockito + WireMock | 사실상의 표준 |
+| YAML | SnakeYAML + Jackson YAML | Spring Boot 번들 |
+| CSV | Apache Commons CSV | RFC 4180 준수 |
+| Markdown | Mustache (`spullara/mustache.java`) | 템플릿 분리 |
 
 ---
 
@@ -74,7 +74,7 @@
                 └─────────────────────────┘
 ```
 
-All external dependencies (JGit, JavaParser, GitHub API) are isolated behind adapters and injected by constructor, enabling mocking in unit tests.
+모든 외부 의존성(JGit, JavaParser, GitHub API)은 어댑터 뒤에 격리되어 생성자로 주입되며, 이를 통해 단위 테스트에서 mocking 이 가능합니다.
 
 ---
 
@@ -209,7 +209,7 @@ output:
 `CLI options > YAML config > code defaults`.
 
 ### Environment Variable Substitution
-`${VAR_NAME}` syntax is resolved against the process environment at load time. Missing variables fail fast with a clear error.
+`${VAR_NAME}` 구문은 로드 시점에 프로세스 환경 변수를 기준으로 치환됩니다. 누락된 변수는 명확한 에러와 함께 즉시 실패(fail fast)합니다.
 
 ---
 
@@ -225,10 +225,10 @@ hotspot analyze --help
 ```
 
 ### Exit Codes
-- `0` — success
-- `1` — runtime / analysis error
-- `2` — configuration validation error
-- `64` — usage error (Picocli default)
+- `0` — 성공
+- `1` — 런타임 / 분석 에러
+- `2` — 설정 검증 에러
+- `64` — 사용법 에러 (Picocli 기본값)
 
 ---
 
@@ -295,8 +295,8 @@ For each Java file F in scope:
 ```
 
 ### Notes
-- Method identifier = `FQCN + name + parameter type signature` (handles overloads).
-- JGit does not provide `git log -L` natively; we approximate by intersecting diff hunks with current method line ranges. Rename tracking is best-effort in Phase 1.
+- 메서드 식별자 = `FQCN + name + parameter type signature` (오버로드 처리).
+- JGit 은 `git log -L` 을 기본 제공하지 않습니다; diff hunk 와 현재 메서드 라인 범위를 교차시켜 근사합니다. Rename 추적은 Phase 1 에서 best-effort 입니다.
 
 ---
 
@@ -306,13 +306,13 @@ For each Java file F in scope:
 
 | ID | Strategy | Idea | Cost |
 |---|---|---|---|
-| S1 | Snapshot (Golden file) | Compare against pre-recorded output of stable fixtures | Low |
-| S2 | Invariant | Check properties that must always hold (e.g. `score = rev × loc`) | Low |
-| S3 | Cross-validation | Compare our output against `git log` / `wc -l` ground truth | Medium |
-| S4 | Performance | Enforce per-tier SLOs | Medium |
-| S5 | Format compliance | Re-parse output with standard parsers | Low |
-| S6 | CLI contract | Exit codes, help text, option precedence | Low |
-| S7 | Provider equivalence | LocalGitProvider ≈ GithubProvider for the same repo | High (network) |
+| S1 | Snapshot (Golden file) | 안정적인 fixture 의 사전 기록된 출력과 비교 | Low |
+| S2 | Invariant | 항상 성립해야 하는 속성 검증 (예: `score = rev × loc`) | Low |
+| S3 | Cross-validation | 출력을 `git log` / `wc -l` ground truth 와 비교 | Medium |
+| S4 | Performance | tier 별 SLO 강제 | Medium |
+| S5 | Format compliance | 표준 파서로 출력을 다시 파싱 | Low |
+| S6 | CLI contract | exit code, help 텍스트, 옵션 우선순위 | Low |
+| S7 | Provider equivalence | 동일 repo 에 대해 LocalGitProvider ≈ GithubProvider | High (network) |
 
 ### 8.2 Invariants
 
@@ -333,13 +333,13 @@ For each Java file F in scope:
 
 | Axis | Pass Criterion |
 |---|---|
-| S1 | 4 in-repo fixtures: byte-level diff = 0 against snapshot |
-| S2 | All 10 invariants hold across every fixture and external repo |
-| S3 | For each external repo, 10 random files: `revisions` and `loc` match `git log` / `wc -l` exactly |
-| S4 | Tiny < 3s, Small < 10s, Medium < 30s, Large < 90s, XL < 180s (Apple Silicon Mac baseline) |
-| S5 | CSV reparsable by Commons CSV; YAML reparsable by SnakeYAML and matches schema; MD parsable by CommonMark with table extraction |
-| S6 | Exit codes: success=0, config error=2, runtime error=1; help lists every option; precedence CLI > YAML > default |
-| S7 | Same repo via Local and Github: score relative error ≤ 0.1% (note: full equality not guaranteed due to GitHub squash merges) |
+| S1 | repo 내 4개 fixture: snapshot 대비 byte 수준 diff = 0 |
+| S2 | 모든 fixture 및 외부 repo 전반에서 10개 invariant 모두 성립 |
+| S3 | 각 외부 repo 별로 무작위 10개 파일: `revisions` 와 `loc` 가 `git log` / `wc -l` 과 정확히 일치 |
+| S4 | Tiny < 3s, Small < 10s, Medium < 30s, Large < 90s, XL < 180s (Apple Silicon Mac 기준) |
+| S5 | CSV 는 Commons CSV 로 재파싱 가능; YAML 은 SnakeYAML 로 재파싱 가능하며 스키마와 일치; MD 는 CommonMark 로 파싱 가능하며 테이블 추출 가능 |
+| S6 | exit code: success=0, config error=2, runtime error=1; help 에 모든 옵션 표시; 우선순위 CLI > YAML > default |
+| S7 | Local 과 Github 으로 동일 repo: score 상대 오차 ≤ 0.1% (참고: GitHub squash merge 로 인해 완전 일치는 보장되지 않음) |
 
 ### 8.4 External Fixtures Inventory (Java + Git, locally available)
 
@@ -375,11 +375,11 @@ For each Java file F in scope:
 
 | Risk | Mitigation |
 |---|---|
-| R1: External repo drifts over time (esp. `wiremock`) | Pin `HEAD` SHA in test code; `assumeTrue(actualSha == pinnedSha)` skip on mismatch |
-| R2: Path is user-machine specific | Read `System.getProperty("hotspot.e2e.fixturesDir")`; `@EnabledIfSystemProperty` auto-skip on CI |
-| R3: Time-dependent results | All E2E tests pin `analysis.window.until` to a fixed date |
-| R4: Large repos slow down developer loop | Tag-based separation: `e2e-fast` (default, < 60s) vs `e2e-slow` (nightly) |
-| R5: Maven vs Gradle layout differences | Default scope: `src/main/java/**/*.java` works for both |
+| R1: 외부 repo 가 시간이 지나며 변경됨 (특히 `wiremock`) | 테스트 코드에 `HEAD` SHA 를 고정; 불일치 시 `assumeTrue(actualSha == pinnedSha)` 로 skip |
+| R2: 경로가 사용자 머신마다 다름 | `System.getProperty("hotspot.e2e.fixturesDir")` 읽기; CI 에서는 `@EnabledIfSystemProperty` 로 자동 skip |
+| R3: 시간 의존적 결과 | 모든 E2E 테스트가 `analysis.window.until` 을 고정 날짜로 고정 |
+| R4: 대형 repo 가 개발 루프를 느리게 함 | 태그 기반 분리: `e2e-fast` (기본, < 60s) vs `e2e-slow` (nightly) |
+| R5: Maven vs Gradle 레이아웃 차이 | 기본 scope: `src/main/java/**/*.java` 가 양쪽 모두에서 동작 |
 
 ### 8.7 Execution
 
@@ -402,19 +402,19 @@ For each Java file F in scope:
 
 | # | Task | Deliverables | Key Tests |
 |---|---|---|---|
-| T1 | Project scaffolding | Gradle build, Spring Boot main, Picocli root | `hotspot --version` works |
-| T2 | YAML config loader | `ConfigLoader` + 7 POJOs | Valid / invalid / missing YAML cases |
-| T3 | VCS provider interface + model | `VcsProvider`, `CommitRecord`, `FileChange` | Contract tests via mocks |
-| T4 | LocalGitProvider (JGit) | Local git commit + diff collection | Integration test with in-repo fixture |
-| T5 | GithubProvider (kohsuke) | Same interface, GitHub-backed | WireMock-based API mocking |
-| T6 | JavaSourceParser | Method extraction with line ranges + signatures | Java 21 (records, sealed types) coverage |
-| T7 | RevisionsCalculator | Line-range ↔ diff-hunk overlap counter | Boundary cases on hunk overlap |
-| T8 | LocCalculator + ScoreCalculator | LOC + `revisions * loc` | Pure unit tests |
-| T9 | HotspotAnalyzer | End-to-end orchestration | Integration via fixture repo |
-| T10 | Output writers (CSV/YAML/MD) | Three writer impls | Snapshot tests + schema validation |
-| T11 | CLI wiring + `init` subcommand | Picocli subcommands integrated | CLI invocation integration tests + E2E (§8) |
+| T1 | Project scaffolding | Gradle build, Spring Boot main, Picocli root | `hotspot --version` 동작 |
+| T2 | YAML config loader | `ConfigLoader` + 7 POJOs | 유효 / 무효 / 누락 YAML 케이스 |
+| T3 | VCS provider interface + model | `VcsProvider`, `CommitRecord`, `FileChange` | mock 을 통한 contract test |
+| T4 | LocalGitProvider (JGit) | Local git commit + diff collection | repo 내 fixture 로 integration test |
+| T5 | GithubProvider (kohsuke) | 동일 인터페이스, GitHub 기반 | WireMock 기반 API mocking |
+| T6 | JavaSourceParser | 라인 범위 + 시그니처가 포함된 메서드 추출 | Java 21 (records, sealed types) 커버리지 |
+| T7 | RevisionsCalculator | 라인 범위 ↔ diff hunk 겹침 카운터 | hunk 겹침의 경계 케이스 |
+| T8 | LocCalculator + ScoreCalculator | LOC + `revisions * loc` | 순수 단위 테스트 |
+| T9 | HotspotAnalyzer | End-to-end orchestration | fixture repo 를 통한 integration |
+| T10 | Output writers (CSV/YAML/MD) | 세 가지 writer 구현 | Snapshot test + schema validation |
+| T11 | CLI wiring + `init` subcommand | Picocli subcommand 통합 | CLI 호출 integration test + E2E (§8) |
 
-Estimated effort: ~2 weeks full-time / ~3–4 weeks part-time.
+예상 공수: ~2주 풀타임 / ~3–4주 파트타임.
 
 ---
 
@@ -475,18 +475,18 @@ dependencies {
 
 ## 12. Open Items (Pending User Decision when Reached)
 
-1. Authentication policy for backend (Phase 3)
-2. Monorepo vs multi-repo scanning strategy (Phase 2)
-3. Distribution model (OSS / internal) (Phase 1+)
-4. Result persistence (DB / S3 / file) (Phase 3)
-5. CodeScene or other commercial tool integration (any phase)
+1. 백엔드 인증 정책 (Phase 3)
+2. Monorepo vs multi-repo 스캐닝 전략 (Phase 2)
+3. 배포 모델 (OSS / 내부용) (Phase 1+)
+4. 결과 영속화 (DB / S3 / file) (Phase 3)
+5. CodeScene 또는 기타 상용 도구 통합 (any phase)
 
-These will be revisited as each phase approaches.
+각 phase 가 다가오면 재검토합니다.
 
 ## 13. v0.2: Unified scoring model
 
-Starting v0.2, the `SIMPLE`/`COMPOSITE` distinction is gone. Every run
-computes both scores plus the four input factors and emits them side by
-side in every output format. See
-`docs/superpowers/specs/2026-05-25-unified-scoring-design.md` for the
-approved design.
+v0.2 부터는 `SIMPLE`/`COMPOSITE` 구분이 사라집니다. 모든 실행에서
+두 점수와 네 가지 입력 factor 를 함께 계산하여 모든 출력 포맷에 나란히
+출력합니다. 승인된 설계는
+`docs/superpowers/specs/2026-05-25-unified-scoring-design.md` 를
+참고하세요.

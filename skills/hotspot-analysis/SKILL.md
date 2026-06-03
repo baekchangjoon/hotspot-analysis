@@ -72,7 +72,9 @@ it is missing and then runs `analyze`.
 
 3. **Configure for endpoint prioritization.** Point `analysis.target.path` at
    the target repo, enable API analysis, and (if available) supply a JaCoCo
-   report. See **Config reference**. The key block:
+   report. If the user can't hand-write the YAML, **run the interview below**
+   (["Configure interactively"](#configure-interactively-interview)) — ask, fill
+   defaults, write the file. See **Config reference** for every key. The key block:
 
    ```yaml
    analysis:
@@ -124,14 +126,56 @@ it is missing and then runs `analyze`.
    endpoint's call graph. **Do not fabricate the ranking — run the CLI and read
    the actual file.**
 
+## Configure interactively (interview)
+
+A freshly-installed user usually can't write `hotspot.yml` cold. **Don't make
+them.** Generate a starting file (`init`), then fill it by Q&A: auto-detect what
+you can, ask only what's ambiguous, confirm, and write the file.
+
+Procedure:
+
+1. **Detect first, then ask.** Inspect the target repo to pre-fill defaults so
+   most questions become a yes/no confirmation:
+   - Spring app? — `grep -rl "@RestController\|@RequestMapping" <repo>/src` → if
+     hits, default `apiAnalysis.enabled: true`.
+   - Multi-module? — more than one `src/main/java` root → include both globs.
+   - JaCoCo report present? — look for `**/jacoco/**/*.xml` (e.g.
+     `build/reports/jacoco/test/jacocoTestReport.xml`) → default `jacocoReportPath`.
+   - Built classes/jars? — `build/libs`, `build/classes` → default
+     `apiAnalysis.classpathDirectories`.
+   - Recent activity? — `git -C <repo> log -1 --format=%cd` → if older than a
+     year, propose absolute `window.since`/`until` instead of `days`.
+
+2. **Ask, one decision at a time** (skip any you confidently detected — just
+   state the default and let the user correct it):
+
+   | # | Question | Maps to | Default |
+   |---|---|---|---|
+   | 1 | Which repo to analyze? (path to the `.git/` working tree) | `analysis.target.path` | — (required) |
+   | 2 | Prioritize REST API endpoints for test generation? | `apiAnalysis.enabled` | `true` if Spring detected |
+   | 3 | Count churn over the last N days, or an absolute date range? | `window.days` or `window.since`/`until` | `days: 365` |
+   | 4 | File-level, method-level, or both? | `scope.granularity` | `[file, method]` |
+   | 5 | Have a JaCoCo coverage report? Where? | `analysis.jacocoReportPath` | detected path, else omit |
+   | 6 | Dirs with built classes/dep jars (improves call graph)? | `apiAnalysis.classpathDirectories` | detected, else `[]` |
+   | 7 | Shared-method handling? | `apiAnalysis.sharedComponentMode` | `BOTH` |
+   | 8 | Output formats / where / how many rows? | `output.formats`/`path`/`topN` | `[csv,yaml,md,html]`, `./hotspot-report`, `30` |
+   | 9 | Fail the run if the result is empty (CI)? | pass `--strict` at run time | no |
+
+3. **Write `hotspot.yml`** from the answers, **show it back** to the user for a
+   final OK, then run step 4. If a tool like `AskUserQuestion` is available,
+   prefer it for crisp multiple-choice prompts; otherwise ask in plain text.
+
+Keep it short: a typical session is "confirm repo path → confirm Spring/API on →
+accept window default → confirm the detected JaCoCo path → go".
+
 ## How the score is computed
 
 Four input factors → two scores. Full per-granularity derivations (with source
-references and worked examples) live in **[`docs/scoring/`](../../docs/scoring/README.md)**:
-[file](../../docs/scoring/file.md) ·
-[method](../../docs/scoring/method.md) ·
-[REST API endpoint](../../docs/scoring/rest-api-endpoint.md) ·
-[shared component](../../docs/scoring/shared-component.md).
+references and worked examples) live in **[`docs/scoring/`](../../docs/scoring/README.en.md)**:
+[file](../../docs/scoring/file.en.md) ·
+[method](../../docs/scoring/method.en.md) ·
+[REST API endpoint](../../docs/scoring/rest-api-endpoint.en.md) ·
+[shared component](../../docs/scoring/shared-component.en.md).
 
 | Factor / score | Definition |
 |---|---|
@@ -272,7 +316,7 @@ toolchain is sound end-to-end.
 ## References
 
 - API report field schema: [`references/api-report-schema.md`](references/api-report-schema.md).
-- Scoring derivations: [`docs/scoring/`](../../docs/scoring/README.md).
+- Scoring derivations: [`docs/scoring/`](../../docs/scoring/README.en.md).
 - Convenience wrapper: [`scripts/run-analysis.sh`](scripts/run-analysis.sh).
 - Project README and `docs/` (architecture, advanced techniques, theory).
 - Adam Tornhill, *Your Code as a Crime Scene*.

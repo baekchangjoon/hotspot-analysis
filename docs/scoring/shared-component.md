@@ -1,5 +1,7 @@
 # 공유 컴포넌트 단위 (shared-component)
 
+> 🌐 **한국어** (현재 문서) · [English](shared-component.en.md)
+
 공통 요인·점수 정의는 [스코어링 레퍼런스](README.md)를, 엔드포인트 집계 맥락은
 [REST API 엔드포인트](rest-api-endpoint.md)를 먼저 보세요.
 
