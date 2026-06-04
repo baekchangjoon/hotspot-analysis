@@ -35,13 +35,19 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
 
-      # Cheap sanity check that the plugin/marketplace manifests are valid JSON.
+      # Cheap sanity check that the plugin/marketplace manifests are valid JSON
+      # and agree on the version (the Claude marketplace reads plugin.json).
       # (Full Claude-plugin manifest validation runs locally via `claude plugin validate`.)
       - name: Sanity-check plugin / marketplace manifests
         run: |
           python3 - <<'PY'
-          import json
-          for f in (".claude-plugin/plugin.json", ".claude-plugin/marketplace.json"):
-              json.load(open(f))
-              print(f"{f}: valid JSON")
+          import json, sys
+          plugin = json.load(open(".claude-plugin/plugin.json"))
+          market = json.load(open(".claude-plugin/marketplace.json"))
+          print("manifests: valid JSON")
+          pv, mv = plugin["version"], market["plugins"][0]["version"]
+          if pv != mv:
+              print(f"::error::version mismatch: plugin.json={pv}, marketplace.json={mv}")
+              sys.exit(1)
+          print(f"version OK: {pv}")
           PY

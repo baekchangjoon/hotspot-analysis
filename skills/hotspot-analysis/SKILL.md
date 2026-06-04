@@ -321,6 +321,12 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.4** — endpoint coverage is now line-weighted (Σcovered/Σexecutable over
+  the call graph) instead of a mean of per-method ratios, so a large untested
+  method can no longer hide behind a small covered one; new opt-in
+  `output.coverageBreakdown` writes `coverage_breakdown.yml`, the calculation
+  trace behind every coverage number; releases enforce 4-way version
+  consistency (tag = gradle = CLI = plugin/marketplace manifests).
 - **0.1.3** — one-click `release` button + skills-validation CI gate + tag
   protection; the button reliably fans out to jar/image via `workflow_call`
   (a GITHUB_TOKEN-created release doesn't re-trigger event workflows).
