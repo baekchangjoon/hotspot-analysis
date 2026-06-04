@@ -41,7 +41,12 @@ jobs:
       - name: gh version
         run: gh --version
 
-      - name: Validate version and match it to the code
+      # The Claude plugin marketplace resolves the installed version from
+      # plugin.json (NOT marketplace.json), so a release whose tag doesn't match
+      # the manifests strands marketplace users on the old version. hotspot also
+      # carries the version in build.gradle.kts (jar name) and the CLI
+      # @Command(version) — enforce all four before publishing.
+      - name: Validate version and match it to the code + manifests
         id: v
         env:
           VERSION: ${{ inputs.version }}
@@ -55,6 +60,23 @@ jobs:
             echo "::error::build.gradle.kts version ($code_ver) != tag ($VERSION). Bump the code version first."
             exit 1
           fi
+          cli_ver="$(grep -oE 'version = "hotspot [0-9][^"]*"' \
+              src/main/java/io/github/baekchangjoon/hotspotanalysis/cli/HotspotCommand.java \
+              | grep -oE '[0-9][^"]*')"
+          if [ "v$cli_ver" != "$VERSION" ]; then
+            echo "::error::CLI @Command version ($cli_ver) != tag ($VERSION). Bump HotspotCommand.java."
+            exit 1
+          fi
+          python3 - "$VERSION" <<'PY'
+          import json, sys
+          tag = sys.argv[1].lstrip("v")
+          plugin = json.load(open(".claude-plugin/plugin.json"))["version"]
+          market = json.load(open(".claude-plugin/marketplace.json"))["plugins"][0]["version"]
+          if not (tag == plugin == market):
+              print(f"::error::version mismatch: tag={tag}, plugin.json={plugin}, marketplace.json={market}")
+              sys.exit(1)
+          print(f"version OK: {tag}")
+          PY
           echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
