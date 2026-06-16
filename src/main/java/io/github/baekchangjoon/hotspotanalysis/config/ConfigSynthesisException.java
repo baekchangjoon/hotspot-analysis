@@ -9,4 +9,8 @@ public class ConfigSynthesisException extends RuntimeException {
     public ConfigSynthesisException(String message) {
         super(message);
     }
+
+    public ConfigSynthesisException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }
