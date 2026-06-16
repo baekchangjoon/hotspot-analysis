@@ -2,18 +2,25 @@ package io.github.baekchangjoon.hotspotanalysis;
 
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -29,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * correctly.</p>
  */
 @SpringBootTest
+@ExtendWith(OutputCaptureExtension.class)
 class HotspotCliE2ETest {
 
     @Autowired
@@ -401,6 +409,160 @@ class HotspotCliE2ETest {
 
         assertThat(application.getExitCode()).isZero();
         assertThat(Files.exists(target)).isTrue();
+    }
+
+    @AfterEach
+    void cleanupCwdReport() throws IOException {
+        deleteRecursively(Path.of("hotspot-report"));
+    }
+
+    @Test
+    @DisplayName("zero-config: analyze <repo> with no --config runs end-to-end (single module)")
+    void zeroConfigSingleModuleViaPositional(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() { int x = 1; } }",
+                    Instant.now().minus(Duration.ofDays(1)));
+        }
+
+        application.run("analyze", repoRoot.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isZero();
+        assertThat(Files.exists(Path.of("hotspot-report").resolve("file_hotspots.csv"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("zero-config: multi-module repo is detected and run succeeds")
+    void zeroConfigMultiModule(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot.resolve("moduleA/src/main/java/com/example"));
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "moduleA/src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() { int x = 1; } }",
+                    Instant.now().minus(Duration.ofDays(1)));
+        }
+
+        application.run("analyze", repoRoot.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isZero();
+    }
+
+    @Test
+    @DisplayName("zero-config: not a git work tree exits 1 with a clear hint")
+    void zeroConfigNotAGitWorkTree(@TempDir Path tempDir) throws Exception {
+        Path notARepo = tempDir.resolve("plain");
+        Files.createDirectories(notARepo.resolve("src/main/java"));
+
+        application.run("analyze", notARepo.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("zero-config: git repo with no Java sources exits 1 with a hint")
+    void zeroConfigNoJavaSources(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot);
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "README.md", "hi", Instant.now().minus(Duration.ofDays(1)));
+        }
+
+        application.run("analyze", repoRoot.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("zero-config: --print-config prints reloadable YAML and writes no report")
+    void zeroConfigPrintConfigRoundTrips(@TempDir Path tempDir, CapturedOutput output) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() { int x = 1; } }",
+                    Instant.now().minus(Duration.ofDays(1)));
+        }
+        deleteRecursively(Path.of("hotspot-report"));
+
+        application.run("analyze", repoRoot.toString(), "--print-config");
+
+        assertThat(application.getExitCode()).isZero();
+        assertThat(output.getOut()).contains("analysis:").contains("LOCAL_GIT");
+        assertThat(Files.exists(Path.of("hotspot-report"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("zero-config: --config and a positional path are mutually exclusive")
+    void zeroConfigMutuallyExclusive(@TempDir Path tempDir) throws Exception {
+        Path cfg = tempDir.resolve("hotspot.yml");
+        Files.writeString(cfg, "analysis: {}\noutput: {}\n");
+        application.run("analyze", "--config", cfg.toString(), tempDir.toString());
+        assertThat(application.getExitCode()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("zero-config: JaCoCo report at the Gradle path is auto-detected")
+    void zeroConfigDetectsJacoco(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+        Files.createDirectories(repoRoot.resolve("build/reports/jacoco/test"));
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example;\npublic class Hot {\n  void m(int x) { if (x>0) { int y=x+1; } }\n}",
+                    Instant.now().minus(Duration.ofDays(1)));
+        }
+        Files.writeString(repoRoot.resolve("build/reports/jacoco/test/jacocoTestReport.xml"), """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <!DOCTYPE report PUBLIC "-//JACOCO//DTD Report 1.1//EN" "report.dtd">
+                <report name="t">
+                  <package name="com/example">
+                    <sourcefile name="Hot.java">
+                      <line nr="3" mi="0" ci="2"/>
+                      <line nr="4" mi="2" ci="0"/>
+                    </sourcefile>
+                  </package>
+                </report>
+                """);
+
+        application.run("analyze", repoRoot.toString(), "--quiet");
+        assertThat(application.getExitCode()).isZero();
+        String csv = Files.readString(Path.of("hotspot-report").resolve("file_hotspots.csv"));
+        String hotRow = csv.lines().filter(l -> l.contains("Hot.java")).findFirst().orElseThrow();
+        assertThat(hotRow.split(",", -1)[8]).isNotEqualTo("1");
+    }
+
+    @Test
+    @DisplayName("zero-config: a linked git worktree (.git is a file) is accepted end-to-end")
+    void zeroConfigLinkedWorktree(@TempDir Path tempDir) throws Exception {
+        Path repoRoot = tempDir.resolve("repo");
+        Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/Hot.java",
+                    "package com.example; public class Hot { void m() { int x = 1; } }",
+                    Instant.now().minus(Duration.ofDays(1)));
+        }
+        Path wt = tempDir.resolve("wt");
+        int rc = new ProcessBuilder("git", "-C", repoRoot.toString(),
+                "worktree", "add", wt.toString(), "HEAD")
+                .inheritIO().start().waitFor();
+        assertThat(rc).isZero();
+        assertThat(Files.isRegularFile(wt.resolve(".git"))).isTrue();
+
+        application.run("analyze", wt.toString(), "--quiet");
+
+        assertThat(application.getExitCode()).isZero();
+        assertThat(Files.exists(Path.of("hotspot-report").resolve("file_hotspots.csv"))).isTrue();
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        try (Stream<Path> walk = Files.walk(root)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (IOException ignored) { }
+            });
+        }
     }
 
     private static void writeJava(Git git, String relativePath, String body, Instant ts)
