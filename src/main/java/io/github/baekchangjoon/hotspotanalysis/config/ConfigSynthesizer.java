@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.stream.Stream;
 
@@ -118,7 +119,7 @@ public class ConfigSynthesizer {
 
     private boolean detectSpring(Path base, List<Path> moduleRoots) {
         // LinkedHashSet dedups the single-module case where moduleRoots == [base].
-        java.util.LinkedHashSet<Path> dirs = new java.util.LinkedHashSet<>();
+        LinkedHashSet<Path> dirs = new LinkedHashSet<>();
         dirs.add(base);
         dirs.addAll(moduleRoots);
         for (Path dir : dirs) {

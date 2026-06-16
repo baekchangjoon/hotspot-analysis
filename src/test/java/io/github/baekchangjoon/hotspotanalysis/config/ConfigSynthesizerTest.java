@@ -99,16 +99,16 @@ class ConfigSynthesizerTest {
     }
 
     @Test
-    @DisplayName("module scan ignores build/ and target/ directories")
+    @DisplayName("module scan ignores build/: a src/main/java only under build/ is not a module")
     void scanIgnoresBuildAndTarget(@TempDir Path repo) throws Exception {
         initGitDir(repo);
+        // The ONLY src/main/java is buried under build/ — it must be skipped,
+        // leaving no modules, so synthesis fails with "no Java sources".
         Files.createDirectories(repo.resolve("build/generated/src/main/java"));
-        Files.createDirectories(repo.resolve("moduleA/src/main/java"));
 
-        AnalysisConfig cfg = synth.synthesize(repo);
-
-        assertThat(cfg.analysis().scope().include())
-                .containsExactly("**/src/main/java/**/*.java");
+        assertThatThrownBy(() -> synth.synthesize(repo))
+                .isInstanceOf(ConfigSynthesisException.class)
+                .hasMessageContaining("no Java sources");
     }
 
     @Test
@@ -122,6 +122,18 @@ class ConfigSynthesizerTest {
         Files.writeString(repo.resolve("build/reports/jacoco/test/jacocoTestReport.xml"), "<report/>");
         assertThat(synth.synthesize(repo).analysis().jacocoReportPath())
                 .isEqualTo("build/reports/jacoco/test/jacocoTestReport.xml");
+    }
+
+    @Test
+    @DisplayName("JaCoCo Maven path is used when only the Maven report exists")
+    void jacocoMavenFallback(@TempDir Path repo) throws Exception {
+        initGitDir(repo);
+        Files.createDirectories(repo.resolve("src/main/java"));
+        Files.createDirectories(repo.resolve("target/site/jacoco"));
+        Files.writeString(repo.resolve("target/site/jacoco/jacoco.xml"), "<report/>");
+
+        assertThat(synth.synthesize(repo).analysis().jacocoReportPath())
+                .isEqualTo("target/site/jacoco/jacoco.xml");
     }
 
     @Test
