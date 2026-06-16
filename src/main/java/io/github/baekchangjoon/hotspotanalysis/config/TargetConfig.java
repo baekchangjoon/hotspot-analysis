@@ -1,6 +1,7 @@
 package io.github.baekchangjoon.hotspotanalysis.config;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotNull;
@@ -15,6 +16,7 @@ public record TargetConfig(
         @Valid GithubConfig github
 ) {
 
+    @JsonIgnore
     @AssertTrue(message = "target.path is required when target.type=local-git")
     public boolean isPathPresentWhenLocalGit() {
         if (type != TargetType.LOCAL_GIT) {
@@ -23,6 +25,7 @@ public record TargetConfig(
         return path != null && !path.isBlank();
     }
 
+    @JsonIgnore
     @AssertTrue(message = "target.github block is required when target.type=github")
     public boolean isGithubPresentWhenGithubType() {
         if (type != TargetType.GITHUB) {

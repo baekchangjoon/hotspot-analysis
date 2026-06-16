@@ -1,5 +1,6 @@
 package io.github.baekchangjoon.hotspotanalysis.config;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 
@@ -21,6 +22,7 @@ public record WindowConfig(
         @Min(value = 1, message = "window.days must be >= 1") Integer days
 ) {
 
+    @JsonIgnore
     @AssertTrue(message = "window requires either (since,until) or days")
     public boolean hasEitherRangeOrDays() {
         boolean hasAbsoluteRange = since != null && until != null;
@@ -28,6 +30,7 @@ public record WindowConfig(
         return hasAbsoluteRange || hasRelativeRange;
     }
 
+    @JsonIgnore
     @AssertTrue(message = "window.since must not be after window.until")
     public boolean isSinceNotAfterUntil() {
         if (since == null || until == null) {
