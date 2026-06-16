@@ -91,7 +91,7 @@
 ### 5.2 보완 권장 사항 (버그 아님, UX 차원)
 
 1. **CSV/Markdown 에 분해 인자 부재**: composite mode 결과를 PR/스프레드시트에서 분해 검증하려면 HTML 만 가능. README 의 *CSV → 5/10 컬럼* 가이드를 composite mode 용으로 별도 명시하거나, 옵션 컬럼
-   (`decayed_revisions`, `cognitive_complexity`, `coverage`) 을 CSV 에 추가하는 것을 검토 (Phase 2 후보).
+   (`decayed_revisions`, `cognitive_complexity`, `coverage`) 을 CSV 에 추가하는 것을 검토 (후속 작업 후보).
 2. **기본 `decayHalfLifeDays=90` 과 긴 window 의 충돌**: Tornhill 책 권장값이지만, `since:2017-01-01 until:2026-12-31` 같은 6년 윈도와 결합되면
    대부분 score 가 e-8 자릿수로 압축되어 모든 행이 `0` 으로 보임. 사용자가 의아해할 가능성이 큼.
    - 권장: `analyze` 실행 종료 시 *"이 윈도의 95-th percentile commit age = N days. half-life=90d 라 decay weight 가 매우 작습니다"* 같은 힌트 메시지 출력.
@@ -106,7 +106,7 @@
 ### 5.3 회귀 위험 모니터링 대상
 
 - `HotspotAnalyzer#analyze` 가 251 LOC, cognitive complexity ≈ 115. 이 자신의 self-analysis 에서도 메서드 단위 1위 (score 181.83) — 즉 **분석기 본인이 가장 위험한 메서드를 가리키고 있는 self-coherent 신호**.
-  Composite formula 가 늘어날 때 이 메서드도 함께 분기 폭증할 가능성이 있으니 Phase 2 진입 전 의도적 분해 (e.g. `CompositeScoringPipeline` 추출) 검토 권장.
+  Composite formula 가 늘어날 때 이 메서드도 함께 분기 폭증할 가능성이 있으니 복합 공식이 늘어나면 의도적 분해 (e.g. `CompositeScoringPipeline` 추출) 를 권장합니다.
 
 ## 6. 결론
 

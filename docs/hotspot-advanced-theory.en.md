@@ -54,7 +54,7 @@ This is a feasibility assessment and concrete architecture design proposal for c
       $$\text{Risk Score} = \text{Complexity} \times \text{Effective Revisions} \times \left(\frac{1}{Cov + \epsilon}\right) \quad (\epsilon = 0.1 \text{ prevents zero-division when coverage is 0})$$
 
 ### Advancing C-5. X-Ray (Method-Level Precision Investigation)
-*   **Feasibility**: **Core foundation already complete**. The current Phase 1 and Phase 2 prototypes already partially implement the ability to compute `Method Hotspots` and `REST API Hotspots` and map the sub-methods in the Call Graph.
+*   **Feasibility**: **Core foundation already complete**. The current prototype already partially implements the ability to compute `Method Hotspots` and `REST API Hotspots` and map the sub-methods in the Call Graph.
 *   **Implementation approach**:
     - Leveraging the current API Call Graph and method parsing structure, complete a drill-down reporting structure that visualizes `LOC × Revisions` at the internal method level of a top hotspot file (e.g., `PetController.java`) and displays it as a sub-ranking.
 

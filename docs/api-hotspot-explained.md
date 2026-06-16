@@ -265,7 +265,7 @@ analysis:
 |---|---|---|
 | `@FeignClient` / RestTemplate으로 외부 API 호출 | 도구는 *내부* 호출 그래프만 추적 | 외부 의존성 표는 별도 도구 (예: jdeps) |
 | 람다·익명클래스 안의 동적 디스패치 | 정적 분석으로 타입 결정 불가 | 의도된 한계. Composite Score는 약간 보수적으로 나옴 |
-| Spring MVC가 아닌 다른 프레임워크 (gRPC, GraphQL, Quarkus 등) | 현재는 Spring 어노테이션만 인식 | Phase 2+에서 어노테이션 셋 확장 예정 |
+| Spring MVC가 아닌 다른 프레임워크 (gRPC, GraphQL, Quarkus 등) | 현재는 Spring 어노테이션만 인식합니다(다른 프레임워크는 미지원) | 현재 미지원 |
 | 호출 그래프 안의 클래스가 classpath에 없음 | 클래스 로딩 실패 → `ClassNotFoundException` → 전체 분석 실패 | 의존성 JAR 포함된 fat classpath 또는 `~/.gradle/caches/...` 디렉토리 추가 |
 
 ---

@@ -54,7 +54,7 @@ Hotspot Analysis는 소스 코드의 복잡도(Complexity)와 변경 빈도(Chan
       $$\text{Risk Score} = \text{Complexity} \times \text{Effective Revisions} \times \left(\frac{1}{Cov + \epsilon}\right) \quad (\epsilon = 0.1 \text{은 커버리지 0일 때의 Zero-division 방지용})$$
 
 ### C-5. X-Ray (메소드 단위 정밀 조사) 고도화
-*   **타당성**: **이미 핵심 기반 완료**. 현재 Phase 1 및 Phase 2 프로토타입에 이미 `Method Hotspots`와 `REST API Hotspots`를 구하여 Call Graph 상 하위 메소드를 매핑해 내는 기능이 부분적으로 구현되어 있습니다.
+*   **타당성**: **이미 핵심 기반 완료**. 현재 프로토타입에 이미 `Method Hotspots`와 `REST API Hotspots`를 구하여 Call Graph 상 하위 메소드를 매핑해 내는 기능이 부분적으로 구현되어 있습니다.
 *   **구현 방안**:
     - 현재의 API Call Graph 및 Method parsing 구조를 활용하여, 최상위 핫스팟 파일(예: `PetController.java`)의 내부 메소드 수준에서 `LOC × Revisions`를 시각적으로 시각화 및 서브 랭킹으로 표시하는 드릴다운(Drill-down) 리포팅 구조를 완성합니다.
 
