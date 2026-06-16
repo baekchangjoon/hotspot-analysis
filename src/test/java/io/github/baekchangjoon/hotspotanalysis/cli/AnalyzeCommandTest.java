@@ -99,7 +99,29 @@ class AnalyzeCommandTest {
         assertThat(Files.exists(outputDir.resolve("hotspots.yml"))).isTrue();
         assertThat(Files.exists(outputDir.resolve("hotspots.md"))).isTrue();
         assertThat(sw.toString()).contains("Hotspot analysis complete.");
-        assertThat(sw.toString()).contains("Top file:");
+        assertThat(sw.toString()).contains("Top hotspots (by composite score):");
+        // No HTML format here, so no Report path line.
+        assertThat(sw.toString()).doesNotContain("Report:");
+    }
+
+    @Test
+    @DisplayName("summary lists top hotspots and the HTML report path when HTML is emitted")
+    void shouldPrintTopHotspotsAndReportPath() throws Exception {
+        Path configFile = writeConfig("local-git", repoRoot.toString(), outputDir.toString(),
+                List.of("CSV", "HTML"));
+
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute("--config", configFile.toString());
+
+        assertThat(exit).isZero();
+        String out = sw.toString();
+        assertThat(out).contains("Top hotspots (by composite score):");
+        assertThat(out).contains("1. ").contains("composite=");
+        assertThat(out).contains("Report:")
+                .contains(outputDir.toAbsolutePath().normalize().resolve("hotspots.html").toString());
     }
 
     @Test
