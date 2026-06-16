@@ -6,6 +6,8 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.HotspotScoreCalculator;
 import io.github.baekchangjoon.hotspotanalysis.analysis.LocCalculator;
 import io.github.baekchangjoon.hotspotanalysis.analysis.RevisionsCalculator;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigLoader;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializer;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesizer;
 import io.github.baekchangjoon.hotspotanalysis.config.EnvironmentVariableResolver;
 import io.github.baekchangjoon.hotspotanalysis.output.CsvOutputWriter;
 import io.github.baekchangjoon.hotspotanalysis.output.MarkdownOutputWriter;
@@ -16,12 +18,14 @@ import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.file.Files;
@@ -30,6 +34,7 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -71,6 +76,8 @@ class AnalyzeCommandTest {
                 new HotspotScoreCalculator());
         command = new AnalyzeCommand(
                 new ConfigLoader(new EnvironmentVariableResolver()),
+                new ConfigSynthesizer(),
+                new ConfigSerializer(),
                 analyzer, dispatcher);
     }
 
@@ -543,6 +550,77 @@ class AnalyzeCommandTest {
         Path config = tempDir.resolve("hotspot-api.yml");
         Files.writeString(config, yaml);
         return config;
+    }
+
+    @AfterEach
+    void cleanupCwdReport() throws IOException {
+        Path report = Path.of("hotspot-report");
+        if (!Files.exists(report)) return;
+        try (Stream<Path> walk = Files.walk(report)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (IOException ignored) { }
+            });
+        }
+    }
+
+    @Test
+    @DisplayName("zero-config: bare positional path runs and prints the detection summary")
+    void zeroConfigPositionalRuns() throws Exception {
+        StringWriter sw = new StringWriter();
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute(repoRoot.toString());
+
+        assertThat(exit).isZero();
+        assertThat(ew.toString()).contains("Detected (zero-config)");
+        assertThat(Files.exists(Path.of("hotspot-report"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("--config and positional path are mutually exclusive (exit 1)")
+    void configAndPathMutuallyExclusive() throws Exception {
+        Path cfg = tempDir.resolve("hotspot.yml");
+        Files.writeString(cfg, "x");
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute("--config", cfg.toString(), repoRoot.toString());
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(ew.toString()).contains("mutually exclusive");
+    }
+
+    @Test
+    @DisplayName("--print-config with --config is rejected (exit 1)")
+    void printConfigWithConfigRejected() throws Exception {
+        Path cfg = tempDir.resolve("hotspot.yml");
+        Files.writeString(cfg, "x");
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute("--config", cfg.toString(), "--print-config");
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(ew.toString()).contains("zero-config");
+    }
+
+    @Test
+    @DisplayName("--print-config prints YAML and does not run analysis")
+    void printConfigPrintsYaml() throws Exception {
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute(repoRoot.toString(), "--print-config");
+
+        assertThat(exit).isZero();
+        assertThat(sw.toString()).contains("analysis:").contains("LOCAL_GIT");
+        assertThat(Files.exists(Path.of("hotspot-report"))).isFalse();
     }
 
     private void compileJavaFiles(Path srcDir, Path destDir) throws Exception {
