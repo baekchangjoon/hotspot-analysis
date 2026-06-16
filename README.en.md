@@ -112,10 +112,11 @@ To save the detected settings as a file you can then customise:
 java -jar hotspot.jar analyze --print-config > hotspot.yml
 ```
 
-> Run from the repository **root** (a subdirectory errors with a hint). Linked
-> git worktrees are supported. Per-submodule JaCoCo reports in multi-module
-> builds are not aggregated (only the root-level report is detected). Use
-> `--config` (below) for fine-grained control.
+> Run from the repository **root**. A subdirectory or non-repo path errors and
+> tells you to pass the repo root as `[path]` (or use `--config`). Linked git
+> worktrees are supported. Per-submodule JaCoCo reports in multi-module builds
+> are not aggregated (only the root-level report is detected). Use `--config`
+> (below) for fine-grained control.
 
 ### 2. Generate a sample config
 
