@@ -95,6 +95,28 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 >   analyze --config /work/hotspot.yml
 > ```
 
+### Run with no config (zero-config)
+
+Before writing any config, run straight from the repository root. The git root,
+module layout (single/multi), JaCoCo report, and Spring API analysis are
+auto-detected:
+
+```bash
+java -jar hotspot.jar analyze            # current directory
+java -jar hotspot.jar analyze /path/to/repo
+```
+
+To save the detected settings as a file you can then customise:
+
+```bash
+java -jar hotspot.jar analyze --print-config > hotspot.yml
+```
+
+> Run from the repository **root** (a subdirectory errors with a hint). Linked
+> git worktrees are supported. Per-submodule JaCoCo reports in multi-module
+> builds are not aggregated (only the root-level report is detected). Use
+> `--config` (below) for fine-grained control.
+
 ### 2. Generate a sample config
 
 ```bash
@@ -213,7 +235,9 @@ Commands:
 
 | Option | Required | Default | Description |
 |---|:---:|---|---|
-| `--config, -c <file>` | ✅ | — | Path to the YAML configuration file |
+| `[path]`              |   | current dir | Path to the repository root to analyse (mutually exclusive with `--config`) |
+| `--config, -c <file>` |   | — | Path to the YAML configuration file. When omitted, settings are auto-detected from `[path]` (or the current directory) |
+| `--print-config`      |   | off | Print the auto-detected configuration as YAML to stdout and exit (no analysis) |
 | `--quiet, -q`         |   | off  | Suppress the summary on stdout |
 | `--strict, -s`        |   | off  | Exit with code 3 when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
 

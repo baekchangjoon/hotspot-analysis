@@ -93,6 +93,27 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 >   analyze --config /work/hotspot.yml
 > ```
 
+### 설정 없이 바로 실행 (zero-config)
+
+설정 파일을 만들기 전에, 저장소 루트에서 바로 실행할 수 있습니다. git 루트·
+모듈 레이아웃(단일/멀티)·JaCoCo 리포트·Spring API 분석을 자동 감지합니다:
+
+```bash
+java -jar hotspot.jar analyze            # 현재 디렉터리
+java -jar hotspot.jar analyze /path/to/repo
+```
+
+감지 결과를 설정 파일로 저장해 손보려면:
+
+```bash
+java -jar hotspot.jar analyze --print-config > hotspot.yml
+```
+
+> 저장소 **루트**에서 실행하세요(하위 디렉터리는 오류 + 힌트). linked git
+> worktree도 지원합니다. 멀티 모듈에서 서브모듈별 JaCoCo 리포트는 자동
+> 합산하지 않습니다(루트 레벨만 탐지). 세밀한 제어가 필요하면 아래의
+> `--config` 방식을 쓰세요.
+
 ### 2. 샘플 설정 생성
 
 ```bash
@@ -208,7 +229,9 @@ Commands:
 
 | 옵션 | 필수 | 기본값 | 설명 |
 |---|:---:|---|---|
-| `--config, -c <file>` | ✅ | — | YAML 설정 파일 경로 |
+| `[path]`              |   | 현재 디렉터리 | 분석할 저장소 루트 경로(`--config`와 함께 사용 불가) |
+| `--config, -c <file>` |   | — | YAML 설정 파일 경로. 생략하면 `[path]`(또는 현재 디렉터리)에서 자동 감지 |
+| `--print-config`      |   | off | 자동 감지된 설정을 YAML로 stdout에 출력하고 종료(분석하지 않음) |
 | `--quiet, -q`         |   | off  | stdout 요약 출력 억제 |
 | `--strict, -s`        |   | off  | 결과가 비면 종료 코드 3 (윈도우 내 커밋 0건 또는 스코프 매칭 파일 0건). CI 게이팅용. |
 
