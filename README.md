@@ -75,6 +75,31 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 ## 빠른 시작
 
+### 한 줄 설치 (`hotspot` 명령 설치)
+
+jar를 직접 받는 대신, 설치 스크립트가 최신 릴리스 jar를 내려받고 PATH에
+`hotspot` 래퍼를 설치합니다. 이후 `java -jar hotspot.jar ...` 대신 `hotspot ...`로
+실행합니다(JDK 21 런타임 필요):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/install.sh | bash
+```
+
+`~/.local/share/hotspot/hotspot.jar`에 jar를, `~/.local/bin/hotspot`에 래퍼를
+설치합니다(재실행해도 안전). `~/.local/bin`이 PATH에 없으면 스크립트가 추가
+방법을 안내합니다. 설치 위치·버전은 환경변수로 바꿀 수 있습니다(`HOTSPOT_PREFIX`,
+`HOTSPOT_VERSION`). 설치 후:
+
+```bash
+hotspot analyze            # 현재 디렉터리 (zero-config)
+```
+
+> JDK 21 런타임이 필요합니다. 설치하기 어렵다면 아래 Docker 경로를 쓰세요.
+> (Homebrew tap은 추후 제공 예정 — 그때까지는 위 스크립트를 권장합니다.)
+
+> 아래는 jar를 직접 받아 `java -jar`로 실행하는 수동 경로입니다. 위 한 줄
+> 설치를 쓴다면 예시의 `java -jar hotspot.jar`를 `hotspot`으로 바꿔 읽으세요.
+
 ### 1. jar 받기 (빌드 불필요)
 
 [최신 Release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)에서
@@ -193,6 +218,9 @@ hotspot-report/
 └── hotspots.html          ← 아무 브라우저에서나 열기 — 정렬 가능 열 + 필터 박스
 ```
 
+> 콘솔에는 상위 핫스팟(복합 점수 기준)과, HTML을 출력했다면 `hotspots.html`의
+> 절대 경로가 함께 표시됩니다. `--quiet`로 끌 수 있습니다.
+
 > **CSV는 분리하고 YAML/MD/HTML은 합치는 이유?**
 > CSV는 단일 헤더의 표 형식이라 파일(9열)과 메서드(14열) 리포트가 헤더를
 > 공유할 수 없어, 엑셀/시트 편의를 위해 두 파일로 내보냅니다. YAML, Markdown,
@@ -232,7 +260,7 @@ Commands:
 |---|:---:|---|---|
 | `[path]`              |   | 현재 디렉터리 | 분석할 저장소 루트 경로(`--config`와 함께 사용 불가) |
 | `--config, -c <file>` |   | — | YAML 설정 파일 경로. 생략하면 `[path]`(또는 현재 디렉터리)에서 자동 감지 |
-| `--print-config`      |   | off | 자동 감지된 설정을 YAML로 stdout에 출력하고 종료(분석하지 않음) |
+| `--print-config`      |   | off | 자동 감지된 설정을 YAML로 stdout에 출력하고 종료(분석하지 않음). zero-config 모드 전용 — `--config`와 함께 쓸 수 없음 |
 | `--quiet, -q`         |   | off  | stdout 요약 출력 억제 |
 | `--strict, -s`        |   | off  | 결과가 비면 종료 코드 3 (윈도우 내 커밋 0건 또는 스코프 매칭 파일 0건). CI 게이팅용. |
 

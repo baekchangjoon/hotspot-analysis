@@ -76,6 +76,32 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 ## Quick start
 
+### One-line install (installs the `hotspot` command)
+
+Instead of downloading the jar yourself, the install script fetches the latest
+release jar and puts a `hotspot` wrapper on your PATH, so you run `hotspot ...`
+instead of `java -jar hotspot.jar ...` (a JDK 21 runtime is required):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/install.sh | bash
+```
+
+It installs the jar to `~/.local/share/hotspot/hotspot.jar` and the wrapper to
+`~/.local/bin/hotspot` (re-running is safe). If `~/.local/bin` is not on your
+PATH, the script tells you how to add it. The install location and version are
+overridable via `HOTSPOT_PREFIX` and `HOTSPOT_VERSION`. Then:
+
+```bash
+hotspot analyze            # current directory (zero-config)
+```
+
+> A JDK 21 runtime is required. If you cannot install one, use the Docker path
+> below. (A Homebrew tap is planned; until then, prefer the script above.)
+
+> The steps below are the manual path: download the jar and run it with
+> `java -jar`. If you used the one-line install, read `java -jar hotspot.jar` in
+> the examples as `hotspot`.
+
 ### 1. Get the jar (no build needed)
 
 Download the self-contained runnable jar from the
@@ -197,6 +223,9 @@ hotspot-report/
 └── hotspots.html          ← open in any browser — sortable columns + filter box
 ```
 
+> The console also prints the top hotspots (by composite score) and, when HTML
+> is emitted, the absolute path to `hotspots.html`. Turn it off with `--quiet`.
+
 > **Why are CSVs split but YAML/MD/HTML combined?**
 > CSV is a single-header tabular format and the file (9 cols) and method
 > (14 cols) reports can't share a header, so they are emitted as two files
@@ -238,7 +267,7 @@ Commands:
 |---|:---:|---|---|
 | `[path]`              |   | current dir | Path to the repository root to analyse (mutually exclusive with `--config`) |
 | `--config, -c <file>` |   | — | Path to the YAML configuration file. When omitted, settings are auto-detected from `[path]` (or the current directory) |
-| `--print-config`      |   | off | Print the auto-detected configuration as YAML to stdout and exit (no analysis) |
+| `--print-config`      |   | off | Print the auto-detected configuration as YAML to stdout and exit (no analysis). Zero-config mode only — cannot be combined with `--config` |
 | `--quiet, -q`         |   | off  | Suppress the summary on stdout |
 | `--strict, -s`        |   | off  | Exit with code 3 when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
 
