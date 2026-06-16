@@ -45,5 +45,13 @@ class ConfigSerializerTest {
                 .isEqualTo(original.analysis().window().days());
         assertThat(reloaded.output().topN()).isEqualTo(original.output().topN());
         assertThat(reloaded.output().formats()).isEqualTo(original.output().formats());
+        assertThat(reloaded.analysis().scoring().decayHalfLifeDays())
+                .isEqualTo(original.analysis().scoring().decayHalfLifeDays());
+        assertThat(reloaded.analysis().scoring().excludeCoverage())
+                .isEqualTo(original.analysis().scoring().excludeCoverage());
+        assertThat(reloaded.analysis().apiAnalysis().enabled())
+                .isEqualTo(original.analysis().apiAnalysis().enabled());
+        assertThat(reloaded.analysis().apiAnalysis().sharedComponentMode())
+                .isEqualTo(original.analysis().apiAnalysis().sharedComponentMode());
     }
 }
