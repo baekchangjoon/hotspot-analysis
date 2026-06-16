@@ -150,7 +150,15 @@ public class LocalGitProvider implements VcsProvider {
         if (head.startsWith(refPrefix)) {
             return repo.resolve(head.substring(refPrefix.length()).trim());
         }
-        return head.isEmpty() ? null : ObjectId.fromString(head);
+        if (head.isEmpty()) {
+            return null;
+        }
+        try {
+            return ObjectId.fromString(head);
+        } catch (IllegalArgumentException e) {
+            // A corrupted / partially-written HEAD — keep the IOException contract.
+            throw new IOException("Corrupted HEAD file at " + headFile + ": " + head, e);
+        }
     }
 
     private CommitRecord toCommitRecord(Repository repo, RevWalk walk, RevCommit commit)
