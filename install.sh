@@ -50,7 +50,9 @@ check_java() {
   if [ "$major" = "1" ]; then
     major="$(java -version 2>&1 | head -1 | sed -E 's/.*version "1\.([0-9]+).*/\1/')"
   fi
-  if [ -z "$major" ] || [ "$major" -lt 21 ] 2>/dev/null; then
+  if [ -z "$major" ] || ! printf '%s' "$major" | grep -qE '^[0-9]+$'; then
+    warn "could not determine the Java version (got: '$major'). Ensure JDK 21+ is installed, or use Docker."
+  elif [ "$major" -lt 21 ]; then
     warn "found Java $major, but hotspot needs JDK 21+. Install JDK 21 or use Docker."
   else
     info "Java $major detected (OK)."
