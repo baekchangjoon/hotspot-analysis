@@ -312,7 +312,8 @@ class ConfigSynthesizerTest {
         assertThat(cfg.analysis().scope().include())
                 .containsExactly("src/main/java/**/*.java");
         assertThat(cfg.analysis().scope().exclude())
-                .containsExactly("**/generated/**", "**/test/**", "**/build/**", "**/target/**");
+                .containsExactly("**/generated/**", "**/test/**",
+                        "**/build/**", "build/**", "**/target/**", "target/**");
         assertThat(cfg.analysis().scope().granularity())
                 .containsExactly(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD);
         assertThat(cfg.analysis().target().type()).isEqualTo(TargetConfig.TargetType.LOCAL_GIT);
@@ -773,10 +774,10 @@ public class ConfigSerializer {
 Run: `./gradlew test --tests 'io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializerTest' -q`
 Expected: PASS.
 
-> If the round-trip assertion `doesNotContain("null")` trips on a legitimate
-> substring, tighten it to assert specific absent keys (`jacocoReportPath`,
-> `github`, `since`, `until`) instead. The core guarantee is that
-> `loader.load(serialized)` succeeds and matches the originals asserted above.
+> The core guarantee is that `loader.load(serialized)` succeeds and matches the
+> originals asserted above. If Jackson still emits an unexpected key (e.g. a
+> validation getter slips through), add `@JsonIgnore` to that `@AssertTrue`
+> method on the relevant config record as a targeted fallback.
 
 - [ ] **Step 5: Commit**
 
