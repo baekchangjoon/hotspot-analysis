@@ -56,13 +56,18 @@ public class LocalGitProvider implements VcsProvider {
         Instant lowerBound = resolveLowerBound(window);
         Instant upperBound = resolveUpperBound(window);
 
-        try (Repository repo = openRepository()) {
-            ObjectId headId = resolveHead(repo);
-            if (headId == null) {
-                return List.of();
-            }
+        try {
+            // Resolved once and shared so openRepository (object store / refs) and
+            // resolveHead (the worktree's own HEAD) cannot observe a .git pointer
+            // that changed between two reads.
+            File gitDir = resolveGitDir();
+            try (Repository repo = openRepository(gitDir)) {
+                ObjectId headId = resolveHead(repo, gitDir);
+                if (headId == null) {
+                    return List.of();
+                }
 
-            List<CommitRecord> collected = new ArrayList<>();
+                List<CommitRecord> collected = new ArrayList<>();
             try (RevWalk walk = new RevWalk(repo)) {
                 walk.markStart(walk.parseCommit(headId));
                 for (RevCommit commit : walk) {
@@ -73,8 +78,9 @@ public class LocalGitProvider implements VcsProvider {
                     collected.add(toCommitRecord(repo, walk, commit));
                 }
             }
-            collected.sort(Comparator.comparing(CommitRecord::committedAt));
-            return List.copyOf(collected);
+                collected.sort(Comparator.comparing(CommitRecord::committedAt));
+                return List.copyOf(collected);
+            }
         } catch (IOException e) {
             throw new VcsException("Failed to read repository at " + repositoryPath, e);
         }
@@ -86,12 +92,12 @@ public class LocalGitProvider implements VcsProvider {
      * ({@code .git} is a {@code gitdir:} pointer file). For a linked worktree the
      * object store and refs live in the shared <em>common</em> directory, so the
      * repository is opened there; the worktree's own {@code HEAD} is read
-     * separately via {@link #resolveHead(Repository)}. JGit 6.x's
+     * separately via {@link #resolveHead(Repository, File)}. JGit 6.x's
      * {@code Git.open} / {@code findGitDir} do not resolve the worktree
      * {@code commondir}, hence the manual resolution here.
      */
-    private Repository openRepository() throws IOException {
-        File commonDir = resolveCommonDir(resolveGitDir());
+    private Repository openRepository(File gitDir) throws IOException {
+        File commonDir = resolveCommonDir(gitDir);
         // setMustExist makes build() throw RepositoryNotFoundException (an
         // IOException) when the path is not actually a git repository — opening
         // at the common dir means a linked worktree's shared object store still
@@ -140,8 +146,8 @@ public class LocalGitProvider implements VcsProvider {
      * from the worktree git dir directly — a symbolic {@code ref: ...} is
      * resolved against the shared refs, a detached SHA is parsed directly.
      */
-    private ObjectId resolveHead(Repository repo) throws IOException {
-        File headFile = new File(resolveGitDir(), Constants.HEAD);
+    private ObjectId resolveHead(Repository repo, File gitDir) throws IOException {
+        File headFile = new File(gitDir, Constants.HEAD);
         if (!headFile.isFile()) {
             return repo.resolve(Constants.HEAD);
         }

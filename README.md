@@ -109,8 +109,9 @@ java -jar hotspot.jar analyze /path/to/repo
 java -jar hotspot.jar analyze --print-config > hotspot.yml
 ```
 
-> 저장소 **루트**에서 실행하세요(하위 디렉터리는 오류 + 힌트). linked git
-> worktree도 지원합니다. 멀티 모듈에서 서브모듈별 JaCoCo 리포트는 자동
+> 저장소 **루트**에서 실행하세요. 하위 디렉터리나 비-git 경로에서는 오류가 나며,
+> 루트 경로를 `[path]`로 넘기거나 `--config`를 쓰라는 안내가 출력됩니다. linked
+> git worktree도 지원합니다. 멀티 모듈에서 서브모듈별 JaCoCo 리포트는 자동
 > 합산하지 않습니다(루트 레벨만 탐지). 세밀한 제어가 필요하면 아래의
 > `--config` 방식을 쓰세요.
 
