@@ -36,7 +36,7 @@ public class ConfigSerializer {
         try {
             return mapper.writeValueAsString(config);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
-            throw new ConfigSynthesisException(
+            throw new ConfigSerializeException(
                     "failed to serialise synthesized config: " + e.getMessage(), e);
         }
     }
