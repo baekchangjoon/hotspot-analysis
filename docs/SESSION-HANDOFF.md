@@ -23,12 +23,7 @@ where the historical evidence says bugs are most likely to live (Adam
 Tornhill, *Your Code as a Crime Scene*). The project is delivered in four
 phases:
 
-| Phase | Goal | Status |
-|---:|---|:---:|
-| 1 | CLI prototype (file + method scoring, three output formats) | ✅ Complete |
-| 2 | Extended CLI (parameter combinations, coverage integration, more languages) | 🚧 Not started |
-| 3 | REST API backend exposing the analysis as a service | ⏳ |
-| 4 | Front-end visualisation on top of the backend | ⏳ |
+The project currently delivers a CLI tool (file + method scoring, four output formats, unified composite scoring). REST API backend, frontend visualization, and other extensions are not implemented.
 
 ---
 
@@ -59,16 +54,16 @@ Execution time on M-series Mac: **~2.3 s** (warm), **~6 s** (cold JVM).
 | Layer | Choice | Why |
 |---|---|---|
 | Language / runtime | Java 21 LTS | User's stack majority is Java 21 + Spring Boot 3 |
-| Framework | Spring Boot 3.3.x | DI for Picocli sub-commands, future REST API in Phase 3 |
+| Framework | Spring Boot 3.3.x | DI for Picocli sub-commands |
 | Build | Gradle 8.10.2 (Kotlin DSL) + Foojay toolchain auto-provisioning | Predictable JDK 21 on any host |
 | CLI | Picocli 4.7.x with Spring `IFactory` | Strong typing, env-var aware, fits DI |
 | Config | Jackson YAML + Jakarta Bean Validation | Strong schema + env-var substitution + readable validation errors |
 | Local VCS | JGit (`org.eclipse.jgit`) | Pure-Java, no native git binary required |
 | Remote VCS | `org.kohsuke:github-api` + WireMock (test only) | Mature, hermetically testable |
 | Java parsing | JavaParser 3.26 (symbol-solver) | Records / sealed / switch-expr / pattern-matching ready |
-| Scoring formula | `revisions × loc` (`SIMPLE`) | Phase 1 only. Phase 2 should add `COMPOSITE` (entropy + recency weighting) |
+| Scoring formula | Unified model: always computes simple score (`revisions × loc`) AND composite score (recency decay × cognitive complexity × coverage multiplier) | Both emitted in every output format since v0.2 |
 
-### Architectural invariants (must not break in Phase 2+)
+### Architectural invariants
 
 1. **`VcsProvider` interface is the only VCS abstraction.** Add new
    providers; do not let any pipeline class talk to JGit / GitHub APIs
@@ -84,7 +79,7 @@ Execution time on M-series Mac: **~2.3 s** (warm), **~6 s** (cold JVM).
 4. **`DiffHunk`-driven method revisions with a fallback.** `LocalGitProvider`
    populates per-file diff hunks; `RevisionsCalculator` uses them when
    present and falls back to file-level revisions when the provider can't
-   (Phase 1 `GithubProvider`).
+   (`GithubProvider` does not supply diff hunks).
 5. **CLI exit code contract** (do not renumber without README + tests):
    `0` ok • `1` fatal • `2` Picocli usage • `3` `--strict` empty result.
 
@@ -225,9 +220,9 @@ Verified by replaying the README walkthrough end-to-end against
 | ID | Topic | Effort | Notes |
 |---|---|:---:|---|
 | **C1** | `target.type=github` is **not** end-to-end | M | `GithubProvider` + `KohsukeGithubClient` are WireMock-verified, but `HotspotAnalyzer.analyze` rejects non-`local-git` with a clear `UnsupportedOperationException`. To unblock: either clone-on-demand under a temp dir, or implement raw-content fetch via the GitHub API. |
-| **C2** | `LocCalculator` reads **working-tree LOC**, not LOC at each historic commit | L | Same simplification Tornhill takes in the book. Acceptable for Phase 1; revisit if Phase 2 introduces composite scoring. |
-| **C3** | No bot-commit filtering (Dependabot, Renovate) | L | Phase 2 candidate. Need a config flag `analysis.commitFilter.botPatterns` or similar. |
-| **C4** | No coverage integration (JaCoCo / Sonar) | M | Phase 2. Combine with hotspot scores to surface "hot but uncovered". |
+| **C2** | `LocCalculator` reads **working-tree LOC**, not LOC at each historic commit | L | Same simplification Tornhill takes in the book. Acceptable current limitation. |
+| **C3** | No bot-commit filtering (Dependabot, Renovate) | L | Current limitation. Would need a config flag `analysis.commitFilter.botPatterns` or similar. |
+| **C4** | Coverage integration (JaCoCo XML) is implemented as the composite-score coverage multiplier | — | Auto-detected via zero-config path lookup. Works in composite mode. |
 | **C5** | Gradle 8.10 deprecation warnings | S | Visible during every `./gradlew build`. Validate with `./gradlew --warning-mode all build`. Confirm spring-boot plugin compatibility before bumping to Gradle 9. |
 | **C6** | Daily cron trigger | S | Active only after PR #1 is merged into `main` (GitHub Actions policy). After merge, expect a run shortly after `00:00 UTC` (= 09:00 KST). |
 | **C7** | Output layout asymmetry (CSV split, YAML/MD/HTML combined) | S | Intentional. README documents it. If users vote for per-granularity YAML/MD/HTML, add `output.layout: combined \| per-granularity` option. |
@@ -290,25 +285,14 @@ If you see `Commits: 0 / Files: 0`, see README → Troubleshooting.
    with `gh pr merge 1 --squash --delete-branch`.
 2. **C6 verification** — within 24 h of merge, confirm at least one
    `schedule` event under `gh run list --workflow=CI`.
-3. **Pick the first Phase 2 task.** Concrete candidates, in increasing
-   effort:
+3. **Concrete improvement candidates** (in increasing effort):
    - (a) `--window-days` / `--top-n` CLI overrides → simple Picocli option
      additions + tests. ~2 h.
-   - (b) Composite scoring formula (`revisions × LOC × log2(uniqueAuthors)`
-     or entropy) → new `Formula.COMPOSITE`, new `CompositeScoreCalculator`,
-     parametric tests. ~½ day.
-   - (c) Bot-commit filter (`analysis.commitFilter`) → config record +
+   - (b) Bot-commit filter (`analysis.commitFilter`) → config record +
      `CommitFilter` interface + `LocalGitProvider` integration. ~½ day.
-   - (d) End-to-end GitHub target (C1) → cloned-temp-dir adapter wired into
+   - (c) End-to-end GitHub target (C1) → cloned-temp-dir adapter wired into
      `VcsProviderFactory`. ~1 day.
 4. **Gradle 9 compatibility check** (C5) before any of the above. ~½ h.
-
-When starting Phase 2, **always**:
-- Begin by reading `docs/phase1-design.md` once more to recall the
-  invariants in Section 3 of this document.
-- Open a new task report file `docs/reports/T12-*.md` following the same
-  style as T1–T11.
-- Pin every new dependency version; do not let Gradle resolve "latest".
 
 ---
 
@@ -344,8 +328,8 @@ anything substantive:
 
 1. Read this file in full.
 2. Confirm repo state with the Section 9 commands.
-3. If the user's first prompt is implementation-shaped ("Phase 2 시작해줘",
-   "X 기능 추가해줘"), respond in Korean with: a short status summary,
+3. If the user's first prompt is implementation-shaped ("X 기능 추가해줘"),
+   respond in Korean with: a short status summary,
    the proposed plan (numbered), the alternatives considered, and a
    `진행해줘` invitation.
 4. If the prompt is exploratory ("이거 왜 이래?", "어떻게 동작해?"),

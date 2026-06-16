@@ -91,7 +91,7 @@ Settings: `decayHalfLifeDays=180`, `until=2026-12-31`, jacoco supplied. The file
 ### 5.2 Recommended Improvements (Not Bugs, UX-Level)
 
 1. **Absence of decomposition factors in CSV/Markdown**: To verify a composite-mode result by decomposition in a PR/spreadsheet, only HTML works. Consider separately specifying the README's *CSV → 5/10 column* guide for composite mode, or adding optional columns
-   (`decayed_revisions`, `cognitive_complexity`, `coverage`) to the CSV (Phase 2 candidate).
+   (`decayed_revisions`, `cognitive_complexity`, `coverage`) to the CSV (follow-up candidate).
 2. **Conflict between the default `decayHalfLifeDays=90` and a long window**: It is the value recommended in Tornhill's book, but combined with a 6-year window such as `since:2017-01-01 until:2026-12-31`,
    most scores are compressed to e-8 digits, so every row appears as `0`. Users are likely to find this puzzling.
    - Recommendation: at the end of an `analyze` run, output a hint message like *"The 95-th percentile commit age in this window = N days. With half-life=90d, the decay weight is very small."*
@@ -106,7 +106,7 @@ Settings: `decayHalfLifeDays=180`, `until=2026-12-31`, jacoco supplied. The file
 ### 5.3 Regression-Risk Monitoring Targets
 
 - `HotspotAnalyzer#analyze` is 251 LOC, cognitive complexity ≈ 115. In its own self-analysis it ranks #1 at the method level (score 181.83) — i.e., **a self-coherent signal in which the analyzer itself points to the most dangerous method**.
-  As the composite formula grows, this method is likely to explode in branching as well, so before entering Phase 2, deliberate decomposition (e.g., extracting a `CompositeScoringPipeline`) is recommended.
+  As the composite formula grows, this method is likely to explode in branching as well; deliberate decomposition (e.g., extracting a `CompositeScoringPipeline`) is recommended.
 
 ## 6. Conclusion
 

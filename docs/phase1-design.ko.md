@@ -7,6 +7,8 @@
 > 담당자: Baek
 > 함께 보기: [`./hotspot-analysis.md`](./hotspot-analysis.md) (이론 및 배경)
 
+> **참고:** v0.2 부터 스코어러는 항상 단순 점수(simple score)와 복합 점수(composite score, 감쇠 × 인지 복잡도 × 커버리지 승수)를 모두 계산합니다. 아래에서 설명하는 `formula: simple|composite` 토글은 제거되었습니다.
+
 ## 0. Goals and Non-goals
 
 ### Goals
@@ -16,12 +18,11 @@
 - VCS 어댑터: `LocalGitProvider` (JGit)와 `GithubProvider` (kohsuke `github-api`).
 - YAML 설정 파일로 구동.
 
-### Non-goals (Phase 2+ 로 연기)
+### Non-goals
 - 봇 커밋 필터링 (Dependabot, Renovate 등)
-- 테스트 커버리지 통합 (JaCoCo / SonarQube).
-- 조합 테스트 설계 (pairwise / N-wise) — Phase 1 에서는 파라미터 메타데이터만 추출.
+- 조합 테스트 설계 (pairwise / N-wise) — 파라미터 메타데이터만 추출.
 - 비 Java 언어 (Python, TypeScript).
-- 시각화 (D3 circle packing) — Phase 4.
+- 시각화 (D3 circle packing).
 
 ---
 
@@ -197,7 +198,7 @@ analysis:
       - "**/target/**"
 
   scoring:
-    formula: simple                # Phase 1: simple = revisions * loc
+    formula: simple                # simple = revisions * loc (참고: v0.2+에서는 composite도 항상 계산됨)
 
 output:
   formats: [csv, md]               # csv | yaml | md (multiple allowed)
@@ -260,7 +261,7 @@ public record FileHotspot(
     String path,
     int revisions,
     int loc,
-    double score      // Phase 1: revisions * loc
+    double score      // 단순 점수: revisions * loc
 ) {}
 
 public record MethodHotspot(
@@ -296,7 +297,7 @@ For each Java file F in scope:
 
 ### Notes
 - 메서드 식별자 = `FQCN + name + parameter type signature` (오버로드 처리).
-- JGit 은 `git log -L` 을 기본 제공하지 않습니다; diff hunk 와 현재 메서드 라인 범위를 교차시켜 근사합니다. Rename 추적은 Phase 1 에서 best-effort 입니다.
+- JGit 은 `git log -L` 을 기본 제공하지 않습니다; diff hunk 와 현재 메서드 라인 범위를 교차시켜 근사합니다. Rename 추적은 best-effort 입니다.
 
 ---
 
@@ -319,7 +320,7 @@ For each Java file F in scope:
 ```
 [I1]  FileHotspot.revisions >= 1
 [I2]  FileHotspot.loc >= 0
-[I3]  score == revisions * loc (Phase 1 simple formula)
+[I3]  단순 점수 == revisions * loc
 [I4]  Output sorted by score DESC, ties broken by path ASC
 [I5]  Result path matches scope.include AND not scope.exclude
 [I6]  Sum of MethodHotspot per file <= total methods in file
@@ -459,29 +460,26 @@ dependencies {
 
 ---
 
-## 11. Out of Scope for Phase 1 (Forward References)
+## 11. 미지원 항목
 
-| Topic | Target Phase |
-|---|---|
-| Bot commit filtering | Phase 2 |
-| Coverage integration (JaCoCo / SonarQube) | Phase 2 |
-| Cognitive complexity scoring | Phase 2 |
-| Combinatorial test case generation | Phase 2 |
-| Multi-language support (Tree-sitter) | Phase 2 / 3 |
-| REST API backend | Phase 3 |
-| React + D3 frontend | Phase 4 |
+다음 기능은 현재 지원되지 않습니다:
+
+- 봇 커밋 필터링 (Dependabot, Renovate 등)
+- 다중 언어 지원 (Tree-sitter / 비 Java)
+- 조합 / pairwise 테스트 케이스 생성
+- 모노레포 vs 멀티레포 스캔 전략
+- REST API 백엔드, 결과 영속화, 백엔드 인증
+- React + D3 프론트엔드 시각화
 
 ---
 
-## 12. Open Items (Pending User Decision when Reached)
+## 12. 미해결 항목
 
-1. 백엔드 인증 정책 (Phase 3)
-2. Monorepo vs multi-repo 스캐닝 전략 (Phase 2)
-3. 배포 모델 (OSS / 내부용) (Phase 1+)
-4. 결과 영속화 (DB / S3 / file) (Phase 3)
-5. CodeScene 또는 기타 상용 도구 통합 (any phase)
+1. Monorepo vs multi-repo 스캐닝 전략
+2. 결과 영속화 (DB / S3 / file)
+3. CodeScene 또는 기타 상용 도구 통합
 
-각 phase 가 다가오면 재검토합니다.
+---
 
 ## 13. v0.2: Unified scoring model
 

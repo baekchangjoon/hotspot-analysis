@@ -7,6 +7,8 @@
 > Owner: Baek
 > See also: [`./hotspot-analysis.md`](./hotspot-analysis.md) (theory & background)
 
+> **Note:** Since v0.2 the scorer always computes both the simple score and the composite score (recency decay × cognitive complexity × coverage multiplier); the `formula: simple|composite` toggle described below was removed.
+
 ## 0. Goals and Non-goals
 
 ### Goals
@@ -16,12 +18,11 @@
 - VCS adapters: `LocalGitProvider` (JGit) and `GithubProvider` (kohsuke `github-api`).
 - Driven by a YAML configuration file.
 
-### Non-goals (deferred to Phase 2+)
+### Non-goals
 - Bot commit filtering (Dependabot, Renovate, etc.)
-- Test coverage integration (JaCoCo / SonarQube).
-- Combinatorial test design (pairwise / N-wise) — only parameter metadata is extracted in Phase 1.
+- Combinatorial test design (pairwise / N-wise) — only parameter metadata is extracted.
 - Non-Java languages (Python, TypeScript).
-- Visualization (D3 circle packing) — Phase 4.
+- Visualization (D3 circle packing).
 
 ---
 
@@ -197,7 +198,7 @@ analysis:
       - "**/target/**"
 
   scoring:
-    formula: simple                # Phase 1: simple = revisions * loc
+    formula: simple                # simple = revisions * loc (note: v0.2+ always computes composite too)
 
 output:
   formats: [csv, md]               # csv | yaml | md (multiple allowed)
@@ -260,7 +261,7 @@ public record FileHotspot(
     String path,
     int revisions,
     int loc,
-    double score      // Phase 1: revisions * loc
+    double score      // simple score: revisions * loc
 ) {}
 
 public record MethodHotspot(
@@ -296,7 +297,7 @@ For each Java file F in scope:
 
 ### Notes
 - Method identifier = `FQCN + name + parameter type signature` (handles overloads).
-- JGit does not provide `git log -L` natively; we approximate by intersecting diff hunks with current method line ranges. Rename tracking is best-effort in Phase 1.
+- JGit does not provide `git log -L` natively; we approximate by intersecting diff hunks with current method line ranges. Rename tracking is best-effort.
 
 ---
 
@@ -319,7 +320,7 @@ For each Java file F in scope:
 ```
 [I1]  FileHotspot.revisions >= 1
 [I2]  FileHotspot.loc >= 0
-[I3]  score == revisions * loc (Phase 1 simple formula)
+[I3]  simple score == revisions * loc
 [I4]  Output sorted by score DESC, ties broken by path ASC
 [I5]  Result path matches scope.include AND not scope.exclude
 [I6]  Sum of MethodHotspot per file <= total methods in file
@@ -459,29 +460,26 @@ dependencies {
 
 ---
 
-## 11. Out of Scope for Phase 1 (Forward References)
+## 11. Out of scope
 
-| Topic | Target Phase |
-|---|---|
-| Bot commit filtering | Phase 2 |
-| Coverage integration (JaCoCo / SonarQube) | Phase 2 |
-| Cognitive complexity scoring | Phase 2 |
-| Combinatorial test case generation | Phase 2 |
-| Multi-language support (Tree-sitter) | Phase 2 / 3 |
-| REST API backend | Phase 3 |
-| React + D3 frontend | Phase 4 |
+The following are not currently supported:
+
+- Bot commit filtering (Dependabot, Renovate, etc.)
+- Multi-language support (Tree-sitter / non-Java)
+- Combinatorial / pairwise test-case generation
+- Monorepo-vs-multi-repo scan strategy
+- REST API backend, result persistence, backend auth
+- React + D3 frontend visualization
 
 ---
 
-## 12. Open Items (Pending User Decision when Reached)
+## 12. Open Items
 
-1. Authentication policy for backend (Phase 3)
-2. Monorepo vs multi-repo scanning strategy (Phase 2)
-3. Distribution model (OSS / internal) (Phase 1+)
-4. Result persistence (DB / S3 / file) (Phase 3)
-5. CodeScene or other commercial tool integration (any phase)
+1. Monorepo vs multi-repo scanning strategy
+2. Result persistence (DB / S3 / file)
+3. CodeScene or other commercial tool integration
 
-These will be revisited as each phase approaches.
+---
 
 ## 13. v0.2: Unified scoring model
 

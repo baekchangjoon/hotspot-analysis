@@ -265,7 +265,7 @@ analysis:
 |---|---|---|
 | External API calls via `@FeignClient` / RestTemplate | The tool only traces the *internal* call graph | Use a separate tool for the external dependency table (e.g. jdeps) |
 | Dynamic dispatch inside lambdas / anonymous classes | Static analysis can't determine the type | An intended limitation. The Composite Score comes out slightly conservative |
-| Frameworks other than Spring MVC (gRPC, GraphQL, Quarkus, etc.) | Currently only Spring annotations are recognized | Annotation set expansion planned in Phase 2+ |
+| Frameworks other than Spring MVC (gRPC, GraphQL, Quarkus, etc.) | Currently only Spring annotations are recognized (other frameworks unsupported) | Not currently supported |
 | A class in the call graph is not on the classpath | Class loading failure → `ClassNotFoundException` → the whole analysis fails | Add a fat classpath including dependency JARs, or a directory like `~/.gradle/caches/...` |
 
 ---
