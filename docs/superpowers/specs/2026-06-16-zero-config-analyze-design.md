@@ -152,10 +152,10 @@ absolute.
 | `window.days` | `365` (fixed default; matches the template's safe default). |
 | `scope.granularity` | `[file, method]`. |
 | `scope.include` | If `base/src/main/java` is a directory → `["src/main/java/**/*.java"]` (single module). Else if any `src/main/java` directory exists below base (bounded scan, see below) → `["**/src/main/java/**/*.java"]` (multi-module). Else → **error**. |
-| `scope.exclude` | `["**/generated/**", "**/test/**", "**/build/**", "**/target/**"]`. |
+| `scope.exclude` | `["**/generated/**", "**/test/**", "**/build/**", "build/**", "**/target/**", "target/**"]`. Both nested and **root-level** `build/`/`target/` are excluded because Java NIO `**` does not match zero path segments — `**/build/**` alone would not exclude a root-level `build/`. |
 | `scoring` | Defaults: `decayHalfLifeDays = 90`, `excludeCoverage = false`. |
 | `jacocoReportPath` | First existing of: `build/reports/jacoco/test/jacocoTestReport.xml` (Gradle), then `target/site/jacoco/jacoco.xml` (Maven), probed **at base only**. Else omit (null). Multi-module per-submodule reports are not aggregated — see Non-goals. |
-| `apiAnalysis` | `enabled = true` iff a build file (`build.gradle`, `build.gradle.kts`, or `pom.xml`) **at base or at any detected module root** contains the substring `spring-boot-starter-web`, `spring-webmvc`, or `spring-web`; else `false`. `sharedComponentMode = BOTH`. `classpathDirectories` = the subset of `["build/classes/java/main", "target/classes", "build/libs"]` (in that priority order) that exist under base; `[]` if none. |
+| `apiAnalysis` | `enabled = true` iff a build file (`build.gradle`, `build.gradle.kts`, or `pom.xml`) **at base or at any detected module root** contains the substring `spring-boot-starter-web`, `spring-webmvc`, or `spring-web`; else `false`. `sharedComponentMode = BOTH`. `classpathDirectories` = for each detected module root, the subset of `["build/classes/java/main", "target/classes", "build/libs"]` (in that priority order) that exist, expressed relative to base (e.g. `moduleA/build/classes/java/main`); `[]` if none. |
 | `output` | `formats = [csv, yaml, md, html]`, `path = "./hotspot-report"`, `topN = 50` (matches the `init` template, so `init` and zero-config produce the same row count), `apiLayout = BOTH`, `coverageBreakdown = false`. |
 
 ### Module / `src/main/java` scan

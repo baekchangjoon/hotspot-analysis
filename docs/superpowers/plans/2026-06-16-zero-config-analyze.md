@@ -43,9 +43,22 @@ Author the acceptance tests first. They are expected to FAIL until the feature l
 
 - [ ] **Step 1: Add the zero-config E2E tests**
 
-Append these methods inside the `HotspotCliE2ETest` class (it already imports `Git`, `PersonIdent`, `@TempDir`, `Files`, `Path`, `Instant`, `Date`, `TimeZone`, AssertJ, and has the `writeJava(Git, String, String, Instant)` helper). Add imports `java.io.IOException` and `java.util.stream.Stream` if not present.
+Append these methods inside the `HotspotCliE2ETest` class (it already imports `Git`, `PersonIdent`, `@TempDir`, `Files`, `Path`, `Instant`, `Date`, `TimeZone`, AssertJ, and has the `writeJava(Git, String, String, Instant)` helper).
+
+Add imports: `java.io.IOException`, `java.time.Duration`, `java.util.stream.Stream`, `org.junit.jupiter.api.AfterEach`, `org.junit.jupiter.api.extension.ExtendWith`, `org.springframework.boot.test.system.CapturedOutput`, `org.springframework.boot.test.system.OutputCaptureExtension`.
+
+Add the class-level annotation `@ExtendWith(OutputCaptureExtension.class)` next to `@SpringBootTest` so a `CapturedOutput` parameter can be injected.
+
+> **Why dynamic timestamps:** zero-config uses `window.days = 365`, a window relative to *now*. Fixed 2026 dates would fall out of the window in a future year and silently empty the result. All zero-config fixtures commit at `Instant.now().minus(Duration.ofDays(1))`.
+
+> **Why `@AfterEach` cleanup:** zero-config's default `output.path` is `./hotspot-report`, relative to the test process CWD (not `@TempDir`). The hook removes it after every test — including on assertion failure — so tests cannot leak state into one another.
 
 ```java
+    @AfterEach
+    void cleanupCwdReport() throws IOException {
+        deleteRecursively(Path.of("hotspot-report"));
+    }
+
     @Test
     @DisplayName("zero-config: analyze <repo> with no --config runs end-to-end (single module)")
     void zeroConfigSingleModuleViaPositional(@TempDir Path tempDir) throws Exception {
@@ -54,36 +67,31 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             writeJava(git, "src/main/java/com/example/Hot.java",
                     "package com.example; public class Hot { void m() { int x = 1; } }",
-                    Instant.parse("2026-05-20T10:00:00Z"));
+                    Instant.now().minus(Duration.ofDays(1)));
         }
 
         application.run("analyze", repoRoot.toString(), "--quiet");
 
         assertThat(application.getExitCode()).isZero();
-        // Default output dir is ./hotspot-report relative to CWD; assert via absolute resolve.
-        Path out = Path.of("hotspot-report");
-        assertThat(Files.exists(out.resolve("file_hotspots.csv"))).isTrue();
-        // Clean up the CWD-relative output so it does not leak between tests.
-        deleteRecursively(out);
+        // Default output dir is ./hotspot-report relative to CWD (cleaned by @AfterEach).
+        assertThat(Files.exists(Path.of("hotspot-report").resolve("file_hotspots.csv"))).isTrue();
     }
 
     @Test
-    @DisplayName("zero-config: multi-module repo is detected via **/src/main/java")
+    @DisplayName("zero-config: multi-module repo is detected and run succeeds")
     void zeroConfigMultiModule(@TempDir Path tempDir) throws Exception {
         Path repoRoot = tempDir.resolve("repo");
-        Path outDir = tempDir.resolve("out");
         Files.createDirectories(repoRoot.resolve("moduleA/src/main/java/com/example"));
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             writeJava(git, "moduleA/src/main/java/com/example/Hot.java",
                     "package com.example; public class Hot { void m() { int x = 1; } }",
-                    Instant.parse("2026-05-20T10:00:00Z"));
+                    Instant.now().minus(Duration.ofDays(1)));
         }
 
-        // Use --print-config to assert the detected include glob without touching CWD output.
-        // (print-config writes YAML to stdout; capture it.)
-        application.run("analyze", repoRoot.toString(), "--print-config");
+        application.run("analyze", repoRoot.toString(), "--quiet");
+
         assertThat(application.getExitCode()).isZero();
-        // The detected glob is asserted in ConfigSynthesizerTest; here we assert the run succeeds.
+        // The detected include glob is asserted directly in ConfigSynthesizerTest.
     }
 
     @Test
@@ -103,10 +111,9 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
         Path repoRoot = tempDir.resolve("repo");
         Files.createDirectories(repoRoot);
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
-            // a repo with a README but no src/main/java
-            Files.writeString(repoRoot.resolve("README.md"), "hi");
-            git.add().addFilepattern("README.md").call();
-            git.commit().setMessage("init").call();
+            // a repo with a README but no src/main/java; writeJava sets a PersonIdent
+            // so the commit does not depend on a global git identity (CI-safe).
+            writeJava(git, "README.md", "hi", Instant.now().minus(Duration.ofDays(1)));
         }
 
         application.run("analyze", repoRoot.toString(), "--quiet");
@@ -116,18 +123,23 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
 
     @Test
     @DisplayName("zero-config: --print-config prints reloadable YAML and writes no report")
-    void zeroConfigPrintConfigRoundTrips(@TempDir Path tempDir) throws Exception {
+    void zeroConfigPrintConfigRoundTrips(@TempDir Path tempDir, CapturedOutput output) throws Exception {
         Path repoRoot = tempDir.resolve("repo");
         Files.createDirectories(repoRoot.resolve("src/main/java/com/example"));
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             writeJava(git, "src/main/java/com/example/Hot.java",
                     "package com.example; public class Hot { void m() { int x = 1; } }",
-                    Instant.parse("2026-05-20T10:00:00Z"));
+                    Instant.now().minus(Duration.ofDays(1)));
         }
+        // Guarantee a clean precondition regardless of sibling-test ordering.
+        deleteRecursively(Path.of("hotspot-report"));
 
         application.run("analyze", repoRoot.toString(), "--print-config");
+
         assertThat(application.getExitCode()).isZero();
-        // No report directory is written in print-config mode.
+        // YAML was printed to stdout...
+        assertThat(output.getOut()).contains("analysis:").contains("LOCAL_GIT");
+        // ...and no report directory was written in print-config mode.
         assertThat(Files.exists(Path.of("hotspot-report"))).isFalse();
     }
 
@@ -149,7 +161,7 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             writeJava(git, "src/main/java/com/example/Hot.java",
                     "package com.example;\npublic class Hot {\n  void m(int x) { if (x>0) { int y=x+1; } }\n}",
-                    Instant.parse("2026-05-20T10:00:00Z"));
+                    Instant.now().minus(Duration.ofDays(1)));
         }
         Files.writeString(repoRoot.resolve("build/reports/jacoco/test/jacocoTestReport.xml"), """
                 <?xml version="1.0" encoding="UTF-8"?>
@@ -166,12 +178,10 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
 
         application.run("analyze", repoRoot.toString(), "--quiet");
         assertThat(application.getExitCode()).isZero();
-        Path out = Path.of("hotspot-report");
-        String csv = Files.readString(out.resolve("file_hotspots.csv"));
+        String csv = Files.readString(Path.of("hotspot-report").resolve("file_hotspots.csv"));
         // coverage_multiplier column (index 8) must not be the neutral "1".
         String hotRow = csv.lines().filter(l -> l.contains("Hot.java")).findFirst().orElseThrow();
         assertThat(hotRow.split(",", -1)[8]).isNotEqualTo("1");
-        deleteRecursively(out);
     }
 
     @Test
@@ -182,10 +192,12 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
             writeJava(git, "src/main/java/com/example/Hot.java",
                     "package com.example; public class Hot { void m() { int x = 1; } }",
-                    Instant.parse("2026-05-20T10:00:00Z"));
+                    Instant.now().minus(Duration.ofDays(1)));
         }
         Path wt = tempDir.resolve("wt");
-        // Create a real linked worktree via the git CLI (this is a git-based tool, git is present).
+        // A real linked worktree (so JGit can read commits) needs the git CLI.
+        // This is a git-based tool exercised in a git repo, so git is present;
+        // a hand-written pointer file would not be an openable work tree.
         int rc = new ProcessBuilder("git", "-C", repoRoot.toString(),
                 "worktree", "add", wt.toString(), "HEAD")
                 .inheritIO().start().waitFor();
@@ -195,9 +207,7 @@ Append these methods inside the `HotspotCliE2ETest` class (it already imports `G
         application.run("analyze", wt.toString(), "--quiet");
 
         assertThat(application.getExitCode()).isZero();
-        Path out = Path.of("hotspot-report");
-        assertThat(Files.exists(out.resolve("file_hotspots.csv"))).isTrue();
-        deleteRecursively(out);
+        assertThat(Files.exists(Path.of("hotspot-report").resolve("file_hotspots.csv"))).isTrue();
     }
 
     private static void deleteRecursively(Path root) throws IOException {
@@ -456,7 +466,6 @@ package io.github.baekchangjoon.hotspotanalysis.config;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -483,8 +492,13 @@ public class ConfigSynthesizer {
             List.of("build.gradle", "build.gradle.kts", "pom.xml");
     private static final List<String> SPRING_MARKERS =
             List.of("spring-boot-starter-web", "spring-webmvc", "spring-web");
-    private static final List<String> EXCLUDES =
-            List.of("**/generated/**", "**/test/**", "**/build/**", "**/target/**");
+    // Java NIO "**" does NOT match zero path segments, so "**/build/**" alone
+    // would not exclude a ROOT-level build/ dir. Root-level variants are added
+    // so generated/compiled output never leaks into the multi-module include.
+    private static final List<String> EXCLUDES = List.of(
+            "**/generated/**", "**/test/**",
+            "**/build/**", "build/**",
+            "**/target/**", "target/**");
     private static final List<String> CLASSPATH_CANDIDATES =
             List.of("build/classes/java/main", "target/classes", "build/libs");
     private static final List<String> JACOCO_CANDIDATES = List.of(
@@ -508,7 +522,7 @@ public class ConfigSynthesizer {
         ApiAnalysisConfig api = new ApiAnalysisConfig(
                 detectSpring(base, layout.moduleRoots()),
                 ApiAnalysisConfig.SharedComponentMode.BOTH,
-                detectClasspathDirs(base));
+                detectClasspathDirs(base, layout.moduleRoots()));
         String jacoco = detectJacoco(base);
 
         AnalysisSection analysis = new AnalysisSection(
@@ -559,12 +573,15 @@ public class ConfigSynthesizer {
                     .sorted()
                     .forEach(c -> collectModuleRoots(c, depth + 1, roots));
         } catch (IOException e) {
-            throw new UncheckedIOException(e);
+            // Surface as a clean CLI error (exit 1), not an uncaught crash.
+            throw new ConfigSynthesisException(
+                    "failed to scan for Java sources under " + dir + ": " + e.getMessage());
         }
     }
 
     private boolean detectSpring(Path base, List<Path> moduleRoots) {
-        List<Path> dirs = new ArrayList<>();
+        // LinkedHashSet dedups the single-module case where moduleRoots == [base].
+        java.util.LinkedHashSet<Path> dirs = new java.util.LinkedHashSet<>();
         dirs.add(base);
         dirs.addAll(moduleRoots);
         for (Path dir : dirs) {
@@ -587,11 +604,18 @@ public class ConfigSynthesizer {
         }
     }
 
-    private List<String> detectClasspathDirs(Path base) {
+    private List<String> detectClasspathDirs(Path base, List<Path> moduleRoots) {
+        // Resolved by CallGraphBuilder against repoRoot (= base), so paths are
+        // returned relative to base with forward slashes. For multi-module
+        // projects each module's compiled-class dir is probed (e.g.
+        // moduleA/build/classes/java/main).
         List<String> dirs = new ArrayList<>();
-        for (String c : CLASSPATH_CANDIDATES) {
-            if (Files.isDirectory(base.resolve(c))) {
-                dirs.add(c);
+        for (Path root : moduleRoots) {
+            String prefix = base.relativize(root).toString().replace('\\', '/');
+            for (String c : CLASSPATH_CANDIDATES) {
+                if (Files.isDirectory(root.resolve(c))) {
+                    dirs.add(prefix.isEmpty() ? c : prefix + "/" + c);
+                }
             }
         }
         return dirs;
@@ -663,7 +687,12 @@ class ConfigSerializerTest {
 
         // null fields are omitted, not emitted as explicit nulls.
         assertThat(yaml).doesNotContain("jacocoReportPath");
-        assertThat(yaml).doesNotContain("null");
+        // @AssertTrue validation getters must NOT leak into the YAML.
+        assertThat(yaml)
+                .doesNotContain("pathPresentWhenLocalGit")
+                .doesNotContain("githubPresentWhenGithubType")
+                .doesNotContain("sinceNotAfterUntil")
+                .doesNotContain("eitherRangeOrDays");
 
         Path file = repo.resolve("printed.yml");
         Files.writeString(file, yaml);
@@ -692,6 +721,7 @@ Expected: FAIL — `ConfigSerializer` does not exist.
 package io.github.baekchangjoon.hotspotanalysis.config;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -705,6 +735,14 @@ import org.springframework.stereotype.Component;
  * --print-config}. Output is tuned (not the loader's parse mapper): null fields
  * are omitted and dates are ISO-8601 strings, so the printed YAML re-loads
  * through {@link ConfigLoader} to an equivalent config.
+ *
+ * <p>Getter / is-getter auto-detection is disabled so the {@code @AssertTrue}
+ * validation methods on the config records (e.g.
+ * {@code TargetConfig.isPathPresentWhenLocalGit()},
+ * {@code WindowConfig.isSinceNotAfterUntil()}) are NOT emitted as bogus YAML
+ * keys that {@link ConfigLoader} would reject. Records are still serialised via
+ * their canonical components, which Jackson introspects from record metadata
+ * independently of getter visibility.</p>
  */
 @Component
 public class ConfigSerializer {
@@ -714,6 +752,8 @@ public class ConfigSerializer {
             .propertyNamingStrategy(PropertyNamingStrategies.LOWER_CAMEL_CASE)
             .serializationInclusion(JsonInclude.Include.NON_NULL)
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+            .disable(MapperFeature.AUTO_DETECT_GETTERS)
+            .disable(MapperFeature.AUTO_DETECT_IS_GETTERS)
             .disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER)
             .build();
 
@@ -774,25 +814,36 @@ Replace that with the new 5-arg constructor:
                 analyzer, dispatcher);
 ```
 
-Then add these test methods to the class (it has `repoRoot`, `outputDir`, `tempDir`, the `writeJava` helper, and constructs `new CommandLine(command)`):
+Then add these test methods to the class (it has `repoRoot`, `outputDir`, `tempDir`, the `writeJava` helper, and constructs `new CommandLine(command)`). Also add the CWD-output cleanup hook and import `org.junit.jupiter.api.AfterEach`, `java.io.IOException`, `java.util.stream.Stream`:
 
 ```java
+    @AfterEach
+    void cleanupCwdReport() throws IOException {
+        Path report = Path.of("hotspot-report");
+        if (!Files.exists(report)) return;
+        try (Stream<Path> walk = Files.walk(report)) {
+            walk.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+                try { Files.deleteIfExists(p); } catch (IOException ignored) { }
+            });
+        }
+    }
+
     @Test
-    @DisplayName("zero-config: bare positional path runs and writes reports")
+    @DisplayName("zero-config: bare positional path runs and prints the detection summary")
     void zeroConfigPositionalRuns() throws Exception {
-        Path out = repoRoot.resolve("hotspot-report");
         StringWriter sw = new StringWriter();
         StringWriter ew = new StringWriter();
         CommandLine cli = new CommandLine(command);
         cli.setOut(new PrintWriter(sw));
         cli.setErr(new PrintWriter(ew));
 
-        // run from repoRoot so the default ./hotspot-report lands under repoRoot
-        int exit = cli.execute(repoRoot.toString(), "--quiet");
+        // No --quiet, so the stderr detection summary is printed.
+        int exit = cli.execute(repoRoot.toString());
 
-        // exit 0 and a report exists relative to CWD or repoRoot
         assertThat(exit).isZero();
         assertThat(ew.toString()).contains("Detected (zero-config)");
+        // Default ./hotspot-report (CWD-relative) is created; @AfterEach removes it.
+        assertThat(Files.exists(Path.of("hotspot-report"))).isTrue();
     }
 
     @Test
@@ -835,7 +886,10 @@ Then add these test methods to the class (it has `repoRoot`, `outputDir`, `tempD
         int exit = cli.execute(repoRoot.toString(), "--print-config");
 
         assertThat(exit).isZero();
-        assertThat(sw.toString()).contains("analysis:").contains("local-git".toUpperCase());
+        // Enums serialise via name(): LOCAL_GIT (underscore), not "local-git".
+        assertThat(sw.toString()).contains("analysis:").contains("LOCAL_GIT");
+        // print-config does not run analysis → no report dir.
+        assertThat(Files.exists(Path.of("hotspot-report"))).isFalse();
     }
 ```
 
