@@ -5,7 +5,6 @@ import io.github.baekchangjoon.hotspotanalysis.vcs.model.ChangeType;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.CommitRecord;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.DiffHunk;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.FileChange;
-import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.diff.Edit;
@@ -17,9 +16,11 @@ import org.eclipse.jgit.patch.FileHeader;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevTree;
 import org.eclipse.jgit.revwalk.RevWalk;
+import org.eclipse.jgit.storage.file.FileRepositoryBuilder;
 import org.eclipse.jgit.treewalk.TreeWalk;
 import org.eclipse.jgit.util.io.DisabledOutputStream;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -55,9 +56,8 @@ public class LocalGitProvider implements VcsProvider {
         Instant lowerBound = resolveLowerBound(window);
         Instant upperBound = resolveUpperBound(window);
 
-        try (Git git = Git.open(repositoryPath.toFile())) {
-            Repository repo = git.getRepository();
-            ObjectId headId = repo.resolve(Constants.HEAD);
+        try (Repository repo = openRepository()) {
+            ObjectId headId = resolveHead(repo);
             if (headId == null) {
                 return List.of();
             }
@@ -78,6 +78,79 @@ public class LocalGitProvider implements VcsProvider {
         } catch (IOException e) {
             throw new VcsException("Failed to read repository at " + repositoryPath, e);
         }
+    }
+
+    /**
+     * Opens the repository for {@code repositoryPath}, supporting both a normal
+     * checkout ({@code .git} is a directory) and a linked worktree / submodule
+     * ({@code .git} is a {@code gitdir:} pointer file). For a linked worktree the
+     * object store and refs live in the shared <em>common</em> directory, so the
+     * repository is opened there; the worktree's own {@code HEAD} is read
+     * separately via {@link #resolveHead(Repository)}. JGit 6.x's
+     * {@code Git.open} / {@code findGitDir} do not resolve the worktree
+     * {@code commondir}, hence the manual resolution here.
+     */
+    private Repository openRepository() throws IOException {
+        File commonDir = resolveCommonDir(resolveGitDir());
+        // setMustExist makes build() throw RepositoryNotFoundException (an
+        // IOException) when the path is not actually a git repository — opening
+        // at the common dir means a linked worktree's shared object store still
+        // satisfies the check.
+        return new FileRepositoryBuilder().setGitDir(commonDir).setMustExist(true).build();
+    }
+
+    /** The git directory: {@code .git} dir, or the target of a {@code .git} pointer file. */
+    private File resolveGitDir() throws IOException {
+        File dotGit = new File(repositoryPath.toFile(), Constants.DOT_GIT);
+        if (dotGit.isDirectory()) {
+            return dotGit;
+        }
+        if (dotGit.isFile()) {
+            String content = Files.readString(dotGit.toPath()).trim();
+            String prefix = "gitdir:";
+            if (content.startsWith(prefix)) {
+                File target = new File(content.substring(prefix.length()).trim());
+                if (!target.isAbsolute()) {
+                    target = new File(repositoryPath.toFile(), target.getPath());
+                }
+                return target.getCanonicalFile();
+            }
+        }
+        // No usable .git — let JGit surface a clear RepositoryNotFoundException.
+        return dotGit;
+    }
+
+    /** The common git directory (shared object store / refs), following a {@code commondir} file if present. */
+    private static File resolveCommonDir(File gitDir) throws IOException {
+        File commonFile = new File(gitDir, "commondir");
+        if (commonFile.isFile()) {
+            String rel = Files.readString(commonFile.toPath()).trim();
+            File common = new File(rel);
+            if (!common.isAbsolute()) {
+                common = new File(gitDir, rel);
+            }
+            return common.getCanonicalFile();
+        }
+        return gitDir;
+    }
+
+    /**
+     * Resolves the worktree's {@code HEAD} commit. The repository is opened at
+     * the common dir (whose {@code HEAD} is the main checkout's), so HEAD is read
+     * from the worktree git dir directly — a symbolic {@code ref: ...} is
+     * resolved against the shared refs, a detached SHA is parsed directly.
+     */
+    private ObjectId resolveHead(Repository repo) throws IOException {
+        File headFile = new File(resolveGitDir(), Constants.HEAD);
+        if (!headFile.isFile()) {
+            return repo.resolve(Constants.HEAD);
+        }
+        String head = Files.readString(headFile.toPath()).trim();
+        String refPrefix = "ref:";
+        if (head.startsWith(refPrefix)) {
+            return repo.resolve(head.substring(refPrefix.length()).trim());
+        }
+        return head.isEmpty() ? null : ObjectId.fromString(head);
     }
 
     private CommitRecord toCommitRecord(Repository repo, RevWalk walk, RevCommit commit)
