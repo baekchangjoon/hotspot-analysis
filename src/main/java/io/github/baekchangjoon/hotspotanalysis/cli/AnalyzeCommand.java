@@ -6,9 +6,11 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigLoadException;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigLoader;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializeException;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializer;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesisException;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesizer;
+import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
 import io.github.baekchangjoon.hotspotanalysis.output.OutputDispatcher;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
@@ -135,7 +137,7 @@ public class AnalyzeCommand implements Callable<Integer> {
                 }
                 config = configLoader.load(configPath);
             }
-        } catch (ConfigSynthesisException e) {
+        } catch (ConfigSynthesisException | ConfigSerializeException e) {
             err.println("ERROR: " + e.getMessage());
             return EXIT_FAILURE;
         } catch (ConfigLoadException e) {
@@ -152,7 +154,7 @@ public class AnalyzeCommand implements Callable<Integer> {
                     && Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
             outputDispatcher.dispatch(result, config.output(), apiEnabled, excludeCoverage);
             if (!quiet) {
-                printSummary(out, result);
+                printSummary(out, result, config.output());
             }
             if (strict && isEmpty(result)) {
                 printStrictFailure(err, result);
@@ -202,16 +204,26 @@ public class AnalyzeCommand implements Callable<Integer> {
                 + "that contains a .git/ folder.");
     }
 
-    private static void printSummary(PrintWriter out, AnalysisResult result) {
+    private static void printSummary(PrintWriter out, AnalysisResult result, OutputConfig output) {
         out.println("Hotspot analysis complete.");
         out.println("  Target:      " + result.meta().targetDescription());
         out.println("  Commits:     " + result.meta().totalCommits());
         out.println("  Files:       " + result.meta().totalFiles());
         out.println("  Methods:     " + result.meta().totalMethods());
-        if (!result.fileHotspots().isEmpty()) {
-            FileHotspot top = result.fileHotspots().get(0);
-            out.printf("  Top file:    %s (rev=%d, loc=%d, score=%.0f)%n",
-                    top.path(), top.revisions(), top.loc(), top.simpleScore());
+        var files = result.fileHotspots();
+        if (!files.isEmpty()) {
+            // fileHotspots are already sorted by composite score, descending.
+            out.println("  Top hotspots (by composite score):");
+            int n = Math.min(3, files.size());
+            for (int i = 0; i < n; i++) {
+                FileHotspot f = files.get(i);
+                out.printf("    %d. %s (composite=%.1f, rev=%d, loc=%d)%n",
+                        i + 1, f.path(), f.compositeScore(), f.revisions(), f.loc());
+            }
+        }
+        if (output.formats().contains(OutputConfig.OutputFormat.HTML)) {
+            Path html = Path.of(output.path()).toAbsolutePath().normalize().resolve("hotspots.html");
+            out.println("  Report:      " + html);
         }
     }
 }
