@@ -15,9 +15,8 @@
 > **역사적 증거상 버그가 가장 많이 살 만한 곳**에 테스트 노력을 집중하게 합니다.
 > Adam Tornhill의 *Your Code as a Crime Scene* 방법론에 기반합니다.
 
-이 저장소는 프로젝트의 **Phase 1**을 제공합니다. 로컬 git 저장소를 분석해
-파일과 메서드에 점수를 매기고 CSV / YAML / Markdown 리포트를 내보내는, 완전히
-연결된 CLI입니다.
+로컬 git 저장소를 분석해 파일과 메서드에 점수를 매기고 CSV / YAML / Markdown /
+HTML 리포트를 내보내는, 완전히 연결된 CLI입니다.
 
 ---
 
@@ -226,8 +225,7 @@ hotspot-report/
 > 공유할 수 없어, 엑셀/시트 편의를 위해 두 파일로 내보냅니다. YAML, Markdown,
 > HTML은 두 표를 자연스럽게 한 파일에 담는 문서 형식이라 — PR에 첨부(`.md`),
 > 다운스트림 자동화에 투입(`.yml`), 또는 자체 완결형 증거 페이지로 브라우저에서
-> 열기(`.html`)가 더 쉽습니다. 이를 뒤집는 `output.layout` 옵션은 Phase 2로
-> 추적 중입니다.
+> 열기(`.html`)가 더 쉽습니다.
 
 > **HTML 리포트 기능.** `hotspots.html`은 단일 자체 완결형 파일입니다
 > (원격 CSS/JS 없음, CDN 없음). 아무 열 헤더나 클릭해 오름/내림차순 정렬;
@@ -284,7 +282,7 @@ Commands:
 
 | 경로 | 타입 | 비고 |
 |---|---|---|
-| `analysis.target.type` | `local-git` \| `github` | Phase 1 CLI는 `local-git`만 end-to-end 실행 |
+| `analysis.target.type` | `local-git` \| `github` | CLI는 `local-git`만 end-to-end 실행 |
 | `analysis.target.path` | string | `local-git`에 필수 |
 | `analysis.target.github.{owner,repo,branch,token}` | strings | `github`에 필수; `token`은 `${ENV_VAR}` 치환 지원 |
 | `analysis.window.since` / `analysis.window.until` | ISO date | 또는 `analysis.window.days` 사용 |
@@ -440,34 +438,22 @@ target:
     token: ${GITHUB_TOKEN}     # 로드 시 환경에서 해석
 ```
 
-…그리고 실행 전에 `export GITHUB_TOKEN=…`. Phase 1 CLI는 **`local-git`에만
+…그리고 실행 전에 `export GITHUB_TOKEN=…`. CLI는 **`local-git`에만
 end-to-end로 연결**되어 있고, GitHub 프로바이더는 WireMock 계약 테스트로
-검증됩니다. 오늘 GitHub 저장소를 분석하려면 로컬에 클론하고
+검증됩니다. GitHub 저장소를 분석하려면 로컬에 클론하고
 `target.type: local-git`을 작업 트리에 가리키세요.
 
 ---
 
-## Phase 1 한계
+## 한계
 
 1. **GitHub 대상 end-to-end**: API 클라이언트는 WireMock으로 검증되지만 CLI의
-   `analyze`는 `local-git` 대상을 요구합니다. GitHub 클론 통합이 들어오기 전까지는
-   저장소를 로컬에 클론하고 `target.type=local-git`으로 다시 실행하세요.
+   `analyze`는 `local-git` 대상을 요구합니다. GitHub 저장소는 로컬에 클론하고
+   `target.type=local-git`으로 실행하세요.
 2. **작업 트리 LOC**: LOC는 각 역사적 커밋이 아니라 HEAD에서 읽습니다
    (Tornhill이 책에서 하는 동일한 단순화).
-3. **봇 필터링 / 커버리지 통합 / 증분 캐시 없음**: Phase 2+로 연기.
 
 이 결정들과 대안의 태스크별 분석은 `docs/reports/*`를 참고하세요.
-
----
-
-## 로드맵
-
-| Phase | 목표 | 상태 |
-|---|---|:---:|
-| 1 | 파일/메서드 점수화, 세 출력 형식의 CLI 프로토타입 | ✅ 완료 |
-| 2 | 확장 CLI: 매개변수 조합, 커버리지 통합, 더 많은 언어 | 🚧 |
-| 3 | REST API 백엔드 | ⏳ |
-| 4 | 백엔드 위 프런트엔드 시각화 | ⏳ |
 
 ---
 
@@ -497,7 +483,7 @@ CI는 매 푸시마다 그리고 **매일 스케줄**(09:00 KST)로 실행됩니
 hotspot-analysis는 **전적으로 당신의 머신에서** 실행됩니다. 텔레메트리도,
 애널리틱스도, "phone home"도 없습니다.
 
-- **`local-git` 대상 (Phase 1 기본값):** git 히스토리와 Java 소스를 지정한 작업
+- **`local-git` 대상 (기본값):** git 히스토리와 Java 소스를 지정한 작업
   트리에서 읽고, 점수를 로컬에서 계산해, 리포트를 로컬 `output.path` 디렉터리에
   씁니다. **아무것도 컴퓨터를 떠나지 않습니다.**
 - **`github` 대상:** 유일한 외부 네트워크 트래픽은 GitHub REST API로 향하며,

@@ -16,9 +16,8 @@
 > are most likely to live.
 > Based on Adam Tornhill's *Your Code as a Crime Scene* methodology.
 
-This repository ships **Phase 1** of the project: a fully wired CLI that
-analyses a local git repository, scores files and methods, and emits reports
-in CSV / YAML / Markdown.
+A fully wired CLI that analyses a local git repository, scores files and
+methods, and emits reports in CSV / YAML / Markdown / HTML.
 
 ---
 
@@ -232,8 +231,7 @@ hotspot-report/
 > for Excel/Sheets ease of use. YAML, Markdown, and HTML are document
 > formats that naturally hold both tables in one file — easier to attach
 > to a PR (`.md`), feed downstream automation (`.yml`), or open in a browser
-> as a self-contained evidence page (`.html`). A future `output.layout`
-> option to flip this is tracked under Phase 2.
+> as a self-contained evidence page (`.html`).
 
 > **HTML report features.** `hotspots.html` is a single self-contained file
 > (no remote CSS/JS, no CDN). Click any column header to sort
@@ -291,7 +289,7 @@ Commands:
 
 | Path | Type | Notes |
 |---|---|---|
-| `analysis.target.type` | `local-git` \| `github` | Phase 1 CLI runs only `local-git` end-to-end |
+| `analysis.target.type` | `local-git` \| `github` | CLI runs only `local-git` end-to-end |
 | `analysis.target.path` | string | Required for `local-git` |
 | `analysis.target.github.{owner,repo,branch,token}` | strings | Required for `github`; `token` supports `${ENV_VAR}` substitution |
 | `analysis.window.since` / `analysis.window.until` | ISO date | Or use `analysis.window.days` |
@@ -449,37 +447,23 @@ target:
     token: ${GITHUB_TOKEN}     # resolved from env at load time
 ```
 
-…and `export GITHUB_TOKEN=…` before running. The Phase 1 CLI is wired
+…and `export GITHUB_TOKEN=…` before running. The CLI is wired
 **end-to-end only for `local-git`**; the GitHub provider is verified by
-WireMock contract tests. To analyse a GitHub repo today, clone it locally
+WireMock contract tests. To analyse a GitHub repo, clone it locally
 and point `target.type: local-git` at the working tree.
 
 ---
 
-## Phase 1 limitations
+## Limitations
 
 1. **GitHub target end-to-end**: the API client is verified by WireMock, but
-   the CLI's `analyze` requires a `local-git` target. Until a GitHub-clone
-   integration lands, clone the repository locally and re-run with
-   `target.type=local-git`.
+   the CLI's `analyze` requires a `local-git` target. Clone the repository
+   locally and run with `target.type=local-git`.
 2. **Working-tree LOC**: LOC is read at HEAD, not at each historical commit
    (same simplification Tornhill makes in his book).
-3. **No bot filtering / coverage integration / incremental cache**: deferred
-   to Phase 2+.
 
 See `docs/reports/*` for a per-task breakdown of these decisions and their
 alternatives.
-
----
-
-## Roadmap
-
-| Phase | Goal | Status |
-|---|---|:---:|
-| 1 | CLI prototype with file/method scoring, three output formats | ✅ Done |
-| 2 | Extended CLI: parameter combinations, coverage integration, more languages | 🚧 |
-| 3 | REST API backend | ⏳ |
-| 4 | Front-end visualisation on top of the backend | ⏳ |
 
 ---
 
@@ -510,7 +494,7 @@ Continuous Integration runs on every push and on a **daily schedule**
 hotspot-analysis runs **entirely on your machine**. There is no telemetry,
 no analytics, and no "phone home".
 
-- **`local-git` target (the Phase 1 default):** the tool reads git history and
+- **`local-git` target (the default):** the tool reads git history and
   Java source from the working tree you point it at, computes scores locally,
   and writes reports to the local `output.path` directory. **Nothing leaves your
   computer.**
