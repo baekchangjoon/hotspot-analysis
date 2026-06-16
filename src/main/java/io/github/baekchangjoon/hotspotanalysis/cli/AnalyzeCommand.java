@@ -6,10 +6,14 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigLoadException;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigLoader;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializer;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesisException;
+import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesizer;
 import io.github.baekchangjoon.hotspotanalysis.output.OutputDispatcher;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 import picocli.CommandLine.Model.CommandSpec;
 
@@ -19,19 +23,22 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 /**
- * {@code hotspot analyze --config <file>} subcommand: loads a YAML
- * configuration, runs the analysis pipeline, writes the requested output
- * formats, and prints a short summary.
+ * {@code hotspot analyze [path] [--config <file>]} subcommand.
  *
- * <p>Exit codes:
+ * <p>Two modes:
  * <ul>
- *   <li>{@code 0} — analysis completed and outputs were written</li>
- *   <li>{@code 1} — fatal error (configuration invalid, repository unreachable,
- *       parser failure, …)</li>
- *   <li>{@code 2} — unknown / unsupported configuration option (handled by Picocli)</li>
- *   <li>{@code 3} — {@code --strict} was set and the analysis produced an
- *       empty result (zero commits in window or zero files matching scope)</li>
+ *   <li><b>File mode</b> — {@code --config <file>} loads a YAML configuration
+ *       (unchanged behaviour).</li>
+ *   <li><b>Zero-config mode</b> — no {@code --config}; the configuration is
+ *       synthesized from {@code [path]} (default: current directory) by
+ *       {@link ConfigSynthesizer}.</li>
  * </ul>
+ * {@code --print-config} (zero-config only) prints the synthesized YAML to
+ * stdout and exits without analysing.</p>
+ *
+ * <p>Exit codes: {@code 0} success; {@code 1} fatal error (bad config,
+ * unreadable repo, illegal flag combination, synthesis failure); {@code 3}
+ * {@code --strict} with an empty result.</p>
  */
 @Component
 @Command(
@@ -45,10 +52,20 @@ public class AnalyzeCommand implements Callable<Integer> {
     static final int EXIT_FAILURE = 1;
     static final int EXIT_STRICT_EMPTY = 3;
 
+    @Parameters(index = "0", arity = "0..1",
+            description = "Repository to analyse in zero-config mode "
+                    + "(default: current directory). Mutually exclusive with --config.")
+    private Path path;
+
     @Option(names = {"-c", "--config"},
-            required = true,
-            description = "Path to the YAML configuration file.")
+            description = "Path to the YAML configuration file. If omitted, the "
+                    + "configuration is auto-detected from [path].")
     private Path configPath;
+
+    @Option(names = {"--print-config"},
+            description = "Print the auto-detected configuration as YAML and exit "
+                    + "(zero-config mode only).")
+    private boolean printConfig;
 
     @Option(names = {"-q", "--quiet"},
             description = "Suppress the summary output on stdout.")
@@ -64,13 +81,19 @@ public class AnalyzeCommand implements Callable<Integer> {
     private CommandSpec spec;
 
     private final ConfigLoader configLoader;
+    private final ConfigSynthesizer configSynthesizer;
+    private final ConfigSerializer configSerializer;
     private final HotspotAnalyzer analyzer;
     private final OutputDispatcher outputDispatcher;
 
     public AnalyzeCommand(ConfigLoader configLoader,
+                          ConfigSynthesizer configSynthesizer,
+                          ConfigSerializer configSerializer,
                           HotspotAnalyzer analyzer,
                           OutputDispatcher outputDispatcher) {
         this.configLoader = configLoader;
+        this.configSynthesizer = configSynthesizer;
+        this.configSerializer = configSerializer;
         this.analyzer = analyzer;
         this.outputDispatcher = outputDispatcher;
     }
@@ -80,15 +103,51 @@ public class AnalyzeCommand implements Callable<Integer> {
         PrintWriter out = spec.commandLine().getOut();
         PrintWriter err = spec.commandLine().getErr();
 
-        if (!Files.isRegularFile(configPath)) {
-            err.println("ERROR: configuration file not found: " + configPath);
+        // 1. Preflight validation (before any I/O).
+        if (configPath != null && path != null) {
+            err.println("ERROR: --config and [path] are mutually exclusive.");
+            return EXIT_FAILURE;
+        }
+        if (configPath != null && printConfig) {
+            err.println("ERROR: --print-config applies only to zero-config mode (remove --config).");
             return EXIT_FAILURE;
         }
 
+        // 2. Build the config.
+        AnalysisConfig config;
+        boolean zeroConfig = configPath == null;
         try {
-            AnalysisConfig config = configLoader.load(configPath);
+            if (zeroConfig) {
+                Path base = (path != null) ? path : Path.of("").toAbsolutePath();
+                config = configSynthesizer.synthesize(base);
+                if (printConfig) {
+                    out.print(configSerializer.serialize(config));
+                    out.flush();
+                    return EXIT_OK;
+                }
+                if (!quiet) {
+                    printDetectionSummary(err, config);
+                }
+            } else {
+                if (!Files.isRegularFile(configPath)) {
+                    err.println("ERROR: configuration file not found: " + configPath);
+                    return EXIT_FAILURE;
+                }
+                config = configLoader.load(configPath);
+            }
+        } catch (ConfigSynthesisException e) {
+            err.println("ERROR: " + e.getMessage());
+            return EXIT_FAILURE;
+        } catch (ConfigLoadException e) {
+            err.println("ERROR: invalid configuration: " + e.getMessage());
+            return EXIT_FAILURE;
+        }
+
+        // 3. Analyse.
+        try {
             AnalysisResult result = analyzer.analyze(config);
-            boolean apiEnabled = config.analysis().apiAnalysis() != null && config.analysis().apiAnalysis().enabled();
+            boolean apiEnabled = config.analysis().apiAnalysis() != null
+                    && config.analysis().apiAnalysis().enabled();
             boolean excludeCoverage = config.analysis().scoring() != null
                     && Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
             outputDispatcher.dispatch(result, config.output(), apiEnabled, excludeCoverage);
@@ -100,9 +159,6 @@ public class AnalyzeCommand implements Callable<Integer> {
                 return EXIT_STRICT_EMPTY;
             }
             return EXIT_OK;
-        } catch (ConfigLoadException e) {
-            err.println("ERROR: invalid configuration: " + e.getMessage());
-            return EXIT_FAILURE;
         } catch (UnsupportedOperationException e) {
             err.println("ERROR: " + e.getMessage());
             return EXIT_FAILURE;
@@ -114,6 +170,22 @@ public class AnalyzeCommand implements Callable<Integer> {
 
     private static boolean isEmpty(AnalysisResult result) {
         return result.meta().totalCommits() == 0 || result.meta().totalFiles() == 0;
+    }
+
+    private static void printDetectionSummary(PrintWriter err, AnalysisConfig config) {
+        String include = config.analysis().scope().include().get(0);
+        boolean multiModule = include.startsWith("**/");
+        String jacoco = config.analysis().jacocoReportPath();
+        boolean api = config.analysis().apiAnalysis() != null
+                && config.analysis().apiAnalysis().enabled();
+        err.println("Detected (zero-config):");
+        err.println("  Repo:           " + config.analysis().target().path() + " (.git found)");
+        err.println("  Module layout:  " + (multiModule ? "multi-module (**/src/main/java)"
+                : "single-module (src/main/java)"));
+        err.println("  JaCoCo:         " + (jacoco != null ? jacoco : "none"));
+        err.println("  API analysis:   " + (api ? "ON (spring-web detected)"
+                : "OFF (no spring-web on build)"));
+        err.println("  → run with --print-config to save this as hotspot.yml");
     }
 
     private static void printStrictFailure(PrintWriter err, AnalysisResult result) {

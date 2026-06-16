@@ -22,27 +22,26 @@ import picocli.CommandLine.IFactory;
 @SpringBootApplication
 public class HotspotApplication implements CommandLineRunner, ExitCodeGenerator {
 
-    private final IFactory picocliFactory;
-    private final HotspotCommand rootCommand;
-    private final AnalyzeCommand analyzeCommand;
-    private final InitCommand initCommand;
+    // Built once at construction (not per run): the command beans are Spring
+    // singletons, so picocli must capture their clean initial @Option/@Parameters
+    // values once. Rebuilding the CommandLine on every run() would re-capture the
+    // previous run's leftover field values as "initial", leaking option state
+    // across invocations (visible when one process issues several commands, e.g.
+    // the @SpringBootTest end-to-end suite).
+    private final CommandLine cli;
     private int exitCode = 0;
 
     public HotspotApplication(IFactory picocliFactory,
                               HotspotCommand rootCommand,
                               AnalyzeCommand analyzeCommand,
                               InitCommand initCommand) {
-        this.picocliFactory = picocliFactory;
-        this.rootCommand = rootCommand;
-        this.analyzeCommand = analyzeCommand;
-        this.initCommand = initCommand;
+        this.cli = new CommandLine(rootCommand, picocliFactory)
+                .addSubcommand("analyze", analyzeCommand)
+                .addSubcommand("init", initCommand);
     }
 
     @Override
     public void run(String... args) {
-        CommandLine cli = new CommandLine(rootCommand, picocliFactory)
-                .addSubcommand("analyze", analyzeCommand)
-                .addSubcommand("init", initCommand);
         this.exitCode = cli.execute(args);
     }
 
