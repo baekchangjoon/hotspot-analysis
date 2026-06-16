@@ -148,7 +148,7 @@ absolute.
 
 | Field | Rule |
 |---|---|
-| `target` | `type = local-git`, `path = base`. **If `base/.git` does not exist (as either a file or a directory) → error.** A `.git` *file* is valid: linked worktrees and submodules store a `gitdir:` pointer file, and JGit `Git.open(base)` (used by `LocalGitProvider`) opens these correctly. No upward walk. |
+| `target` | `type = local-git`, `path = base`. **If `base/.git` does not exist (as either a file or a directory) → error.** A `.git` *file* is valid: linked worktrees and submodules store a `gitdir:` pointer file. (Implementation note: JGit's `Git.open`/`findGitDir` do **not** resolve a worktree's `commondir`, so `LocalGitProvider` resolves the pointer + commondir manually — see the `fix(vcs)` commit.) No upward walk. |
 | `window.days` | `365` (fixed default; matches the template's safe default). |
 | `scope.granularity` | `[file, method]`. |
 | `scope.include` | If `base/src/main/java` is a directory → `["src/main/java/**/*.java"]` (single module). Else if any `src/main/java` directory exists below base (bounded scan, see below) → `["**/src/main/java/**/*.java"]` (multi-module). Else → **error**. |
