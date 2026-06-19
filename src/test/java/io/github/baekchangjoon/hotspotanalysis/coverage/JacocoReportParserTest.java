@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 class JacocoReportParserTest {
 
@@ -106,5 +107,44 @@ class JacocoReportParserTest {
 
         assertThat(parser.getFileCoverage("AnyFile.java")).isZero();
         assertThat(parser.getMethodCoverage("AnyFile.java", 1, 10)).isZero();
+    }
+
+    @Test
+    @DisplayName("hasData reflects whether the report yielded coverage: true for a valid report")
+    void hasDataTrueForValidReport(@TempDir Path tempDir) throws Exception {
+        Path good = tempDir.resolve("good.xml");
+        Files.writeString(good, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(good);
+        assertThat(parser.hasData()).isTrue();
+    }
+
+    @Test
+    @DisplayName("malformed XML is swallowed without throwing and leaves hasData false (no coverage)")
+    void hasDataFalseForMalformedReport(@TempDir Path tempDir) throws Exception {
+        Path bad = tempDir.resolve("bad.xml");
+        // Truncated / unclosed XML: SAX parsing must fail, but parse() must not throw.
+        Files.writeString(bad, "<report><package><sourcefile name=\"Foo.java\"><line nr=\"5\" ci=\"1\"");
+
+        JacocoReportParser parser = new JacocoReportParser();
+        assertThatCode(() -> parser.parse(bad)).doesNotThrowAnyException();
+        assertThat(parser.hasData()).isFalse();
+    }
+
+    @Test
+    @DisplayName("missing report file leaves hasData false")
+    void hasDataFalseForMissingFile() {
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(Path.of("nonexistent.xml"));
+        assertThat(parser.hasData()).isFalse();
     }
 }

@@ -90,6 +90,15 @@ if ! command -v java >/dev/null 2>&1; then
   echo "ERROR: hotspot needs a JDK 21+ runtime, but 'java' is not on PATH." >&2
   exit 1
 fi
+_raw="\$(java -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/')"
+_major="\${_raw%%.*}"
+if [ "\$_major" = "1" ]; then
+  _major="\$(java -version 2>&1 | head -1 | sed -E 's/.*version "1\.([0-9]+).*/\1/')"
+fi
+if printf '%s' "\$_major" | grep -qE '^[0-9]+\$' && [ "\$_major" -lt 21 ]; then
+  echo "ERROR: hotspot needs JDK 21+, but found Java \$_major. Install JDK 21 or use Docker." >&2
+  exit 1
+fi
 exec java -jar "$JAR_PATH" "\$@"
 EOF
 chmod +x "$WRAPPER"

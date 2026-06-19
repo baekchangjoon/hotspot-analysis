@@ -34,8 +34,8 @@ The project currently delivers a CLI tool (file + method scoring, four output fo
 | GitHub repo | https://github.com/baekchangjoon/hotspot-analysis |
 | Default branch | `main` |
 | Recent PRs | **#1** Phase 1 CLI + CI (merged), **#2** SESSION-HANDOFF.md (merged), **#3** HTML output + CI demo artifact (verify status with `gh pr list --state all`) |
-| Latest fat jar | `build/libs/hotspot-0.1.0-SNAPSHOT.jar` (Java 21) |
-| Test suite | **145 tests**, 0 failures, ~10 s |
+| Latest fat jar | `build/libs/hotspot-*.jar` (version per `build.gradle.kts`, currently 0.1.4; Java 21) |
+| Test suite | **251 tests**, 0 failures, ~10 s |
 | Output formats | `CSV`, `YAML`, `MD`, **`HTML`** (self-contained, sortable, filterable, XSS-safe) |
 | CI | `.github/workflows/ci.yml` — push / PR / daily cron (`0 0 * * *` UTC) / `workflow_dispatch`. Uploads `hotspot-demo-report-<run>` artifact with all four output formats so reviewers can open `hotspots.html` directly. |
 
@@ -224,7 +224,7 @@ Verified by replaying the README walkthrough end-to-end against
 | **C3** | No bot-commit filtering (Dependabot, Renovate) | L | Current limitation. Would need a config flag `analysis.commitFilter.botPatterns` or similar. |
 | **C4** | Coverage integration (JaCoCo XML) is implemented as the composite-score coverage multiplier | — | Auto-detected via zero-config path lookup. Works in composite mode. |
 | **C5** | Gradle 8.10 deprecation warnings | S | Visible during every `./gradlew build`. Validate with `./gradlew --warning-mode all build`. Confirm spring-boot plugin compatibility before bumping to Gradle 9. |
-| **C6** | Daily cron trigger | S | Active only after PR #1 is merged into `main` (GitHub Actions policy). After merge, expect a run shortly after `00:00 UTC` (= 09:00 KST). |
+| **C6** | Daily cron trigger | — | PR #1 is merged, so the daily cron is active; expect a run shortly after `00:00 UTC` (= 09:00 KST). |
 | **C7** | Output layout asymmetry (CSV split, YAML/MD/HTML combined) | S | Intentional. README documents it. If users vote for per-granularity YAML/MD/HTML, add `output.layout: combined \| per-granularity` option. |
 | **C7b** | HTML report deep-links to source | M | Currently rows carry `data-path`/`data-start-line`/`data-end-line` attributes but no clickable hyperlinks. Adding `output.html.repoUrl` + `branch` config would let the writer emit `https://github.com/.../blob/<branch>/<path>#L<start>-L<end>` URLs as proper anchors. |
 | **C8** | No `--scope` / `--window` CLI overrides for the YAML config | M | Currently config-only. Adding CLI overrides would help one-off triage runs (`hotspot analyze --window-days 90`). |
@@ -246,8 +246,8 @@ gh pr list --state all
 gh run list --limit 5
 
 # 3. Smoke-test the CLI
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar --version
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar init -o /tmp/hotspot.yml
+java -jar build/libs/hotspot-*.jar --version
+java -jar build/libs/hotspot-*.jar init -o /tmp/hotspot.yml
 
 # 4. Real run against ftgo (good "is it alive" check)
 cat > /tmp/hotspot.yml <<'YAML'
@@ -258,10 +258,10 @@ analysis:
     granularity: [file, method]
     include: ["**/src/main/java/**/*.java"]
     exclude: ["**/test/**", "**/build/**", "**/buildSrc/**"]
-  scoring: { formula: simple }
+  scoring: { decayHalfLifeDays: 90 }
 output: { formats: [csv, yaml, md], path: /tmp/hot-out, topN: 10 }
 YAML
-java -jar build/libs/hotspot-0.1.0-SNAPSHOT.jar analyze --config /tmp/hotspot.yml --strict
+java -jar build/libs/hotspot-*.jar analyze --config /tmp/hotspot.yml --strict
 ```
 
 Expected output:
@@ -281,18 +281,16 @@ If you see `Commits: 0 / Files: 0`, see README → Troubleshooting.
 
 ## 10. Recommended next steps (priority-ordered)
 
-1. **Merge PR #1 into `main`** to activate the daily cron CI. Squash merge
-   with `gh pr merge 1 --squash --delete-branch`.
-2. **C6 verification** — within 24 h of merge, confirm at least one
-   `schedule` event under `gh run list --workflow=CI`.
-3. **Concrete improvement candidates** (in increasing effort):
-   - (a) `--window-days` / `--top-n` CLI overrides → simple Picocli option
-     additions + tests. ~2 h.
-   - (b) Bot-commit filter (`analysis.commitFilter`) → config record +
-     `CommitFilter` interface + `LocalGitProvider` integration. ~½ day.
-   - (c) End-to-end GitHub target (C1) → cloned-temp-dir adapter wired into
-     `VcsProviderFactory`. ~1 day.
-4. **Gradle 9 compatibility check** (C5) before any of the above. ~½ h.
+PR #1 (Phase 1 CLI + CI) is merged and the daily cron is active, so the
+remaining candidates (in increasing effort) are:
+
+1. `--window-days` / `--top-n` CLI overrides → simple Picocli option
+   additions + tests. ~2 h.
+2. Bot-commit filter (`analysis.commitFilter`) → config record +
+   `CommitFilter` interface + `LocalGitProvider` integration. ~½ day.
+3. End-to-end GitHub target (C1) → cloned-temp-dir adapter wired into
+   `VcsProviderFactory`. ~1 day.
+4. Gradle 9 compatibility check (C5). ~½ h.
 
 ---
 
@@ -304,7 +302,7 @@ If you see `Commits: 0 / Files: 0`, see README → Troubleshooting.
 | Add a new YAML config field | `config/*Config.java` (record), `ConfigLoaderTest.java`, README "Configuration schema" table, `templates/hotspot.example.yml` |
 | Add a new output format | new `output/*OutputWriter.java` impl, register as `@Component`, add format key to `OutputConfig.OutputFormat`, README "Outputs" |
 | Add a new VCS source | new package under `vcs/`, implement `VcsProvider`, register in `VcsProviderFactory`, add contract test mirroring `VcsProviderContract` |
-| Add a new scoring formula | `analysis/HotspotScoreCalculator.java` (extend switch), `ScoringConfig.Formula` enum, calculator test |
+| Adjust the scoring model | `analysis/HotspotScoreCalculator.java` (simple / composite / multiplier methods), `analysis/HotspotAnalyzer.java`, calculator test — the unified model has no formula enum or switch |
 
 ---
 

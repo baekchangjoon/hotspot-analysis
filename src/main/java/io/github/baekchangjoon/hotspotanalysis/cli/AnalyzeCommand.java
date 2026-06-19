@@ -187,6 +187,10 @@ public class AnalyzeCommand implements Callable<Integer> {
         err.println("  JaCoCo:         " + (jacoco != null ? jacoco : "none"));
         err.println("  API analysis:   " + (api ? "ON (spring-web detected)"
                 : "OFF (no spring-web on build)"));
+        if (!api) {
+            err.println("                  (Spring web app hidden behind a BOM/version catalog? "
+                    + "enable it via --print-config + analysis.apiAnalysis.enabled)");
+        }
         err.println("  → run with --print-config to save this as hotspot.yml");
     }
 

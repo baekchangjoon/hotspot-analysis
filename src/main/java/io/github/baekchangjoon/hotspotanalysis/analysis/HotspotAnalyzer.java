@@ -156,6 +156,14 @@ public class HotspotAnalyzer {
                 jacocoSupplied = false;
             } else {
                 jacocoParser.parse(p);
+                if (!jacocoParser.hasData()) {
+                    // The report existed but yielded no coverage (corrupt XML, wrong
+                    // format, or empty). Treating that as 0% covered would inflate
+                    // every multiplier to 1/0.1 = 10. Fall back to no-coverage scoring.
+                    System.err.println("WARNING: JaCoCo report at " + p
+                            + " produced no coverage data — proceeding WITHOUT coverage (multiplier = 1.0).");
+                    jacocoSupplied = false;
+                }
             }
         }
 

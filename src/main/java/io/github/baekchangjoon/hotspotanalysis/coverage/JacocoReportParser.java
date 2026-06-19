@@ -54,8 +54,19 @@ public class JacocoReportParser {
                 }
             }
         } catch (Exception e) {
-            // Ignore parse errors and leave coverage maps empty
+            // A malformed/corrupt report must not abort the whole run, but it also
+            // must not pass silently: an empty coverage map inflates every coverage
+            // multiplier to its 1/0.1 = 10 maximum. Warn and let callers fall back
+            // via hasData() so the scores stay trustworthy.
+            lineCoverageMap.clear();
+            System.err.println("WARNING: failed to parse JaCoCo XML report at " + xmlPath
+                    + " (" + e.getMessage() + ") — proceeding WITHOUT coverage.");
         }
+    }
+
+    /** True when parsing produced at least one file's line-coverage data. */
+    public boolean hasData() {
+        return !lineCoverageMap.isEmpty();
     }
 
     public LineCounts getFileLineCounts(String filePath) {

@@ -81,6 +81,11 @@ All external dependencies (JGit, JavaParser, GitHub API) are isolated behind ada
 
 ## 3. Directory Layout
 
+> Note: the tree below is the Phase 1 *draft* plan. The implemented paths differ —
+> the Java package is `io.github.baekchangjoon.hotspotanalysis` (not `com.baek.hotspot`),
+> and the bundled sample config lives at `src/main/resources/templates/hotspot.example.yml`
+> (not `config/hotspot.example.yml`).
+
 ```
 hotspot-analysis/
 ├── build.gradle.kts

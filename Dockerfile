@@ -1,6 +1,6 @@
 # Multi-stage build: compile the fat jar, then ship a slim JRE runtime.
 # Run against a target repo by mounting it at /work:
-#   docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:0.1.0 \
+#   docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest \
 #     analyze --config /work/hotspot.yml
 FROM eclipse-temurin:21-jdk AS build
 WORKDIR /src
