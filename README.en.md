@@ -47,7 +47,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
 > No build needed — the skill's `scripts/get-jar.sh` downloads the released jar
-> (only a JDK 21 runtime is required). For no JDK at all, use the Docker path above.
+> (only a JDK 21 runtime is required). For no JDK at all, use the Docker path in the Quick start below.
 
 ---
 
@@ -114,7 +114,12 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 > To build from source instead (optional): `./gradlew bootJar` →
 > `build/libs/hotspot-*.jar`. Swap `hotspot.jar` below for that path.
 
-> **No JDK — Docker.** Mount the target repo at `/work`:
+> **No JDK — Docker.** Mount the target repo at `/work`.
+> With no config file (zero-config):
+> ```bash
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest analyze
+> ```
+> Or, for fine-grained control with a config file:
 > ```bash
 > docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest \
 >   analyze --config /work/hotspot.yml
@@ -140,8 +145,10 @@ java -jar hotspot.jar analyze --print-config > hotspot.yml
 > Run from the repository **root**. A subdirectory or non-repo path errors and
 > tells you to pass the repo root as `[path]` (or use `--config`). Linked git
 > worktrees are supported. Per-submodule JaCoCo reports in multi-module builds
-> are not aggregated (only the root-level report is detected). Use `--config`
-> (below) for fine-grained control.
+> are not aggregated (only the root-level report is detected). Zero-config uses
+> safe defaults such as `topN: 50` (unlike the `20` in the manual example below);
+> inspect or adjust them with `--print-config`. Use `--config` (below) for
+> fine-grained control.
 
 ### 2. Generate a sample config
 
@@ -215,19 +222,22 @@ Outputs:
 
 ```
 hotspot-report/
-├── file_hotspots.csv      ← CSV is split per granularity (9 columns for files, 14 for methods)
+├── file_hotspots.csv      ← CSV is split per granularity (10 columns for files, 15 for methods)
 ├── method_hotspots.csv
 ├── hotspots.yml           ← YAML/MD/HTML bundle both granularities in one document
 ├── hotspots.md
 └── hotspots.html          ← open in any browser — sortable columns + filter box
+#   When apiAnalysis.enabled=true and apiLayout is STANDALONE | BOTH, these are added:
+#   api_hotspots.csv, shared_components.csv, api_report.{yml,md,html}
+#   When output.coverageBreakdown=true, coverage_breakdown.yml is emitted too.
 ```
 
 > The console also prints the top hotspots (by composite score) and, when HTML
 > is emitted, the absolute path to `hotspots.html`. Turn it off with `--quiet`.
 
 > **Why are CSVs split but YAML/MD/HTML combined?**
-> CSV is a single-header tabular format and the file (9 cols) and method
-> (14 cols) reports can't share a header, so they are emitted as two files
+> CSV is a single-header tabular format and the file (10 cols) and method
+> (15 cols) reports can't share a header, so they are emitted as two files
 > for Excel/Sheets ease of use. YAML, Markdown, and HTML are document
 > formats that naturally hold both tables in one file — easier to attach
 > to a PR (`.md`), feed downstream automation (`.yml`), or open in a browser
@@ -331,7 +341,11 @@ Every report now carries **two scores** and **four input factors** side by side,
 
 Rows are sorted by **Composite Score DESC** (ties broken by path / canonical signature).
 
-CSVs split per granularity (9 columns for files, 14 for methods); YAML/MD/HTML bundle every granularity into one document.
+CSVs split per granularity (10 columns for files, 15 for methods); YAML/MD/HTML bundle every granularity into one document.
+CSV prefixes the factors above with two columns, `simple_rank` and `composite_rank` — so the
+`file_hotspots.csv` header is `simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score`,
+and `method_hotspots.csv` inserts `fqcn,method,parameters,file,start_line,end_line` for 15 columns.
+(With `excludeCoverage: true` the last two columns become `composite_score,line_coverage`.)
 
 > Per-granularity derivations — how Revisions / Recency Decay / Cognitive
 > Complexity / Coverage are measured and combined for **file / method / REST API
@@ -353,7 +367,8 @@ src/main/java/io/github/baekchangjoon/hotspotanalysis/
   vcs/                        ← VcsProvider + LocalGit / GitHub impls
   parser/                     ← JavaParser-based method extraction
   analysis/                   ← Revisions / LOC / Score / Orchestrator
-  output/                     ← CSV / YAML / MD writers
+  coverage/                   ← JaCoCo XML parser
+  output/                     ← CSV / YAML / MD / HTML writers
 src/main/resources/
   application.yml             ← Spring Boot logging config
   templates/hotspot.example.yml ← bundled sample for `hotspot init`
@@ -461,6 +476,12 @@ and point `target.type: local-git` at the working tree.
    locally and run with `target.type=local-git`.
 2. **Working-tree LOC**: LOC is read at HEAD, not at each historical commit
    (same simplification Tornhill makes in his book).
+3. **Merge commits**: change history is computed from each commit's diff against
+   its **first parent**. Changes that landed on the merged-in branch (without a
+   fast-forward) may therefore be missed in the revision/recency aggregates.
+4. **Source parse failures**: if any single `.java` file in scope fails to parse,
+   the whole analysis aborts (it does not emit partial results). Exclude
+   corrupt/non-standard sources via `scope.exclude`.
 
 See `docs/reports/*` for a per-task breakdown of these decisions and their
 alternatives.

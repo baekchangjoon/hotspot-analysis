@@ -46,7 +46,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
 > 스킬의 `scripts/get-jar.sh`가 릴리스 jar를 자동으로 내려받으므로 빌드는 필요
-> 없습니다(JDK 21 런타임만 필요). JDK 없이 쓰려면 위 Docker 경로를 쓰세요.
+> 없습니다(JDK 21 런타임만 필요). JDK 없이 쓰려면 아래 빠른 시작의 Docker 경로를 쓰세요.
 
 ---
 
@@ -111,7 +111,12 @@ curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/dow
 > 소스에서 빌드하려면(선택): `./gradlew bootJar` → `build/libs/hotspot-*.jar`.
 > 아래 예시의 `hotspot.jar`를 그 경로로 바꾸세요.
 
-> **JDK 없이 — Docker.** 분석 대상 저장소를 `/work`에 마운트해 실행합니다:
+> **JDK 없이 — Docker.** 분석 대상 저장소를 `/work`에 마운트해 실행합니다.
+> 설정 파일 없이 바로(zero-config):
+> ```bash
+> docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest analyze
+> ```
+> 설정 파일로 세밀하게 제어하려면:
 > ```bash
 > docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest \
 >   analyze --config /work/hotspot.yml
@@ -136,8 +141,9 @@ java -jar hotspot.jar analyze --print-config > hotspot.yml
 > 저장소 **루트**에서 실행하세요. 하위 디렉터리나 비-git 경로에서는 오류가 나며,
 > 루트 경로를 `[path]`로 넘기거나 `--config`를 쓰라는 안내가 출력됩니다. linked
 > git worktree도 지원합니다. 멀티 모듈에서 서브모듈별 JaCoCo 리포트는 자동
-> 합산하지 않습니다(루트 레벨만 탐지). 세밀한 제어가 필요하면 아래의
-> `--config` 방식을 쓰세요.
+> 합산하지 않습니다(루트 레벨만 탐지). zero-config는 `topN: 50` 등 안전한
+> 기본값을 쓰며(아래 수동 예시의 `20`과 다름), `--print-config`로 확인·조정할
+> 수 있습니다. 세밀한 제어가 필요하면 아래의 `--config` 방식을 쓰세요.
 
 ### 2. 샘플 설정 생성
 
@@ -210,18 +216,21 @@ java -jar hotspot.jar analyze --config hotspot.yml
 
 ```
 hotspot-report/
-├── file_hotspots.csv      ← CSV는 단위별로 분리(파일 9열, 메서드 14열)
+├── file_hotspots.csv      ← CSV는 단위별로 분리(파일 10열, 메서드 15열)
 ├── method_hotspots.csv
 ├── hotspots.yml           ← YAML/MD/HTML은 두 단위를 한 문서에 묶음
 ├── hotspots.md
 └── hotspots.html          ← 아무 브라우저에서나 열기 — 정렬 가능 열 + 필터 박스
+#   apiAnalysis.enabled=true 이고 apiLayout이 STANDALONE | BOTH면 다음이 추가됩니다:
+#   api_hotspots.csv, shared_components.csv, api_report.{yml,md,html}
+#   output.coverageBreakdown=true 이면 coverage_breakdown.yml 도 함께 출력됩니다.
 ```
 
 > 콘솔에는 상위 핫스팟(복합 점수 기준)과, HTML을 출력했다면 `hotspots.html`의
 > 절대 경로가 함께 표시됩니다. `--quiet`로 끌 수 있습니다.
 
 > **CSV는 분리하고 YAML/MD/HTML은 합치는 이유?**
-> CSV는 단일 헤더의 표 형식이라 파일(9열)과 메서드(14열) 리포트가 헤더를
+> CSV는 단일 헤더의 표 형식이라 파일(10열)과 메서드(15열) 리포트가 헤더를
 > 공유할 수 없어, 엑셀/시트 편의를 위해 두 파일로 내보냅니다. YAML, Markdown,
 > HTML은 두 표를 자연스럽게 한 파일에 담는 문서 형식이라 — PR에 첨부(`.md`),
 > 다운스트림 자동화에 투입(`.yml`), 또는 자체 완결형 증거 페이지로 브라우저에서
@@ -324,7 +333,11 @@ Commands:
 
 행은 **Composite Score 내림차순**으로 정렬됩니다(동점은 경로 / 표준 시그니처로 처리).
 
-CSV는 단위별로 분리(파일 9열, 메서드 14열); YAML/MD/HTML은 모든 단위를 한 문서에 묶습니다.
+CSV는 단위별로 분리(파일 10열, 메서드 15열); YAML/MD/HTML은 모든 단위를 한 문서에 묶습니다.
+CSV는 위 표의 요인 앞에 `simple_rank`, `composite_rank` 두 열이 먼저 옵니다 — 즉
+`file_hotspots.csv` 헤더는 `simple_rank,composite_rank,path,loc,revisions,simple_score,recency_decay,cognitive_complexity,coverage_multiplier,composite_score`이며,
+`method_hotspots.csv`는 그 사이에 `fqcn,method,parameters,file,start_line,end_line`을 더한 15열입니다.
+(`excludeCoverage: true`면 마지막 두 열이 `composite_score,line_coverage`로 바뀝니다.)
 
 > 단위별 산출 방식 — **파일 / 메서드 / REST API 엔드포인트 / 공유 컴포넌트**마다
 > Revisions / Recency Decay / Cognitive Complexity / Coverage를 어떻게 측정하고
@@ -346,7 +359,8 @@ src/main/java/io/github/baekchangjoon/hotspotanalysis/
   vcs/                        ← VcsProvider + LocalGit / GitHub 구현
   parser/                     ← JavaParser 기반 메서드 추출
   analysis/                   ← Revisions / LOC / Score / Orchestrator
-  output/                     ← CSV / YAML / MD 라이터
+  coverage/                   ← JaCoCo XML 파서
+  output/                     ← CSV / YAML / MD / HTML 라이터
 src/main/resources/
   application.yml             ← Spring Boot 로깅 설정
   templates/hotspot.example.yml ← `hotspot init`용 번들 샘플
@@ -452,6 +466,12 @@ end-to-end로 연결**되어 있고, GitHub 프로바이더는 WireMock 계약 �
    `target.type=local-git`으로 실행하세요.
 2. **작업 트리 LOC**: LOC는 각 역사적 커밋이 아니라 HEAD에서 읽습니다
    (Tornhill이 책에서 하는 동일한 단순화).
+3. **Merge 커밋**: 변경 이력은 각 커밋의 **첫 번째 부모**와의 diff로 계산합니다.
+   따라서 fast-forward 없이 머지된 브랜치 쪽 변경은 revision/recency 집계에서
+   누락될 수 있습니다.
+4. **소스 파싱 실패**: 스코프 내 `.java` 파일 하나라도 파싱에 실패하면 분석
+   전체가 중단됩니다(부분 결과를 내지 않음). 손상·비표준 소스는 `scope.exclude`로
+   제외하세요.
 
 이 결정들과 대안의 태스크별 분석은 `docs/reports/*`를 참고하세요.
 

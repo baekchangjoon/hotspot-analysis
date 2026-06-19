@@ -81,6 +81,11 @@
 
 ## 3. Directory Layout
 
+> 참고: 아래 트리는 Phase 1 *초안* 계획입니다. 실제 구현 경로는 다릅니다 —
+> Java 패키지는 `io.github.baekchangjoon.hotspotanalysis`이며(`com.baek.hotspot` 아님),
+> 번들 샘플 설정은 `src/main/resources/templates/hotspot.example.yml`에 있습니다
+> (`config/hotspot.example.yml` 아님).
+
 ```
 hotspot-analysis/
 ├── build.gradle.kts
