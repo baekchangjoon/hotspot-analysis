@@ -230,6 +230,54 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("all-zero jacoco report (no executed lines) → coverage disabled (multiplier 1.0), not a 10x penalty")
+    void shouldNotPenalizeWhenJacocoReportHasNoCoveredLines() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Hot.java",
+                    "package com.example;\npublic class Hot {\n  int m(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, T1, "c1");
+        }
+
+        // A structurally valid report whose lines are ALL ci="0" — what JaCoCo
+        // emits when the report task runs without test execution data (stale
+        // .exec, tests skipped). Trusting it would inflate every coverage
+        // multiplier to its 1/0.1 = 10 maximum; the analyzer must instead
+        // disable coverage (multiplier 1.0) and warn.
+        Path report = repoRoot.resolve("jacoco-all-zero.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Hot.java">
+                            <line nr="3" mi="4" ci="0" mb="2" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(
+                TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(),
+                null, report.toString());
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0);
+
+        AnalysisResult result = analyzer.analyze(new AnalysisConfig(section, output));
+
+        assertThat(result.fileHotspots()).isNotEmpty();
+        assertThat(result.fileHotspots())
+                .allSatisfy(f -> assertThat(f.coverageMultiplier()).isEqualTo(1.0));
+        assertThat(result.methodHotspots())
+                .allSatisfy(m -> assertThat(m.coverageMultiplier()).isEqualTo(1.0));
+    }
+
+    @Test
     @DisplayName("rejects github target with a clear remediation message in Phase 1")
     void shouldRejectGithubTargetInPhase1() {
         AnalysisConfig githubConfig = githubTargetConfig();

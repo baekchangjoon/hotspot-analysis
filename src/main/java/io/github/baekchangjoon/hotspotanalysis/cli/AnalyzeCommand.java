@@ -69,6 +69,11 @@ public class AnalyzeCommand implements Callable<Integer> {
                     + "(zero-config mode only).")
     private boolean printConfig;
 
+    @Option(names = {"-o", "--output-dir"},
+            description = "Directory to write the reports into. Overrides output.path "
+                    + "from the config file; in zero-config mode the default is ./hotspot-report.")
+    private Path outputDir;
+
     @Option(names = {"-q", "--quiet"},
             description = "Suppress the summary output on stdout.")
     private boolean quiet;
@@ -110,6 +115,13 @@ public class AnalyzeCommand implements Callable<Integer> {
             err.println("ERROR: --config and [path] are mutually exclusive.");
             return EXIT_FAILURE;
         }
+        if (outputDir != null && outputDir.toString().isBlank()) {
+            // Guards the `-o "$OUT_DIR"` case with OUT_DIR unset: a blank path
+            // would bypass output.path's @NotBlank (only enforced by
+            // ConfigLoader) and scatter reports over the cwd.
+            err.println("ERROR: --output-dir must not be blank.");
+            return EXIT_FAILURE;
+        }
         if (configPath != null && printConfig) {
             err.println("ERROR: --print-config applies only to zero-config mode (remove --config).");
             return EXIT_FAILURE;
@@ -121,7 +133,7 @@ public class AnalyzeCommand implements Callable<Integer> {
         try {
             if (zeroConfig) {
                 Path base = (path != null) ? path : Path.of("").toAbsolutePath();
-                config = configSynthesizer.synthesize(base);
+                config = withOutputDir(configSynthesizer.synthesize(base));
                 if (printConfig) {
                     out.print(configSerializer.serialize(config));
                     out.flush();
@@ -135,7 +147,7 @@ public class AnalyzeCommand implements Callable<Integer> {
                     err.println("ERROR: configuration file not found: " + configPath);
                     return EXIT_FAILURE;
                 }
-                config = configLoader.load(configPath);
+                config = withOutputDir(configLoader.load(configPath));
             }
         } catch (ConfigSynthesisException | ConfigSerializeException e) {
             err.println("ERROR: " + e.getMessage());
@@ -168,6 +180,20 @@ public class AnalyzeCommand implements Callable<Integer> {
             err.println("ERROR: analysis failed: " + e.getMessage());
             return EXIT_FAILURE;
         }
+    }
+
+    /**
+     * Applies {@code -o/--output-dir} to the just-built config — before
+     * {@code --print-config} runs, so the printed YAML matches the effective
+     * configuration of the command that was actually typed.
+     */
+    private AnalysisConfig withOutputDir(AnalysisConfig config) {
+        if (outputDir == null) {
+            return config;
+        }
+        OutputConfig o = config.output();
+        return new AnalysisConfig(config.analysis(), new OutputConfig(
+                o.formats(), outputDir.toString(), o.topN(), o.apiLayout(), o.coverageBreakdown()));
     }
 
     private static boolean isEmpty(AnalysisResult result) {

@@ -147,4 +147,47 @@ class JacocoReportParserTest {
         parser.parse(Path.of("nonexistent.xml"));
         assertThat(parser.hasData()).isFalse();
     }
+
+    @Test
+    @DisplayName("hasCoveredLines is false for an all-zero report (stale/no exec data) and true otherwise")
+    void hasCoveredLinesDistinguishesAllZeroReports(@TempDir Path tempDir) throws Exception {
+        // A report generated without test execution data lists every line with
+        // ci="0" — structurally valid, but carrying no coverage signal.
+        Path allZero = tempDir.resolve("all-zero.xml");
+        Files.writeString(allZero, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="3" ci="0" mb="0" cb="0"/>
+                            <line nr="6" mi="1" ci="0" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser zeroParser = new JacocoReportParser();
+        zeroParser.parse(allZero);
+        assertThat(zeroParser.hasData()).isTrue();
+        assertThat(zeroParser.hasCoveredLines()).isFalse();
+
+        Path partial = tempDir.resolve("partial.xml");
+        Files.writeString(partial, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                            <line nr="6" mi="1" ci="0" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser partialParser = new JacocoReportParser();
+        partialParser.parse(partial);
+        assertThat(partialParser.hasCoveredLines()).isTrue();
+
+        JacocoReportParser emptyParser = new JacocoReportParser();
+        emptyParser.parse(Path.of("nonexistent.xml"));
+        assertThat(emptyParser.hasCoveredLines()).isFalse();
+    }
 }

@@ -69,6 +69,17 @@ public class JacocoReportParser {
         return !lineCoverageMap.isEmpty();
     }
 
+    /**
+     * True when at least one parsed line was actually executed. A structurally
+     * valid report whose lines are all {@code ci="0"} (generated without test
+     * execution data — stale .exec, tests skipped) passes {@link #hasData()}
+     * but carries no coverage signal.
+     */
+    public boolean hasCoveredLines() {
+        return lineCoverageMap.values().stream()
+                .anyMatch(lines -> lines.values().stream().anyMatch(Boolean::booleanValue));
+    }
+
     public LineCounts getFileLineCounts(String filePath) {
         String normalizedPath = normalizePath(filePath);
         Map<Integer, Boolean> lines = findCoverageForPath(normalizedPath);
