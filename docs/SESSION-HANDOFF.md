@@ -34,7 +34,7 @@ The project currently delivers a CLI tool (file + method scoring, four output fo
 | GitHub repo | https://github.com/baekchangjoon/hotspot-analysis |
 | Default branch | `main` |
 | Recent PRs | **#1** Phase 1 CLI + CI (merged), **#2** SESSION-HANDOFF.md (merged), **#3** HTML output + CI demo artifact (verify status with `gh pr list --state all`) |
-| Latest fat jar | `build/libs/hotspot-*.jar` (version per `build.gradle.kts`, currently 0.1.4; Java 21) |
+| Latest fat jar | `build/libs/hotspot-*.jar` (version per `build.gradle.kts`; Java 21) |
 | Test suite | **251 tests**, 0 failures, ~10 s |
 | Output formats | `CSV`, `YAML`, `MD`, **`HTML`** (self-contained, sortable, filterable, XSS-safe) |
 | CI | `.github/workflows/ci.yml` — push / PR / daily cron (`0 0 * * *` UTC) / `workflow_dispatch`. Uploads `hotspot-demo-report-<run>` artifact with all four output formats so reviewers can open `hotspots.html` directly. |

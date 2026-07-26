@@ -126,7 +126,7 @@ tar -xzf hotspot-*-macos-aarch64.tar.gz
 
 Download the self-contained runnable jar from the
 [latest Release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)
-(only a JDK 21 runtime is required):
+(only this manual path needs a JDK 21 runtime — for no JDK at all use the one-line install, brew, or archive paths above):
 
 ```bash
 curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
@@ -460,8 +460,10 @@ git -C <repo> log --since=<since> --until=<until> --name-only \
 ### `UnsupportedClassVersionError` when running the jar
 
 The bundled jar is compiled for Java 21. Even when the Gradle toolchain
-auto-provisioned 21 to *build* it, **running** still needs JDK 21+ on
-`PATH`:
+auto-provisioned 21 to *build* it, running it manually with `java -jar`
+still needs JDK 21+ on `PATH` (the `hotspot` wrapper, the skill, brew, and
+the self-contained archives resolve a runtime automatically, so they never
+hit this error):
 
 ```bash
 java -version            # must report 21 or later

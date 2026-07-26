@@ -330,6 +330,21 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.5** — **zero-config**: `analyze` now runs without a config file
+  (auto-detects git root, single/multi-module layout, JaCoCo report, Spring
+  API), takes an optional `[path]`, `--print-config` dumps the synthesized
+  config, the first run prints the top-3 hotspots + the report path, and
+  linked git worktrees are supported. A one-line installer
+  (`curl ... install.sh | bash`) provides the `hotspot` command. And the
+  JDK-21 friction is gone: `scripts/ensure-java.sh` (and the
+  `hotspot` wrapper installed by install.sh) finds an installed Java 21+ or
+  auto-downloads a sha256-verified Temurin 21 JRE; `brew install
+  baekchangjoon/tap/hotspot` installs with the JDK as a brew dependency; each
+  release ships self-contained `hotspot-<tag>-<os>-<arch>.tar.gz` archives
+  (bundled JRE, verified on 4 native CI runners before attach); an all-zero
+  JaCoCo report (no execution data) now warns and disables coverage instead
+  of silently inflating every multiplier to 10x; `analyze -o/--output-dir`
+  overrides the report directory.
 - **0.1.4** — endpoint coverage is now line-weighted (Σcovered/Σexecutable over
   the call graph) instead of a mean of per-method ratios, so a large untested
   method can no longer hide behind a small covered one; new opt-in
