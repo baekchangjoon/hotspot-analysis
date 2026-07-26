@@ -25,6 +25,11 @@ on:
         required: true
         type: string
         description: Existing release tag to (re)build assets for
+      bump_tap:
+        required: false
+        type: boolean
+        default: false
+        description: Also update the Homebrew tap formula to this tag
 
 permissions:
   contents: write
@@ -218,7 +223,7 @@ jobs:
   # prerelease-style tags so an RC never becomes `brew install hotspot`.
   bump-tap:
     needs: jar
-    if: github.event.inputs.tag == null || github.event.inputs.tag == ''
+    if: github.event.inputs.tag == null || github.event.inputs.tag == '' || github.event.inputs.bump_tap == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Resolve tag
