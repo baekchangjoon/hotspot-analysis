@@ -109,7 +109,7 @@ Java 21+ 해석 순서(첫 히트 사용):
 | REQ-003 | Must | **G**: java 없는 환경 **W**: 스킬 `run-analysis.sh`(→`ensure-java.sh`) 실행 **T**: JRE 자동 확보 후 분석이 완료된다. **SKILL.md의 명시적 명령("explicit form")도 `JAVA=$(scripts/ensure-java.sh)` 패턴으로 갱신**되고 Prerequisites의 "JDK 21+ 필수"가 자동 확보 안내로 바뀐다 | E2E-3 (java 없는 컨테이너에서 run-analysis.sh 실행) + DOC-1 | ✅ |
 | REQ-004 | Must | **G**: sha256 불일치(변조/손상) **W**: JRE 다운로드 **T**: 설치하지 않고 명확한 에러로 실패한다 | UT-1 (하네스: 체크섬 위조 후 실패 확인) | ✅ |
 | REQ-005 | Must | **G**: tap formula **W**: `brew style`+`brew audit`+`brew fetch` **T**: 모두 통과하고 sha가 릴리스 자산과 일치한다 | E2E-4 (로컬 brew 검증) | ✅ |
-| REQ-006 | Must | **G**: 릴리스 발행 **W**: `release-assets.yml` **T**: 4개 self-contained 아카이브가 자산으로 첨부되고, 추출 후 `bin/hotspot --version`이 동작한다(**4개 플랫폼 전부** 네이티브 러너 CI 검증 후에만 첨부) | E2E-5 (workflow_dispatch 드라이런 v0.1.4 + CI 검증 job green) | 🟡 |
+| REQ-006 | Must | **G**: 릴리스 발행 **W**: `release-assets.yml` **T**: 4개 self-contained 아카이브가 자산으로 첨부되고, 추출 후 `bin/hotspot --version`이 동작한다(**4개 플랫폼 전부** 네이티브 러너 CI 검증 후에만 첨부) | E2E-5 (workflow_dispatch 드라이런 v0.1.4 + CI 검증 job green) | ✅ |
 | REQ-007 | Should | **G**: 릴리스 발행 + `TAP_DEPLOY_KEY` 존재 **W**: `release-assets.yml`의 `bump-tap` job **T**: tap formula의 url/sha가 새 버전으로 갱신되고 `ruby -c` 통과 후 푸시된다; secret 없으면 경고 후 skip | E2E-6 (워크플로 lint + secret-부재 경로는 드라이런으로 확인; 실제 갱신은 다음 릴리스에서 검증) | 🟡 |
 | REQ-008 | Must | **G**: 문서 갱신 **W**: README/SKILL.md 대조 **T**: 새 설치 경로 3종이 실제 동작과 일치하게 기술된다 | DOC-1 (PR 문서동기화 게이트) | ✅ |
 | REQ-009 | Must | **G**: Adoptium API 도달 불가(오프라인/프록시 차단) **W**: JRE 다운로드 시도 **T**: 스택트레이스 없이 명확한 에러 + Docker 안내로 실패한다(기존 동작 대비 악화 없음) | E2E-7 (`docker run --network none` 컨테이너) | ✅ |
@@ -121,9 +121,8 @@ Java 21+ 해석 순서(첫 히트 사용):
   드라이런(workflow_dispatch)과 CI green으로 이번 PR의 수용 기준을 충족한다.
 - (리뷰 반영) 본 문서 작성과 병행해 `ensure-java.sh` 프로토타입이 먼저 작성·실측 검증되었다.
 - 상태 기준(2026-07-26 PR 시점): ✅ = 수용 테스트 실측 통과(하네스 10/10 + brew audit/fetch).
-  🟡 REQ-006 = 조립 스크립트를 컨테이너에서 그대로 실행해 4개 아카이브 생성 + 2개 플랫폼
-  (linux-aarch64, macos-aarch64)은 로컬 실행 검증까지 완료; 4-러너 CI 검증은 머지 후
-  `workflow_dispatch` 드라이런(v0.1.4)으로 확정한다.
+  ✅ REQ-006 = 2026-07-27 workflow_dispatch 드라이런(v0.1.4, run 30208306843)에서
+  4-러너 검증 전부 성공·아카이브 4종 첨부로 확정됨.
   🟡 REQ-007 = job 구현·lint 완료, secret-부재 skip 경로는 드라이런에서 확인 예정;
   실제 formula 갱신은 다음 릴리스에서 확정한다(`TAP_DEPLOY_KEY` 등록 완료).
 

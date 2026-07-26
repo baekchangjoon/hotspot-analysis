@@ -121,7 +121,7 @@ tar -xzf hotspot-*-macos-aarch64.tar.gz
 ### 1. jar 받기 (빌드 불필요)
 
 [최신 Release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)에서
-self-contained 실행 jar를 내려받습니다(JDK 21 런타임만 있으면 됨):
+self-contained 실행 jar를 내려받습니다(이 수동 경로만 JDK 21 런타임 필요 — JDK 없이 쓰려면 위의 한 줄 설치·brew·아카이브 경로):
 
 ```bash
 curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
@@ -450,7 +450,8 @@ git -C <repo> log --since=<since> --until=<until> --name-only \
 ### jar 실행 시 `UnsupportedClassVersionError`
 
 번들 jar는 Java 21로 컴파일됩니다. Gradle 툴체인이 *빌드*에 21을 자동
-프로비저닝했더라도, **실행**에는 여전히 `PATH`에 JDK 21+가 필요합니다:
+프로비저닝했더라도, 수동 `java -jar` 실행에는 여전히 `PATH`에 JDK 21+가 필요합니다
+(`hotspot` 래퍼·스킬·brew·아카이브 경로는 런타임을 자동 확보하므로 이 오류가 나지 않습니다):
 
 ```bash
 java -version            # 반드시 21 이상 보고
