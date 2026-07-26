@@ -110,7 +110,7 @@ Java 21+ 해석 순서(첫 히트 사용):
 | REQ-004 | Must | **G**: sha256 불일치(변조/손상) **W**: JRE 다운로드 **T**: 설치하지 않고 명확한 에러로 실패한다 | UT-1 (하네스: 체크섬 위조 후 실패 확인) | ✅ |
 | REQ-005 | Must | **G**: tap formula **W**: `brew style`+`brew audit`+`brew fetch` **T**: 모두 통과하고 sha가 릴리스 자산과 일치한다 | E2E-4 (로컬 brew 검증) | ✅ |
 | REQ-006 | Must | **G**: 릴리스 발행 **W**: `release-assets.yml` **T**: 4개 self-contained 아카이브가 자산으로 첨부되고, 추출 후 `bin/hotspot --version`이 동작한다(**4개 플랫폼 전부** 네이티브 러너 CI 검증 후에만 첨부) | E2E-5 (workflow_dispatch 드라이런 v0.1.4 + CI 검증 job green) | ✅ |
-| REQ-007 | Should | **G**: 릴리스 발행 + `TAP_DEPLOY_KEY` 존재 **W**: `release-assets.yml`의 `bump-tap` job **T**: tap formula의 url/sha가 새 버전으로 갱신되고 `ruby -c` 통과 후 푸시된다; secret 없으면 경고 후 skip | E2E-6 (워크플로 lint + secret-부재 경로는 드라이런으로 확인; 실제 갱신은 다음 릴리스에서 검증) | 🟡 |
+| REQ-007 | Should | **G**: 릴리스 발행 + `TAP_DEPLOY_KEY` 존재 **W**: `release-assets.yml`의 `bump-tap` job **T**: tap formula의 url/sha가 새 버전으로 갱신되고 `ruby -c` 통과 후 푸시된다; secret 없으면 경고 후 skip | E2E-6 (워크플로 lint + secret-부재 경로는 드라이런으로 확인; 실제 갱신은 다음 릴리스에서 검증) | ✅ |
 | REQ-008 | Must | **G**: 문서 갱신 **W**: README/SKILL.md 대조 **T**: 새 설치 경로 3종이 실제 동작과 일치하게 기술된다 | DOC-1 (PR 문서동기화 게이트) | ✅ |
 | REQ-009 | Must | **G**: Adoptium API 도달 불가(오프라인/프록시 차단) **W**: JRE 다운로드 시도 **T**: 스택트레이스 없이 명확한 에러 + Docker 안내로 실패한다(기존 동작 대비 악화 없음) | E2E-7 (`docker run --network none` 컨테이너) | ✅ |
 | REQ-010 | Must | **G**: 체크섬 확보 실패(사이드카 404·검증 도구 부재) **W**: JRE 다운로드 **T**: 검증 없이 설치하지 않고 실패한다(fail-closed) | UT-2 (하네스: 체크섬 경로 차단) | ✅ |
@@ -123,8 +123,10 @@ Java 21+ 해석 순서(첫 히트 사용):
 - 상태 기준(2026-07-26 PR 시점): ✅ = 수용 테스트 실측 통과(하네스 10/10 + brew audit/fetch).
   ✅ REQ-006 = 2026-07-27 workflow_dispatch 드라이런(v0.1.4, run 30208306843)에서
   4-러너 검증 전부 성공·아카이브 4종 첨부로 확정됨.
-  🟡 REQ-007 = job 구현·lint 완료, secret-부재 skip 경로는 드라이런에서 확인 예정;
-  실제 formula 갱신은 다음 릴리스에서 확정한다(`TAP_DEPLOY_KEY` 등록 완료).
+  ✅ REQ-007 = 2026-07-27 v0.1.5에서 확정: secret-부재 skip 경로는 v0.1.5 버튼 릴리스에서
+  실증(reusable workflow의 secret 미전달 → `secrets: inherit`로 수정), deploy-key push는
+  run 30209994682에서 실증 — homebrew-tap에 `hotspot 0.1.5` 커밋(afb478c) 자동 반영,
+  `brew fetch`로 sha 일치 확인. 매트릭스 11/11 green.
 
 ## E2E 하네스 (수용 테스트 실행 방법)
 
