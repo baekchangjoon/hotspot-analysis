@@ -8,7 +8,8 @@
 #
 # The release attaches a version-stable asset named `hotspot.jar`, so this URL
 # never changes across patch releases. All progress/log output goes to stderr
-# so `JAR=$(get-jar.sh)` stays clean. Requires JDK 21+ on PATH to RUN the jar.
+# so `JAR=$(get-jar.sh)` stays clean. To RUN the jar, resolve a Java 21+
+# runtime with the sibling ensure-java.sh (auto-downloads a JRE if needed).
 set -euo pipefail
 
 REPO="baekchangjoon/hotspot-analysis"

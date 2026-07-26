@@ -45,8 +45,9 @@ git clone https://github.com/baekchangjoon/hotspot-analysis
 cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
-> 스킬의 `scripts/get-jar.sh`가 릴리스 jar를 자동으로 내려받으므로 빌드는 필요
-> 없습니다(JDK 21 런타임만 필요). JDK 없이 쓰려면 아래 빠른 시작의 Docker 경로를 쓰세요.
+> 스킬의 `scripts/get-jar.sh`가 릴리스 jar를, `scripts/ensure-java.sh`가 Java 21+
+> 런타임을 자동으로 확보하므로(설치된 JDK 발견 또는 Temurin JRE ~46MB 1회 다운로드,
+> sha256 검증) 빌드도, JDK 사전 설치도 필요 없습니다.
 
 ---
 
@@ -67,7 +68,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 | 용도          | 요구사항                                                        |
 |-------------------|--------------------------------------------------------------------|
 | 빌드          | `PATH`에 JDK 17+ (Gradle이 Java 21 툴체인을 자동 프로비저닝) |
-| **jar 실행** | **`PATH`에 JDK 21+** — `java -version`으로 확인 |
+| **jar 실행** | **JDK 사전 설치 불필요** — 래퍼·스킬이 설치된 Java 21+를 찾거나 Temurin 21 JRE(~46MB)를 sha256 검증 후 1회 자동 다운로드(`~/.cache/hotspot-analysis/jre`, 갱신은 이 디렉터리 삭제). 수동 실행(`java -jar`)만 JDK 21+ 필요 |
 | 분석 대상   | `.git/` 폴더가 있는 디렉터리(실제 git 작업 트리) |
 
 ---
@@ -78,7 +79,8 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 jar를 직접 받는 대신, 설치 스크립트가 최신 릴리스 jar를 내려받고 PATH에
 `hotspot` 래퍼를 설치합니다. 이후 `java -jar hotspot.jar ...` 대신 `hotspot ...`로
-실행합니다(JDK 21 런타임 필요):
+실행합니다. **JDK가 없어도 됩니다** — 래퍼가 설치된 Java 21+를 찾고, 없으면
+Temurin 21 JRE(~46MB)를 sha256 검증 후 1회 자동 다운로드합니다:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/install.sh | bash
@@ -93,8 +95,25 @@ curl -fsSL https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main
 hotspot analyze            # 현재 디렉터리 (zero-config)
 ```
 
-> JDK 21 런타임이 필요합니다. 설치하기 어렵다면 아래 Docker 경로를 쓰세요.
-> (Homebrew tap은 추후 제공 예정 — 그때까지는 위 스크립트를 권장합니다.)
+### Homebrew로 설치 (macOS/Linuxbrew)
+
+```bash
+brew install baekchangjoon/tap/hotspot
+```
+
+brew가 JDK 21(`openjdk@21`)을 의존성으로 함께 설치하므로 역시 JDK 사전 설치가
+필요 없습니다.
+
+### Self-contained 아카이브 (JRE 동봉, 다운로드 후 바로 실행)
+
+[릴리스](https://github.com/baekchangjoon/hotspot-analysis/releases/latest)에서
+플랫폼별 `hotspot-<버전>-<os>-<arch>.tar.gz`(macos/linux × x64/aarch64, ~70MB)를
+받아 풀면 JRE가 동봉되어 있어 아무 런타임 없이 실행됩니다:
+
+```bash
+tar -xzf hotspot-*-macos-aarch64.tar.gz
+./hotspot/bin/hotspot analyze
+```
 
 > 아래는 jar를 직접 받아 `java -jar`로 실행하는 수동 경로입니다. 위 한 줄
 > 설치를 쓴다면 예시의 `java -jar hotspot.jar`를 `hotspot`으로 바꿔 읽으세요.
