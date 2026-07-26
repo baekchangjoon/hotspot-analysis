@@ -208,12 +208,17 @@ jobs:
   # (an SSH deploy key with write access to baekchangjoon/homebrew-tap —
   # repo-scoped, no expiry, creatable entirely via `gh repo deploy-key add`)
   # is not configured.
-  # Gated off for workflow_dispatch re-builds (they must never move the
-  # published formula, e.g. backwards to an older tag); the step below also
-  # skips prerelease-style tags so an RC never becomes `brew install hotspot`.
+  # Gated off for DIRECT workflow_dispatch re-builds of this file (they must
+  # never move the published formula, e.g. backwards to an older tag). The
+  # event_name is useless for this: a workflow_call inherits the CALLER's
+  # event, so release.yml's button path also reports workflow_dispatch. What
+  # distinguishes a direct re-build is the dispatch payload carrying OUR
+  # `tag` input (release.yml's dispatch input is `version`, and the
+  # release.published path has no inputs at all). The step below also skips
+  # prerelease-style tags so an RC never becomes `brew install hotspot`.
   bump-tap:
     needs: jar
-    if: github.event_name != 'workflow_dispatch'
+    if: github.event.inputs.tag == null || github.event.inputs.tag == ''
     runs-on: ubuntu-latest
     steps:
       - name: Resolve tag
