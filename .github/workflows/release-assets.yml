@@ -16,6 +16,15 @@ on:
       tag:
         required: true
         type: string
+  # Re-build assets for an existing tag (e.g. v0.1.4): rebuilds + verifies the
+  # archives and attaches them to that tag's release. Never touches the
+  # Homebrew tap (bump-tap is gated off for dispatch runs).
+  workflow_dispatch:
+    inputs:
+      tag:
+        required: true
+        type: string
+        description: Existing release tag to (re)build assets for
 
 permissions:
   contents: write
@@ -59,3 +68,219 @@ jobs:
           cp build/libs/hotspot-*.jar hotspot.jar
           gh release upload "$TAG" hotspot.jar build/libs/hotspot-*.jar \
             --repo "${GITHUB_REPOSITORY}" --clobber
+
+  # Self-contained archives: fat jar + bundled Temurin 21 JRE + launcher, one
+  # per platform, so users need no JDK at all. Assembled cross-platform on one
+  # ubuntu runner (a tar of foreign-arch binaries assembles fine anywhere),
+  # then execution-verified on a native runner per platform BEFORE attaching.
+  bundles:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: t
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-${DISPATCH_TAG:-$EVENT_TAG}}"
+          [ -n "$tag" ] || { echo "::error::no release tag resolved"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.t.outputs.tag }}
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build fat jar
+        run: ./gradlew bootJar -q
+
+      - name: Assemble one archive per platform (JRE sha256-verified)
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
+        run: |
+          set -euo pipefail
+          jar="$(ls build/libs/hotspot-*.jar | head -n1)"
+          mkdir -p dist
+          for combo in linux:x64 linux:aarch64 mac:x64 mac:aarch64; do
+            os="${combo%%:*}"; arch="${combo##*:}"
+            osname="$os"; [ "$os" = "mac" ] && osname="macos"
+            echo "--- $osname-$arch"
+            meta="$(curl -fsSL "https://api.adoptium.net/v3/assets/latest/21/hotspot?os=${os}&architecture=${arch}&image_type=jre")"
+            url="$(jq -er '.[0].binary.package.link' <<<"$meta")"
+            sha="$(jq -er '.[0].binary.package.checksum' <<<"$meta")"
+            curl -fsSL "$url" -o jre.tar.gz
+            echo "$sha  jre.tar.gz" | sha256sum -c - || { echo "::error::JRE checksum mismatch for $osname-$arch"; exit 1; }
+            stage="stage-$osname-$arch"
+            rm -rf "$stage" jre-extract && mkdir -p "$stage/hotspot/bin" "$stage/hotspot/lib" jre-extract
+            tar -xzf jre.tar.gz -C jre-extract
+            java_bin="$(find jre-extract -type f -name java -path '*/bin/java' | head -n1)"
+            [ -n "$java_bin" ] || { echo "::error::no bin/java in JRE archive for $osname-$arch"; exit 1; }
+            jre_home="$(cd "$(dirname "$java_bin")/.." && pwd)"
+            mv "$jre_home" "$stage/hotspot/jre"
+            cp "$jar" "$stage/hotspot/lib/hotspot.jar"
+            cat > "$stage/hotspot/bin/hotspot" <<'LAUNCHER'
+          #!/usr/bin/env bash
+          # hotspot launcher (self-contained archive: bundled JRE, no JDK needed)
+          # Resolve symlinks so `ln -s .../bin/hotspot ~/bin/hotspot` works.
+          src="${BASH_SOURCE[0]}"
+          while [ -L "$src" ]; do
+            dir="$(cd -P "$(dirname "$src")" && pwd)"
+            src="$(readlink "$src")"
+            case "$src" in /*) ;; *) src="$dir/$src" ;; esac
+          done
+          HERE="$(cd -P "$(dirname "$src")" && pwd)"
+          exec "$HERE/../jre/bin/java" -jar "$HERE/../lib/hotspot.jar" "$@"
+          LAUNCHER
+            chmod +x "$stage/hotspot/bin/hotspot"
+            tar -czf "dist/hotspot-${TAG}-${osname}-${arch}.tar.gz" -C "$stage" hotspot
+            rm -rf "$stage" jre-extract jre.tar.gz
+          done
+          ls -lh dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bundles
+          path: dist/*.tar.gz
+          retention-days: 3
+
+  # Every shipped archive is executed on a native runner for its platform.
+  verify-bundles:
+    needs: bundles
+    strategy:
+      matrix:
+        include:
+          - { runner: ubuntu-latest,   platform: linux-x64 }
+          - { runner: ubuntu-24.04-arm, platform: linux-aarch64 }
+          - { runner: macos-15-intel,  platform: macos-x64 }
+          - { runner: macos-14,        platform: macos-aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+
+      - name: Extract and run --version
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          tar -xzf hotspot-*-"$PLATFORM".tar.gz
+          ./hotspot/bin/hotspot --version
+
+  # Attach only after every platform's archive proved runnable.
+  attach-bundles:
+    needs: verify-bundles
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: t
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-${DISPATCH_TAG:-$EVENT_TAG}}"
+          [ -n "$tag" ] || { echo "::error::no release tag resolved"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: bundles
+
+      - name: Attach archives to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.t.outputs.tag }}
+        run: |
+          gh release upload "$TAG" hotspot-*.tar.gz \
+            --repo "${GITHUB_REPOSITORY}" --clobber
+
+  # Keep the Homebrew tap formula in lockstep with each release. Lives here
+  # (not a separate workflow) because this file already runs on BOTH release
+  # paths — the release.published event and release.yml's workflow_call — so
+  # one job covers both uniformly. Skips gracefully when TAP_GITHUB_TOKEN
+  # (a PAT with write access to baekchangjoon/homebrew-tap) is not configured.
+  # Gated off for workflow_dispatch re-builds (they must never move the
+  # published formula, e.g. backwards to an older tag); the step below also
+  # skips prerelease-style tags so an RC never becomes `brew install hotspot`.
+  bump-tap:
+    needs: jar
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: t
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-${DISPATCH_TAG:-$EVENT_TAG}}"
+          [ -n "$tag" ] || { echo "::error::no release tag resolved"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Update Formula/hotspot.rb in the tap
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAG: ${{ steps.t.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "::warning::TAP_GITHUB_TOKEN is not configured — skipping the Homebrew tap bump."
+            exit 0
+          fi
+          if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::warning::tag $TAG is not a stable release (vX.Y.Z) — skipping the Homebrew tap bump."
+            exit 0
+          fi
+          version="${TAG#v}"
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/hotspot-${version}.jar"
+          # sha256 is computed from the actual published asset, so url<->sha
+          # cannot disagree; the remaining risk (template breakage) is gated
+          # by the `ruby -c` syntax check below.
+          curl -fsSL "$url" -o release.jar
+          sha="$(sha256sum release.jar | awk '{print $1}')"
+          # Public repo: clone without credentials so the token never lands in
+          # tap/.git/config; authenticate only the push itself.
+          git clone https://github.com/baekchangjoon/homebrew-tap.git tap
+          mkdir -p tap/Formula
+          cat > tap/Formula/hotspot.rb <<FORMULA
+          class Hotspot < Formula
+            desc "Composite hotspot scoring for Java codebases"
+            homepage "https://github.com/baekchangjoon/hotspot-analysis"
+            url "${url}"
+            sha256 "${sha}"
+            license "MIT"
+
+            depends_on "openjdk@21"
+
+            def install
+              libexec.install "hotspot-${version}.jar" => "hotspot.jar"
+              bin.write_jar_script libexec/"hotspot.jar", "hotspot", java_version: "21"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/hotspot --version")
+            end
+          end
+          FORMULA
+          ruby -c tap/Formula/hotspot.rb
+          cd tap
+          # Stage before comparing: `git diff --quiet` ignores untracked files,
+          # which would silently skip the very first formula commit.
+          git add Formula/hotspot.rb
+          if git diff --cached --quiet; then
+            echo "formula already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "hotspot ${version}"
+          git push "https://x-access-token:${TAP_TOKEN}@github.com/baekchangjoon/homebrew-tap.git" HEAD

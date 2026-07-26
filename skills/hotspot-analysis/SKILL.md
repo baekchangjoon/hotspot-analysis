@@ -47,7 +47,7 @@ Target must be a directory containing a real `.git/` folder. Phase 1 runs
 | Need | Requirement |
 |---|---|
 | Get the jar | Nothing to build — `scripts/get-jar.sh` downloads the released fat jar (cached). Building from source instead needs any JDK 17+. |
-| **Run the jar** | **JDK 21+ on `PATH`** — verify `java -version` reports 21 or later |
+| **Run the jar** | **No JDK required** — `scripts/ensure-java.sh` finds an installed Java 21+ or auto-downloads a Temurin 21 JRE (~46MB, sha256-verified, cached in `~/.cache/hotspot-analysis/jre`; refresh by deleting that dir) |
 | Analysis target | A directory with a `.git/` folder |
 | API analysis (recommended) | `apiAnalysis.enabled: true`; ideally `classpathDirectories` for symbol resolution |
 | Coverage signal (recommended) | A JaCoCo XML report from the **same** build |
@@ -58,24 +58,27 @@ A convenience wrapper, [`scripts/run-analysis.sh`](scripts/run-analysis.sh),
 resolves the jar (downloading the released fat jar if needed) and runs `analyze`.
 The steps below show the explicit form.
 
-1. **Get the jar.** No build required — the resolver downloads the released fat
-   jar to a cache (or reuses a local build, or builds from source as a fallback):
+1. **Get a runtime and the jar.** No build and no pre-installed JDK required —
+   `ensure-java.sh` resolves an installed Java 21+ (or auto-downloads a
+   Temurin JRE), and `get-jar.sh` downloads the released fat jar to a cache
+   (or reuses a local build, or builds from source as a fallback):
 
    ```bash
-   JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"   # prints the jar path
+   JAVA="$(skills/hotspot-analysis/scripts/ensure-java.sh)"  # prints a java 21+ path
+   JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"       # prints the jar path
    # manual alternative (no clone needed):
    #   curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
    #   JAR=hotspot.jar
    # from-source alternative (needs the repo + a JDK):  ./gradlew bootJar
    ```
 
-   No JDK at all? Use the Docker image, mounting the target repo at `/work`:
+   Prefer no downloads at all? Use the Docker image, mounting the target repo at `/work`:
    `docker run --rm -v "$PWD":/work ghcr.io/baekchangjoon/hotspot-analysis:latest analyze --config /work/hotspot.yml`
 
 2. **Generate a config.**
 
    ```bash
-   java -jar "$JAR" init -o hotspot.yml
+   "$JAVA" -jar "$JAR" init -o hotspot.yml
    ```
 
 3. **Configure for endpoint prioritization.** Point `analysis.target.path` at
@@ -101,8 +104,8 @@ The steps below show the explicit form.
 4. **Analyze** (add `--strict` in CI).
 
    ```bash
-   java -jar "$JAR" analyze --config hotspot.yml --strict
-   # or, in one shot (resolves the jar for you):
+   "$JAVA" -jar "$JAR" analyze --config hotspot.yml --strict
+   # or, in one shot (resolves the runtime AND the jar for you):
    #   skills/hotspot-analysis/scripts/run-analysis.sh hotspot.yml --strict
    ```
 
@@ -292,7 +295,8 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   `classpathDirectories`).
 - **Don't feed a JaCoCo report from a different module/build.** Path mismatch
   reads as 0% coverage → every multiplier maxes at 10 and the ranking is bogus.
-- **Don't run the jar on JDK < 21** — it's compiled for 21 (`UnsupportedClassVersionError`).
+- **Don't run the jar on JDK < 21** — it's compiled for 21 (`UnsupportedClassVersionError`);
+  `ensure-java.sh` guards this by only accepting 21+.
 - **Don't analyze generated or build output** — keep `**/generated/**`,
   `**/build/**`, `**/target/**`, `**/test/**` in `scope.exclude`.
 - **Don't present the Composite Score as a verdict.** It's prioritization
@@ -312,11 +316,12 @@ The project's own suite exercises every layer (parser, scoring, output, E2E):
 Skill-level smoke check — analyze this very repo and assert a non-empty result:
 
 ```bash
-bash -n skills/hotspot-analysis/scripts/get-jar.sh skills/hotspot-analysis/scripts/run-analysis.sh
+bash -n skills/hotspot-analysis/scripts/ensure-java.sh skills/hotspot-analysis/scripts/get-jar.sh skills/hotspot-analysis/scripts/run-analysis.sh
+JAVA="$(skills/hotspot-analysis/scripts/ensure-java.sh)"  # resolves/downloads a java 21+
 JAR="$(skills/hotspot-analysis/scripts/get-jar.sh)"   # resolves/downloads the jar
-java -jar "$JAR" init -o /tmp/h.yml -f
+"$JAVA" -jar "$JAR" init -o /tmp/h.yml -f
 # set analysis.target.path in /tmp/h.yml to this repo's absolute path, then:
-java -jar "$JAR" analyze --config /tmp/h.yml --strict
+"$JAVA" -jar "$JAR" analyze --config /tmp/h.yml --strict
 echo "exit=$?"   # 0 = produced output; 3 = empty (misconfigured)
 ```
 

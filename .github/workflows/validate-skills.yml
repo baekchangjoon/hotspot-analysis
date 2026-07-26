@@ -8,12 +8,14 @@ on:
     paths:
       - 'skills/**'
       - '.claude-plugin/**'
+      - 'install.sh'
       - '.github/workflows/validate-skills.yml'
   push:
     branches: [main]
     paths:
       - 'skills/**'
       - '.claude-plugin/**'
+      - 'install.sh'
       - '.github/workflows/validate-skills.yml'
 
 permissions:
@@ -34,6 +36,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh skill publish --dry-run
+
+      # install.sh embeds a byte-identical copy of the skill's ensure-java.sh
+      # (single-file `curl | bash` installer). The security-relevant download/
+      # checksum logic lives in both places — fail loudly if they drift.
+      - name: ensure-java.sh and its install.sh embed must be byte-identical
+        run: |
+          sed -n "/<<'ENSURE_JAVA_EOF'\$/,/^ENSURE_JAVA_EOF\$/p" install.sh | sed '1d;$d' > /tmp/embedded.sh
+          if ! diff -u skills/hotspot-analysis/scripts/ensure-java.sh /tmp/embedded.sh; then
+            echo "::error::install.sh's embedded ensure-java.sh drifted from skills/hotspot-analysis/scripts/ensure-java.sh"
+            exit 1
+          fi
 
       # Cheap sanity check that the plugin/marketplace manifests are valid JSON
       # and agree on the version (the Claude marketplace reads plugin.json).

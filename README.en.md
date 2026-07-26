@@ -46,8 +46,9 @@ git clone https://github.com/baekchangjoon/hotspot-analysis
 cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 ```
 
-> No build needed — the skill's `scripts/get-jar.sh` downloads the released jar
-> (only a JDK 21 runtime is required). For no JDK at all, use the Docker path in the Quick start below.
+> No build and no pre-installed JDK needed — the skill's `scripts/get-jar.sh`
+> downloads the released jar, and `scripts/ensure-java.sh` resolves an installed
+> Java 21+ or auto-downloads a Temurin 21 JRE (~46MB, sha256-verified, one-time).
 
 ---
 
@@ -68,7 +69,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 | Use case          | Requirement                                                        |
 |-------------------|--------------------------------------------------------------------|
 | Building          | Any JDK 17+ on `PATH` (Gradle auto-provisions the Java 21 toolchain) |
-| **Running the jar** | **JDK 21+ on `PATH`** — verify with `java -version` |
+| **Running the jar** | **No pre-installed JDK needed** — the wrapper/skill finds an installed Java 21+ or auto-downloads a Temurin 21 JRE (~46MB, sha256-verified) once into `~/.cache/hotspot-analysis/jre` (delete that dir to refresh). Only the manual `java -jar` path needs JDK 21+ yourself |
 | Analysis target   | A directory that contains a `.git/` folder (a real git working tree) |
 
 ---
@@ -79,7 +80,9 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 
 Instead of downloading the jar yourself, the install script fetches the latest
 release jar and puts a `hotspot` wrapper on your PATH, so you run `hotspot ...`
-instead of `java -jar hotspot.jar ...` (a JDK 21 runtime is required):
+instead of `java -jar hotspot.jar ...`. **No JDK required** — the wrapper finds
+an installed Java 21+ or auto-downloads a Temurin 21 JRE (~46MB, sha256-verified)
+on first use:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/baekchangjoon/hotspot-analysis/main/install.sh | bash
@@ -94,8 +97,26 @@ overridable via `HOTSPOT_PREFIX` and `HOTSPOT_VERSION`. Then:
 hotspot analyze            # current directory (zero-config)
 ```
 
-> A JDK 21 runtime is required. If you cannot install one, use the Docker path
-> below. (A Homebrew tap is planned; until then, prefer the script above.)
+### Install via Homebrew (macOS/Linuxbrew)
+
+```bash
+brew install baekchangjoon/tap/hotspot
+```
+
+brew installs JDK 21 (`openjdk@21`) as a dependency, so again no manual JDK
+setup is needed.
+
+### Self-contained archive (bundled JRE — download, extract, run)
+
+Grab the platform archive `hotspot-<version>-<os>-<arch>.tar.gz`
+(macos/linux × x64/aarch64, ~70MB) from the
+[latest release](https://github.com/baekchangjoon/hotspot-analysis/releases/latest);
+it bundles a JRE, so it runs with no runtime installed at all:
+
+```bash
+tar -xzf hotspot-*-macos-aarch64.tar.gz
+./hotspot/bin/hotspot analyze
+```
 
 > The steps below are the manual path: download the jar and run it with
 > `java -jar`. If you used the one-line install, read `java -jar hotspot.jar` in
