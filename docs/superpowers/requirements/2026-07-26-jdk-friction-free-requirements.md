@@ -57,8 +57,10 @@ Java 21+ 해석 순서(첫 히트 사용):
 ### ② Homebrew tap
 
 - **선행 부트스트랩(1회성 외부 작업)**: ⑴ public 저장소 `baekchangjoon/homebrew-tap` 신설(이 작업에서 수행),
-  ⑵ 초기 `Formula/hotspot.rb` 커밋, ⑶ `TAP_GITHUB_TOKEN`(tap repo 쓰기 PAT) 발급·secret 등록 —
-  **⑶은 관리자(사용자)의 수동 작업**이며 완료 전까지 REQ-007 자동 갱신은 skip 경로로 동작한다.
+  ⑵ 초기 `Formula/hotspot.rb` 커밋, ⑶ tap repo 쓰기 자격증명 등록 —
+  (변경) PAT 대신 **SSH deploy key** 사용: `gh repo deploy-key add --allow-write`로 tap에 공개키를,
+  `gh secret set TAP_DEPLOY_KEY`로 본 저장소에 개인키를 등록(전 과정 CLI 가능, repo 한정·무만료).
+  2026-07-27 등록 완료 — 실제 갱신 검증은 다음 릴리스에서.
 - `url` = 릴리스의 **버전 자산** `hotspot-0.1.4.jar`(이미 존재) + `sha256` 고정,
   `depends_on "openjdk@21"`, `bin.write_jar_script`.
   (Homebrew에 유지되는 JRE-only formula가 없어 풀 JDK 의존을 수용 — brew의 네이티브 의존성
@@ -72,7 +74,8 @@ Java 21+ 해석 순서(첫 히트 사용):
   job은 버전 자산을 다운로드해 sha256을 계산하고 formula를 렌더링한 뒤 **`ruby -c` 문법 검증을
   통과해야만** tap 저장소에 커밋-푸시한다(sha는 실제 다운로드물에서 계산하므로 정의상 일치;
   잔여 리스크는 템플릿 파손 → ruby -c가 게이트).
-  **secret `TAP_GITHUB_TOKEN`(tap repo 쓰기 PAT) 없으면 경고 후 skip**(릴리스는 실패시키지 않음).
+  **secret `TAP_DEPLOY_KEY`(tap repo 쓰기 deploy key) 없으면 경고 후 skip**(릴리스는 실패시키지 않음).
+  push는 deploy key로만 인증하고 키는 `RUNNER_TEMP`(mode 600)에만 존재, `.git/config`에 저장되지 않는다.
 
 ### ③ Self-contained 릴리스 아카이브 (JRE 동봉)
 
@@ -107,7 +110,7 @@ Java 21+ 해석 순서(첫 히트 사용):
 | REQ-004 | Must | **G**: sha256 불일치(변조/손상) **W**: JRE 다운로드 **T**: 설치하지 않고 명확한 에러로 실패한다 | UT-1 (하네스: 체크섬 위조 후 실패 확인) | ✅ |
 | REQ-005 | Must | **G**: tap formula **W**: `brew style`+`brew audit`+`brew fetch` **T**: 모두 통과하고 sha가 릴리스 자산과 일치한다 | E2E-4 (로컬 brew 검증) | ✅ |
 | REQ-006 | Must | **G**: 릴리스 발행 **W**: `release-assets.yml` **T**: 4개 self-contained 아카이브가 자산으로 첨부되고, 추출 후 `bin/hotspot --version`이 동작한다(**4개 플랫폼 전부** 네이티브 러너 CI 검증 후에만 첨부) | E2E-5 (workflow_dispatch 드라이런 v0.1.4 + CI 검증 job green) | 🟡 |
-| REQ-007 | Should | **G**: 릴리스 발행 + `TAP_GITHUB_TOKEN` 존재 **W**: `release-assets.yml`의 `bump-tap` job **T**: tap formula의 url/sha가 새 버전으로 갱신되고 `ruby -c` 통과 후 푸시된다; secret 없으면 경고 후 skip | E2E-6 (워크플로 lint + secret-부재 경로는 드라이런으로 확인; 실제 갱신은 다음 릴리스에서 검증) | 🟡 |
+| REQ-007 | Should | **G**: 릴리스 발행 + `TAP_DEPLOY_KEY` 존재 **W**: `release-assets.yml`의 `bump-tap` job **T**: tap formula의 url/sha가 새 버전으로 갱신되고 `ruby -c` 통과 후 푸시된다; secret 없으면 경고 후 skip | E2E-6 (워크플로 lint + secret-부재 경로는 드라이런으로 확인; 실제 갱신은 다음 릴리스에서 검증) | 🟡 |
 | REQ-008 | Must | **G**: 문서 갱신 **W**: README/SKILL.md 대조 **T**: 새 설치 경로 3종이 실제 동작과 일치하게 기술된다 | DOC-1 (PR 문서동기화 게이트) | ✅ |
 | REQ-009 | Must | **G**: Adoptium API 도달 불가(오프라인/프록시 차단) **W**: JRE 다운로드 시도 **T**: 스택트레이스 없이 명확한 에러 + Docker 안내로 실패한다(기존 동작 대비 악화 없음) | E2E-7 (`docker run --network none` 컨테이너) | ✅ |
 | REQ-010 | Must | **G**: 체크섬 확보 실패(사이드카 404·검증 도구 부재) **W**: JRE 다운로드 **T**: 검증 없이 설치하지 않고 실패한다(fail-closed) | UT-2 (하네스: 체크섬 경로 차단) | ✅ |
@@ -122,7 +125,7 @@ Java 21+ 해석 순서(첫 히트 사용):
   (linux-aarch64, macos-aarch64)은 로컬 실행 검증까지 완료; 4-러너 CI 검증은 머지 후
   `workflow_dispatch` 드라이런(v0.1.4)으로 확정한다.
   🟡 REQ-007 = job 구현·lint 완료, secret-부재 skip 경로는 드라이런에서 확인 예정;
-  실제 formula 갱신은 `TAP_GITHUB_TOKEN` 등록 후 다음 릴리스에서 확정한다.
+  실제 formula 갱신은 다음 릴리스에서 확정한다(`TAP_DEPLOY_KEY` 등록 완료).
 
 ## E2E 하네스 (수용 테스트 실행 방법)
 

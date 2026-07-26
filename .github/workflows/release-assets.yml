@@ -204,8 +204,10 @@ jobs:
   # Keep the Homebrew tap formula in lockstep with each release. Lives here
   # (not a separate workflow) because this file already runs on BOTH release
   # paths — the release.published event and release.yml's workflow_call — so
-  # one job covers both uniformly. Skips gracefully when TAP_GITHUB_TOKEN
-  # (a PAT with write access to baekchangjoon/homebrew-tap) is not configured.
+  # one job covers both uniformly. Skips gracefully when TAP_DEPLOY_KEY
+  # (an SSH deploy key with write access to baekchangjoon/homebrew-tap —
+  # repo-scoped, no expiry, creatable entirely via `gh repo deploy-key add`)
+  # is not configured.
   # Gated off for workflow_dispatch re-builds (they must never move the
   # published formula, e.g. backwards to an older tag); the step below also
   # skips prerelease-style tags so an RC never becomes `brew install hotspot`.
@@ -227,13 +229,13 @@ jobs:
 
       - name: Update Formula/hotspot.rb in the tap
         env:
-          TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+          TAP_DEPLOY_KEY: ${{ secrets.TAP_DEPLOY_KEY }}
           TAG: ${{ steps.t.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if [ -z "$TAP_TOKEN" ]; then
-            echo "::warning::TAP_GITHUB_TOKEN is not configured — skipping the Homebrew tap bump."
+          if [ -z "$TAP_DEPLOY_KEY" ]; then
+            echo "::warning::TAP_DEPLOY_KEY is not configured — skipping the Homebrew tap bump."
             exit 0
           fi
           if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -247,8 +249,8 @@ jobs:
           # by the `ruby -c` syntax check below.
           curl -fsSL "$url" -o release.jar
           sha="$(sha256sum release.jar | awk '{print $1}')"
-          # Public repo: clone without credentials so the token never lands in
-          # tap/.git/config; authenticate only the push itself.
+          # Public repo: clone without credentials; only the push authenticates,
+          # via the deploy key (never persisted into tap/.git/config).
           git clone https://github.com/baekchangjoon/homebrew-tap.git tap
           mkdir -p tap/Formula
           cat > tap/Formula/hotspot.rb <<FORMULA
@@ -283,4 +285,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "hotspot ${version}"
-          git push "https://x-access-token:${TAP_TOKEN}@github.com/baekchangjoon/homebrew-tap.git" HEAD
+          key_file="$RUNNER_TEMP/tap_deploy_key"
+          (umask 077; printf '%s\n' "$TAP_DEPLOY_KEY" > "$key_file")
+          known_hosts="$RUNNER_TEMP/tap_known_hosts"
+          if ! ssh-keyscan github.com > "$known_hosts" 2>"$RUNNER_TEMP/keyscan.err"; then
+            echo "::error::ssh-keyscan github.com failed"
+            cat "$RUNNER_TEMP/keyscan.err"
+            exit 1
+          fi
+          GIT_SSH_COMMAND="ssh -i $key_file -o UserKnownHostsFile=$known_hosts -o IdentitiesOnly=yes" \
+            git push git@github.com:baekchangjoon/homebrew-tap.git HEAD
