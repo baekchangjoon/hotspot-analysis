@@ -99,6 +99,10 @@ jobs:
     permissions:
       contents: write
     uses: ./.github/workflows/release-assets.yml
+    # Called workflows do NOT see repo secrets unless passed — without this,
+    # bump-tap's TAP_DEPLOY_KEY is empty on the button path and the tap
+    # update silently skips.
+    secrets: inherit
     with:
       tag: ${{ needs.publish.outputs.tag }}
 
