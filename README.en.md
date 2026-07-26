@@ -200,8 +200,9 @@ analysis:
 
   # JaCoCo XML report (optional). Uncomment ONLY when you actually have a
   # report. Coverage then feeds the score (multiplier 1/(coverage+0.1)).
-  # Pointing at a non-existent path prints a warning and proceeds without
-  # coverage (scores stay correct).
+  # Pointing at a non-existent path — or at a report generated without test
+  # execution data, i.e. zero covered lines (stale .exec, skipped tests) —
+  # prints a warning and proceeds without coverage (scores stay correct).
   # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
@@ -276,6 +277,7 @@ Commands:
 | `[path]`              |   | current dir | Path to the repository root to analyse (mutually exclusive with `--config`) |
 | `--config, -c <file>` |   | — | Path to the YAML configuration file. When omitted, settings are auto-detected from `[path]` (or the current directory) |
 | `--print-config`      |   | off | Print the auto-detected configuration as YAML to stdout and exit (no analysis). Zero-config mode only — cannot be combined with `--config` |
+| `--output-dir, -o <dir>` |   | config's `output.path` (zero-config: `./hotspot-report`) | Directory to write the reports into. Overrides `output.path` from the config file |
 | `--quiet, -q`         |   | off  | Suppress the summary on stdout |
 | `--strict, -s`        |   | off  | Exit with code 3 when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
 

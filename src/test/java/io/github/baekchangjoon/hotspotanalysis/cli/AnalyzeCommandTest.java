@@ -602,6 +602,70 @@ class AnalyzeCommandTest {
     }
 
     @Test
+    @DisplayName("zero-config: -o redirects the report directory (no ./hotspot-report in cwd)")
+    void zeroConfigOutputDirOption() throws Exception {
+        Path customOut = tempDir.resolve("custom-report");
+        StringWriter sw = new StringWriter();
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute(repoRoot.toString(), "-o", customOut.toString());
+
+        assertThat(exit).isZero();
+        assertThat(Files.exists(customOut.resolve("file_hotspots.csv"))).isTrue();
+        assertThat(Files.exists(Path.of("hotspot-report"))).isFalse();
+    }
+
+    @Test
+    @DisplayName("--output-dir overrides output.path from a --config file")
+    void outputDirOverridesConfigFile() throws Exception {
+        Path configFile = writeConfig("local-git", repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"));
+        Path customOut = tempDir.resolve("override-report");
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(new StringWriter()));
+        cli.setErr(new PrintWriter(new StringWriter()));
+
+        int exit = cli.execute("--config", configFile.toString(),
+                "--output-dir", customOut.toString());
+
+        assertThat(exit).isZero();
+        assertThat(Files.exists(customOut.resolve("file_hotspots.csv"))).isTrue();
+        assertThat(Files.exists(outputDir)).isFalse();
+    }
+
+    @Test
+    @DisplayName("--print-config reflects -o so the saved YAML matches the command that was run")
+    void printConfigReflectsOutputDir() throws Exception {
+        Path customOut = tempDir.resolve("custom-report");
+        StringWriter sw = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(sw));
+
+        int exit = cli.execute(repoRoot.toString(), "--print-config", "-o", customOut.toString());
+
+        assertThat(exit).isZero();
+        assertThat(sw.toString()).contains(customOut.toString());
+        assertThat(sw.toString()).doesNotContain("./hotspot-report");
+    }
+
+    @Test
+    @DisplayName("blank -o is rejected (exit 1) instead of silently writing into the cwd")
+    void blankOutputDirRejected() {
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute(repoRoot.toString(), "-o", "");
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(ew.toString()).contains("--output-dir");
+        assertThat(Files.exists(Path.of("file_hotspots.csv"))).isFalse();
+    }
+
+    @Test
     @DisplayName("--config and positional path are mutually exclusive (exit 1)")
     void configAndPathMutuallyExclusive() throws Exception {
         Path cfg = tempDir.resolve("hotspot.yml");

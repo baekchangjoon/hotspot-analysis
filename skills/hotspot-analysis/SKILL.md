@@ -251,6 +251,7 @@ Env vars substitute as `${VAR_NAME}` in any string value; YAML comment lines
 | Option | Effect |
 |---|---|
 | `--config, -c <file>` | Path to the YAML config (required) |
+| `--output-dir, -o <dir>` | Directory to write the reports into (overrides `output.path`) |
 | `--quiet, -q` | Suppress the stdout summary |
 | `--strict, -s` | Exit code **3** on empty result (zero commits or zero files) — for CI gating |
 
@@ -268,6 +269,9 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
 - **IF** every `coverageMultiplier` is `10` (or every `lineCoverage` is `0`)
   **THEN** the JaCoCo report doesn't match the analyzed sources — supply a report
   from the **same** build/module; do not conclude "nothing is tested".
+  (A report with zero covered lines overall — generated without test execution
+  data — is auto-detected: the CLI warns and proceeds without coverage,
+  multiplier `1.0`. Regenerate it, e.g. `./gradlew test jacocoTestReport`.)
 - **IF** the summary shows `Files: 0` **THEN** fix `scope.include` (single-module
   needs `src/main/java/**/*.java`, multi-module needs `**/src/main/java/**/*.java`;
   list both).

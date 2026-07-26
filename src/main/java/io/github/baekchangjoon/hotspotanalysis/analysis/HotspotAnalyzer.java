@@ -163,6 +163,17 @@ public class HotspotAnalyzer {
                     System.err.println("WARNING: JaCoCo report at " + p
                             + " produced no coverage data — proceeding WITHOUT coverage (multiplier = 1.0).");
                     jacocoSupplied = false;
+                } else if (!jacocoParser.hasCoveredLines()) {
+                    // Every line in the report is ci="0" — JaCoCo emits this when
+                    // the report task runs without test execution data (stale
+                    // .exec, tests skipped/up-to-date). Trusting it would mark
+                    // every artifact 0% covered and inflate every multiplier to
+                    // 1/0.1 = 10. Fall back to no-coverage scoring.
+                    System.err.println("WARNING: JaCoCo report at " + p
+                            + " lists zero covered lines — it was likely generated without test"
+                            + " execution data. Regenerate it (e.g. './gradlew test jacocoTestReport')"
+                            + " — proceeding WITHOUT coverage (multiplier = 1.0).");
+                    jacocoSupplied = false;
                 }
             }
         }

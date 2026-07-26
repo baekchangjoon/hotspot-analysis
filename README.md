@@ -195,7 +195,9 @@ analysis:
 
   # JaCoCo XML 리포트(선택). 실제 리포트가 있을 때만 주석을 해제하세요.
   # 커버리지가 점수에 반영됩니다(배수 1/(coverage+0.1)). 존재하지 않는 경로를
-  # 가리키면 커버리지 없이 진행한다는 경고가 출력됩니다(점수는 왜곡되지 않음).
+  # 가리키거나, 리포트가 실행 데이터 없이 생성돼 커버된 라인이 0인 경우
+  # (스테일 .exec, 테스트 스킵), 커버리지 없이 진행한다는 경고가 출력됩니다
+  # (점수는 왜곡되지 않음).
   # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
@@ -268,6 +270,7 @@ Commands:
 | `[path]`              |   | 현재 디렉터리 | 분석할 저장소 루트 경로(`--config`와 함께 사용 불가) |
 | `--config, -c <file>` |   | — | YAML 설정 파일 경로. 생략하면 `[path]`(또는 현재 디렉터리)에서 자동 감지 |
 | `--print-config`      |   | off | 자동 감지된 설정을 YAML로 stdout에 출력하고 종료(분석하지 않음). zero-config 모드 전용 — `--config`와 함께 쓸 수 없음 |
+| `--output-dir, -o <dir>` |   | 설정의 `output.path` (zero-config: `./hotspot-report`) | 리포트를 쓸 디렉터리. 설정 파일의 `output.path`보다 우선 |
 | `--quiet, -q`         |   | off  | stdout 요약 출력 억제 |
 | `--strict, -s`        |   | off  | 결과가 비면 종료 코드 3 (윈도우 내 커밋 0건 또는 스코프 매칭 파일 0건). CI 게이팅용. |
 
