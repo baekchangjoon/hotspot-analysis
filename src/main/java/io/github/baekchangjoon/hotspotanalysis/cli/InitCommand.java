@@ -47,6 +47,13 @@ public class InitCommand implements Callable<Integer> {
         PrintWriter err = spec.commandLine().getErr();
         Path target = outputPath.toAbsolutePath().normalize();
 
+        if (Files.isDirectory(target)) {
+            // REPLACE_EXISTING would silently delete an empty directory and
+            // put a file in its place — never do that, --force or not.
+            err.println("ERROR: " + target + " is a directory — pass a file path, e.g. "
+                    + target.resolve("hotspot.yml"));
+            return 1;
+        }
         if (Files.exists(target) && !force) {
             err.println("ERROR: " + target + " already exists. Use --force to overwrite.");
             return 1;

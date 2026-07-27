@@ -143,6 +143,10 @@ public class AnalyzeCommand implements Callable<Integer> {
                     printDetectionSummary(err, config);
                 }
             } else {
+                if (Files.isDirectory(configPath)) {
+                    err.println("ERROR: " + configPath + " is a directory, not a configuration file.");
+                    return EXIT_FAILURE;
+                }
                 if (!Files.isRegularFile(configPath)) {
                     err.println("ERROR: configuration file not found: " + configPath);
                     return EXIT_FAILURE;

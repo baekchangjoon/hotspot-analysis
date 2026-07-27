@@ -666,6 +666,42 @@ class AnalyzeCommandTest {
     }
 
     @Test
+    @DisplayName("F13: --config pointing at a directory says so instead of 'not found'")
+    void configDirectoryGetsClearMessage() {
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute("--config", tempDir.toString());
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(ew.toString()).contains("directory");
+    }
+
+    @Test
+    @DisplayName("F11: a leading ~/ in output.path expands to the home directory instead of creating a literal '~' dir")
+    void tildeInOutputPathExpands() throws Exception {
+        String fakeHome = tempDir.resolve("fake-home").toString();
+        Path configFile = writeConfig("local-git", repoRoot.toString(), "~/tilde-report",
+                List.of("CSV"));
+        String originalHome = System.getProperty("user.home");
+        System.setProperty("user.home", fakeHome);
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(new StringWriter()));
+        cli.setErr(new PrintWriter(new StringWriter()));
+        int exit;
+        try {
+            exit = cli.execute("--config", configFile.toString());
+        } finally {
+            System.setProperty("user.home", originalHome);
+        }
+
+        assertThat(exit).isZero();
+        assertThat(Files.exists(Path.of(fakeHome, "tilde-report", "file_hotspots.csv"))).isTrue();
+        assertThat(Files.exists(Path.of("~"))).isFalse(); // no literal ~ dir in cwd
+    }
+
+    @Test
     @DisplayName("--config and positional path are mutually exclusive (exit 1)")
     void configAndPathMutuallyExclusive() throws Exception {
         Path cfg = tempDir.resolve("hotspot.yml");

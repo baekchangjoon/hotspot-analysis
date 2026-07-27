@@ -72,4 +72,20 @@ class InitCommandTest {
             throw new AssertionError(e);
         }
     }
+    @Test
+    @DisplayName("F4: refuses to replace a directory even with --force (never silently deletes it)")
+    void shouldRefuseDirectoryTargetEvenWithForce(@TempDir Path tempDir) throws Exception {
+        Path dir = tempDir.resolve("adir");
+        Files.createDirectory(dir);
+        CommandLine cli = new CommandLine(new InitCommand());
+        StringWriter ew = new StringWriter();
+        cli.setErr(new PrintWriter(ew));
+
+        int exit = cli.execute("--force", "--output", dir.toString());
+
+        assertThat(exit).isEqualTo(1);
+        assertThat(ew.toString()).contains("directory");
+        assertThat(Files.isDirectory(dir)).isTrue(); // still a directory, not replaced
+    }
+
 }

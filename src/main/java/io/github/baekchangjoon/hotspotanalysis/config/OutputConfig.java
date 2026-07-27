@@ -13,12 +13,15 @@ import java.util.List;
 public record OutputConfig(
         @NotEmpty(message = "output.formats must not be empty") List<OutputFormat> formats,
         @NotBlank(message = "output.path must not be blank") String path,
-        @Min(value = 0, message = "output.topN must be >= 0 (0 means all rows)") int topN,
+        @Min(value = 0, message = "output.topN must be >= 0 (0 means all rows)") Integer topN,
         ApiLayout apiLayout,
         Boolean coverageBreakdown
 ) {
 
     public OutputConfig {
+        if (topN == null) {
+            topN = 0; // omitted → all rows, instead of a raw null-int mapping error
+        }
         if (apiLayout == null) {
             apiLayout = ApiLayout.BOTH;
         }
@@ -48,7 +51,12 @@ public record OutputConfig(
             if (raw == null) {
                 return null;
             }
-            return ApiLayout.valueOf(raw.trim().toUpperCase());
+            try {
+                return ApiLayout.valueOf(raw.trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "\"" + raw + "\" is not one of " + java.util.Arrays.toString(values()));
+            }
         }
     }
 
@@ -63,7 +71,12 @@ public record OutputConfig(
             if (raw == null) {
                 return null;
             }
-            return OutputFormat.valueOf(raw.trim().toUpperCase());
+            try {
+                return OutputFormat.valueOf(raw.trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "\"" + raw + "\" is not one of " + java.util.Arrays.toString(values()));
+            }
         }
     }
 }
