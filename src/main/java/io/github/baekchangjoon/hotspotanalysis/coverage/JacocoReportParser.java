@@ -96,6 +96,19 @@ public class JacocoReportParser {
         return findCoverageForPath(normalizePath(filePath)) != null;
     }
 
+    /**
+     * Highest line number the report mentions for this file, or 0 without
+     * data. A value beyond the file's actual length means the report was
+     * generated against a different version of the source (stale report).
+     */
+    public int getMaxLineNumber(String filePath) {
+        Map<Integer, Boolean> lines = findCoverageForPath(normalizePath(filePath));
+        if (lines == null || lines.isEmpty()) {
+            return 0;
+        }
+        return lines.keySet().stream().max(Integer::compareTo).orElse(0);
+    }
+
     public LineCounts getFileLineCounts(String filePath) {
         String normalizedPath = normalizePath(filePath);
         Map<Integer, Boolean> lines = findCoverageForPath(normalizedPath);
