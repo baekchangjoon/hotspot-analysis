@@ -331,6 +331,17 @@ toolchain is sound end-to-end.
 
 ## Changelog
 
+- **0.1.6** — scoring-trust and report fixes from a fresh-eyes evaluation
+  round: unknown coverage is never a 10x penalty (files absent from a
+  partial JaCoCo report, line-less sourcefile entries, and uninstrumented
+  methods all get multiplier 1.0 + a warning); switch expressions count
+  toward cognitive complexity; duplicate sourcefile entries OR-merge;
+  stale-report and shallow-clone warnings; unparseable files are skipped
+  instead of aborting; HTML column sorting works on every table (pinned by
+  a JS-executing smoke test) and the X-Ray drill-down is documented;
+  clearer config errors (field + value + allowed values), `~/` expansion,
+  `days` vs `since`/`until` now mutually exclusive, `init` refuses
+  directory targets, `analyze` skips nothing silently.
 - **0.1.5** — **zero-config**: `analyze` now runs without a config file
   (auto-detects git root, single/multi-module layout, JaCoCo report, Spring
   API), takes an optional `[path]`, `--print-config` dumps the synthesized
