@@ -93,7 +93,10 @@ public class JacocoReportParser {
      * of a multi-module build) says nothing about files it does not mention.
      */
     public boolean hasDataForFile(String filePath) {
-        return findCoverageForPath(normalizePath(filePath)) != null;
+        Map<Integer, Boolean> lines = findCoverageForPath(normalizePath(filePath));
+        // A <sourcefile> with no <line> children (interfaces, annotations)
+        // creates an EMPTY entry — that is still "no line data".
+        return lines != null && !lines.isEmpty();
     }
 
     /**
@@ -170,6 +173,8 @@ public class JacocoReportParser {
         if (path == null) {
             return "";
         }
-        return path.replace('\\', '/');
+        // Only the platform separator: a blanket backslash replace would
+        // corrupt POSIX file names that legitimately contain one.
+        return path.replace(java.io.File.separatorChar, '/');
     }
 }

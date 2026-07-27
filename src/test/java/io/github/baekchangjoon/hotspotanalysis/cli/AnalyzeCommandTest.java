@@ -666,6 +666,30 @@ class AnalyzeCommandTest {
     }
 
     @Test
+    @DisplayName("F11: a leading ~/ in target.path expands too — analysis runs end-to-end")
+    void tildeInTargetPathExpands() throws Exception {
+        // The repo itself plays the role of "~/repo" under a fake home.
+        String fakeHome = repoRoot.getParent().toString();
+        Path configFile = writeConfig("local-git", "~/" + repoRoot.getFileName(),
+                tempDir.resolve("tilde-target-out").toString(), List.of("CSV"));
+        String originalHome = System.getProperty("user.home");
+        System.setProperty("user.home", fakeHome);
+        CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(new StringWriter()));
+        StringWriter ew = new StringWriter();
+        cli.setErr(new PrintWriter(ew));
+        int exit;
+        try {
+            exit = cli.execute("--config", configFile.toString());
+        } finally {
+            System.setProperty("user.home", originalHome);
+        }
+
+        assertThat(exit).as(ew.toString()).isZero();
+        assertThat(Files.exists(tempDir.resolve("tilde-target-out/file_hotspots.csv"))).isTrue();
+    }
+
+    @Test
     @DisplayName("F13: --config pointing at a directory says so instead of 'not found'")
     void configDirectoryGetsClearMessage() {
         StringWriter ew = new StringWriter();

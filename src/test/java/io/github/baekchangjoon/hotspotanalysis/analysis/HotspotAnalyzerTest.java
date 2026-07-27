@@ -462,6 +462,53 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("a method with no instrumented lines in a covered file gets multiplier 1.0, not the 10x penalty")
+    void shouldNotPenalizeMethodWithoutInstrumentedLines() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Two.java",
+                    "package com.example;\npublic class Two {\n  int a(int x){ if (x>0) return x; return 0; }\n  void marker() { }\n}\n",
+                    git, T1, "c1");
+        }
+        // The report knows this file but only instruments line 3 (method a).
+        // marker() at line 4 has no instrumented lines → coverage unknown.
+        Path report = repoRoot.resolve("jacoco-lines.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Two.java">
+                            <line nr="3" mi="0" ci="4" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(
+                TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(),
+                null, report.toString());
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0);
+
+        AnalysisResult result = analyzer.analyze(new AnalysisConfig(section, output));
+
+        MethodHotspot covered = result.methodHotspots().stream()
+                .filter(m -> m.signature().methodName().equals("a")).findFirst().orElseThrow();
+        MethodHotspot marker = result.methodHotspots().stream()
+                .filter(m -> m.signature().methodName().equals("marker")).findFirst().orElseThrow();
+        assertThat(covered.coverageMultiplier())
+                .isCloseTo(1.0 / 1.1, org.assertj.core.data.Offset.offset(1e-9));
+        assertThat(marker.coverageMultiplier()).isEqualTo(1.0);
+        assertThat(marker.lineCoverage()).isNull();
+    }
+
+    @Test
     @DisplayName("rejects github target with a clear remediation message in Phase 1")
     void shouldRejectGithubTargetInPhase1() {
         AnalysisConfig githubConfig = githubTargetConfig();

@@ -149,7 +149,7 @@ public class ConfigSynthesizer {
         // moduleA/build/classes/java/main).
         List<String> dirs = new ArrayList<>();
         for (Path root : moduleRoots) {
-            String prefix = base.relativize(root).toString().replace('\\', '/');
+            String prefix = base.relativize(root).toString().replace(java.io.File.separatorChar, '/');
             for (String c : CLASSPATH_CANDIDATES) {
                 if (Files.isDirectory(root.resolve(c))) {
                     dirs.add(prefix.isEmpty() ? c : prefix + "/" + c);
