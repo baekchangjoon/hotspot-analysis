@@ -61,7 +61,8 @@ gh workflow run release-assets.yml -f tag=vX.Y.Z -f bump_tap=true # + tap formul
 
 ## 4. 릴리스 후 확인 포인트
 
-- run의 job summary — bump-tap이 skip됐다면 사유가 표기됨
+- run의 job summary — bump-tap이 스텝 내부에서 skip됐다면 사유가 표기됨
+  (dispatch 게이트로 잡 자체가 skip된 경우엔 summary 없음 — 이때는 verify-tap도 같이 skip)
 - verify-tap green = tap formula가 새 태그를 참조함 (아래 수동 확인과 동등)
   ```bash
   brew update && brew info baekchangjoon/tap/hotspot   # stable X.Y.Z 확인
@@ -73,7 +74,7 @@ gh workflow run release-assets.yml -f tag=vX.Y.Z -f bump_tap=true # + tap formul
 
 | 증상 | 원인/조치 |
 |---|---|
-| verify-tap 실패 | bump-tap이 skip/실패한 것. bump-tap job summary에서 사유 확인(secret 미설정·비-stable 태그·push 실패). 조치 후 `-f bump_tap=true`로 재실행 |
+| verify-tap 실패 | ① `TAP_DEPLOY_KEY` 미설정으로 bump-tap이 skip(green)됐거나 ② formula 내용이 태그와 불일치, 또는 ③ formula fetch 실패. bump-tap job summary에서 사유 확인 후 `-f bump_tap=true`로 재실행. **bump-tap 자체가 실패(red)한 경우 verify-tap은 스킵**되므로 bump-tap 잡 로그를 직접 확인 |
 | bump-tap "success"인데 tap 미갱신 | job summary에 skip 사유가 있는지 확인. verify-tap 도입 이후에는 이 케이스가 하드 실패로 드러남 |
 | publish의 버전 불일치 에러 | §1의 4곳 중 하나가 태그와 다름. 범프 PR부터 다시 |
 | 아카이브 검증 실패 | 해당 플랫폼 러너 로그 확인. 첨부는 4개 전부 통과해야만 수행되므로 릴리스에 불량 아카이브가 올라가지는 않음 |
