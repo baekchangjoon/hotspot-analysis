@@ -190,4 +190,71 @@ class JacocoReportParserTest {
         emptyParser.parse(Path.of("nonexistent.xml"));
         assertThat(emptyParser.hasCoveredLines()).isFalse();
     }
+    @Test
+    @DisplayName("hasDataForFile distinguishes files present in the report from absent ones")
+    void hasDataForFileDistinguishesPresence(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("jacoco.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Covered.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(report);
+        assertThat(parser.hasDataForFile("src/main/java/com/example/Covered.java")).isTrue();
+        assertThat(parser.hasDataForFile("src/main/java/com/example/Absent.java")).isFalse();
+    }
+
+    @Test
+    @DisplayName("duplicate sourcefile entries merge coverage (covered in ANY entry counts covered)")
+    void duplicateSourcefileEntriesMergeWithOr(@TempDir Path tempDir) throws Exception {
+        // Merged/concatenated reports repeat <sourcefile> for the same file.
+        // A line executed in either run is covered — last-wins would silently
+        // erase coverage from the earlier entry.
+        Path report = tempDir.resolve("jacoco.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="1" ci="0" mb="0" cb="0"/>
+                            <line nr="8" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(report);
+        // line 5: covered in first entry → stays covered; line 8: covered.
+        assertThat(parser.getFileLineCounts("com/example/Foo.java"))
+                .isEqualTo(new JacocoReportParser.LineCounts(2, 2));
+    }
+
+    @Test
+    @DisplayName("malformed XML does not spray the JDK parser's raw [Fatal Error] onto stderr")
+    void malformedXmlDoesNotPrintFatalErrorNoise(@TempDir Path tempDir) throws Exception {
+        Path bad = tempDir.resolve("bad.xml");
+        Files.writeString(bad, "<report name=\"x\"><package");
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        try {
+            new JacocoReportParser().parse(bad);
+        } finally {
+            System.setErr(originalErr);
+        }
+        String err = errCapture.toString();
+        assertThat(err).doesNotContain("[Fatal Error]");
+        assertThat(err).contains("WARNING"); // our own diagnostic stays
+    }
+
 }
