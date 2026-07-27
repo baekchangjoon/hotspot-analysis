@@ -29,7 +29,8 @@ public class CognitiveComplexityCalculator {
             for (Node child : node.getChildNodes()) {
                 complexity += calculateNodeComplexity(child, childNesting);
             }
-        } else if (node instanceof SwitchStmt || node instanceof ConditionalExpr) {
+        } else if (node instanceof SwitchStmt || node instanceof SwitchExpr
+                || node instanceof ConditionalExpr) {
             complexity += 1;
 
             int childNesting = nestingLevel + 1;
