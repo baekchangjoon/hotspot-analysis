@@ -382,6 +382,7 @@ and `method_hotspots.csv` inserts `fqcn,method,parameters,file,start_line,end_li
 ```
 docs/
   phase1-design.md            ← architecture & decisions
+  RELEASING.md                ← release-pipeline operations guide (Korean)
   reports/T1…T11-*.md         ← per-task completion reports
 src/main/java/io/github/baekchangjoon/hotspotanalysis/
   HotspotApplication.java     ← Spring Boot entry point

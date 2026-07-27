@@ -246,10 +246,12 @@ jobs:
           set -euo pipefail
           if [ -z "$TAP_DEPLOY_KEY" ]; then
             echo "::warning::TAP_DEPLOY_KEY is not configured — skipping the Homebrew tap bump."
+            echo "## bump-tap: SKIPPED — TAP_DEPLOY_KEY secret is not available to this run" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
             echo "::warning::tag $TAG is not a stable release (vX.Y.Z) — skipping the Homebrew tap bump."
+            echo "## bump-tap: SKIPPED — $TAG is not a stable vX.Y.Z tag" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           version="${TAG#v}"
@@ -290,6 +292,7 @@ jobs:
           git add Formula/hotspot.rb
           if git diff --cached --quiet; then
             echo "formula already up to date"
+            echo "## bump-tap: formula already at ${version} — nothing to push" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -305,3 +308,42 @@ jobs:
           fi
           GIT_SSH_COMMAND="ssh -i $key_file -o UserKnownHostsFile=$known_hosts -o IdentitiesOnly=yes" \
             git push git@github.com:baekchangjoon/homebrew-tap.git HEAD
+
+  # The silent-skip class of failure (bump-tap "success" without a push, as on
+  # the first v0.1.5 attempt) becomes a hard failure here: whenever a stable
+  # release SHOULD have updated the tap, assert the published formula actually
+  # references this tag. Runs unconditionally on release paths — a missing
+  # TAP_DEPLOY_KEY no longer hides a stale tap.
+  verify-tap:
+    needs: bump-tap
+    if: github.event.inputs.tag == null || github.event.inputs.tag == '' || github.event.inputs.bump_tap == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: t
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-${DISPATCH_TAG:-$EVENT_TAG}}"
+          [ -n "$tag" ] || { echo "::error::no release tag resolved"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Assert the tap formula references this tag
+        env:
+          TAG: ${{ steps.t.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "prerelease tag $TAG — the tap is not expected to change; nothing to verify."
+            exit 0
+          fi
+          formula="$(curl -fsSL https://raw.githubusercontent.com/baekchangjoon/homebrew-tap/main/Formula/hotspot.rb)"
+          if printf '%s' "$formula" | grep -q "releases/download/${TAG}/"; then
+            echo "## verify-tap: OK — Formula/hotspot.rb references ${TAG}" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::the tap formula does not reference ${TAG} — the tap bump was skipped or failed (check the bump-tap job summary; is TAP_DEPLOY_KEY configured?)."
+            printf '%s\n' "$formula" | grep -E 'url "' || true
+            exit 1
+          fi
