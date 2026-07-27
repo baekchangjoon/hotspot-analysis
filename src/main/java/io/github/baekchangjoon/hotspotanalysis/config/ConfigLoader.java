@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.exc.MismatchedInputException;
+import com.fasterxml.jackson.databind.exc.ValueInstantiationException;
 import com.fasterxml.jackson.databind.exc.UnrecognizedPropertyException;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -78,7 +79,17 @@ public class ConfigLoader {
                     "Unknown configuration key: " + ex.getPropertyName(), ex);
         } catch (InvalidFormatException ex) {
             throw new ConfigLoadException(
-                    "Invalid value for '" + lastFieldName(ex) + "': " + ex.getValue(), ex);
+                    "Invalid value for '" + lastFieldName(ex) + "': \"" + ex.getValue()
+                            + "\" (expected " + ex.getTargetType().getSimpleName() + ")", ex);
+        } catch (ValueInstantiationException ex) {
+            // Enum @JsonCreator / record compact-constructor rejections (e.g. an
+            // unknown output format, decayHalfLifeDays <= 0). Surface the field
+            // path and the underlying reason instead of a generic parse error.
+            String reason = ex.getCause() != null && ex.getCause().getMessage() != null
+                    ? ex.getCause().getMessage()
+                    : ex.getOriginalMessage();
+            throw new ConfigLoadException(
+                    "Invalid value for '" + pathOf(ex) + "': " + reason, ex);
         } catch (MismatchedInputException ex) {
             // Covers missing required (record component) fields among other shape errors.
             throw new ConfigValidationException(
@@ -101,6 +112,20 @@ public class ConfigLoader {
         throw new ConfigValidationException(
                 "Configuration validation failed: " + String.join("; ", messages),
                 messages);
+    }
+
+    private static String pathOf(com.fasterxml.jackson.databind.JsonMappingException ex) {
+        if (ex.getPath() == null || ex.getPath().isEmpty()) {
+            return "<unknown>";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (com.fasterxml.jackson.databind.JsonMappingException.Reference ref : ex.getPath()) {
+            if (ref.getFieldName() != null) {
+                if (sb.length() > 0) sb.append('.');
+                sb.append(ref.getFieldName());
+            }
+        }
+        return sb.length() > 0 ? sb.toString() : "<unknown>";
     }
 
     private static String lastFieldName(InvalidFormatException ex) {

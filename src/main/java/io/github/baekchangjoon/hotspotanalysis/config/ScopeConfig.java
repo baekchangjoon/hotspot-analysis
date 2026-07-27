@@ -27,7 +27,12 @@ public record ScopeConfig(
             if (raw == null) {
                 return null;
             }
-            return Granularity.valueOf(raw.trim().toUpperCase());
+            try {
+                return Granularity.valueOf(raw.trim().toUpperCase());
+            } catch (IllegalArgumentException ex) {
+                throw new IllegalArgumentException(
+                        "\"" + raw + "\" is not one of " + java.util.Arrays.toString(values()));
+            }
         }
     }
 }

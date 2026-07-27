@@ -455,4 +455,112 @@ class ConfigLoaderTest {
     private static ConfigLoader newLoaderWithEnv(Map<String, String> env) {
         return new ConfigLoader(new EnvironmentVariableResolver(env::get));
     }
+    @Test
+    @DisplayName("F7: omitting output.topN defaults to 0 (all rows) instead of a raw Jackson null-int error")
+    void shouldDefaultTopNWhenOmitted(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target: { type: local-git, path: ./p }
+                  window: { days: 30 }
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                output:
+                  formats: [csv]
+                  path: ./out
+                """;
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(writeYaml(tempDir, yaml));
+        assertThat(config.output().topN()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("F9: an invalid enum value names the field, the value, and the allowed values")
+    void shouldNameFieldAndValueForInvalidEnum(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target: { type: local-git, path: ./p }
+                  window: { days: 30 }
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                output:
+                  formats: [xlsx]
+                  path: ./out
+                  topN: 0
+                """;
+        assertThatThrownBy(() -> newLoaderWithEnv(Map.of()).load(writeYaml(tempDir, yaml)))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("formats")
+                .hasMessageContaining("xlsx");
+    }
+
+    @Test
+    @DisplayName("F9: a rejected scoring value (decayHalfLifeDays: 0) surfaces the underlying reason, not a generic parse error")
+    void shouldSurfaceScoringConstructorRejection(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target: { type: local-git, path: ./p }
+                  window: { days: 30 }
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                  scoring:
+                    decayHalfLifeDays: 0
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 0
+                """;
+        assertThatThrownBy(() -> newLoaderWithEnv(Map.of()).load(writeYaml(tempDir, yaml)))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("decayHalfLifeDays");
+    }
+
+    @Test
+    @DisplayName("F17: days combined with since/until is rejected — the sample config says they are alternatives")
+    void shouldRejectDaysCombinedWithAbsoluteRange(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target: { type: local-git, path: ./p }
+                  window:
+                    days: 30
+                    since: "2025-12-01"
+                    until: "2026-07-01"
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 0
+                """;
+        assertThatThrownBy(() -> newLoaderWithEnv(Map.of()).load(writeYaml(tempDir, yaml)))
+                .isInstanceOf(ConfigValidationException.class)
+                .hasMessageContaining("days")
+                .hasMessageContaining("since");
+    }
+
+    @Test
+    @DisplayName("F8: a malformed scalar names the field, quotes the offending value, and states the expected type")
+    void shouldQuoteMalformedScalarAndExpectedType(@TempDir Path tempDir) throws IOException {
+        String yaml = """
+                analysis:
+                  target: { type: local-git, path: ./p }
+                  window:
+                    days: not-a-number
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 0
+                """;
+        assertThatThrownBy(() -> newLoaderWithEnv(Map.of()).load(writeYaml(tempDir, yaml)))
+                .isInstanceOf(ConfigLoadException.class)
+                .hasMessageContaining("'days'")
+                .hasMessageContaining("\"not-a-number\"")
+                .hasMessageContaining("expected");
+    }
+
 }

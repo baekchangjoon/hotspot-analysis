@@ -141,8 +141,8 @@ class HotspotCliE2ETest {
                     type: local-git
                     path: %s
                   window:
+                    since: 2016-05-23
                     until: 2026-05-23
-                    days: 3650
                   scope:
                     granularity:
                       - file
@@ -299,8 +299,8 @@ class HotspotCliE2ETest {
                     type: local-git
                     path: %s
                   window:
+                    since: 2016-05-23
                     until: 2026-05-23
-                    days: 3650
                   scope:
                     granularity:
                       - file
@@ -374,8 +374,8 @@ class HotspotCliE2ETest {
                     type: local-git
                     path: %s
                   window:
+                    since: 2016-05-23
                     until: 2026-05-23
-                    days: 3650
                   scope:
                     granularity:
                       - file

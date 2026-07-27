@@ -46,7 +46,7 @@ public class OutputDispatcher {
                          boolean apiEnabled, boolean excludeCoverage) {
         Objects.requireNonNull(result, "result");
         Objects.requireNonNull(outputConfig, "outputConfig");
-        Path outputDir = Path.of(outputConfig.path()).toAbsolutePath().normalize();
+        Path outputDir = Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion.expand(outputConfig.path())).toAbsolutePath().normalize();
         for (OutputConfig.OutputFormat fmt : outputConfig.formats()) {
             OutputWriter writer = writers.get(fmt);
             if (writer == null) {

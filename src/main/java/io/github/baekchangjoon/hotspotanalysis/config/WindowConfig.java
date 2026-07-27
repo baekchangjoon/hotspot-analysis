@@ -31,6 +31,12 @@ public record WindowConfig(
     }
 
     @JsonIgnore
+    @AssertTrue(message = "window.days cannot be combined with since/until — use one mode or the other")
+    public boolean isSingleMode() {
+        return days == null || (since == null && until == null);
+    }
+
+    @JsonIgnore
     @AssertTrue(message = "window.since must not be after window.until")
     public boolean isSinceNotAfterUntil() {
         if (since == null || until == null) {

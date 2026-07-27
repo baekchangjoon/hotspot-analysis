@@ -111,7 +111,7 @@ public class HotspotAnalyzer {
                             + " target.type=local-git.");
         }
 
-        Path repoRoot = Path.of(target.path()).toAbsolutePath().normalize();
+        Path repoRoot = Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion.expand(target.path())).toAbsolutePath().normalize();
         if (java.nio.file.Files.isRegularFile(repoRoot.resolve(".git/shallow"))) {
             // actions/checkout defaults to depth=1: every file would report
             // revisions=1 and the ranking silently inverts.
@@ -149,7 +149,7 @@ public class HotspotAnalyzer {
         io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser =
                 new io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser();
         if (jacocoSupplied) {
-            Path p = Path.of(config.analysis().jacocoReportPath());
+            Path p = Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion.expand(config.analysis().jacocoReportPath()));
             if (!p.isAbsolute()) p = repoRoot.resolve(p);
             if (!java.nio.file.Files.isRegularFile(p)) {
                 // A missing report must not silently mark every artifact as 0%
