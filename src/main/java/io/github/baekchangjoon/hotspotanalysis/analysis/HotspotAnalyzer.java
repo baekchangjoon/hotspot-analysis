@@ -178,6 +178,22 @@ public class HotspotAnalyzer {
             }
         }
 
+        if (jacocoSupplied) {
+            // A partial report (e.g. one module of a multi-module build) says
+            // nothing about files it does not mention. Treating them as 0%
+            // covered would inflate their multiplier to 1/0.1 = 10 — the same
+            // silent distortion the three guards above exist to prevent.
+            long absentFiles = methodsByFile.keySet().stream()
+                    .filter(path -> !jacocoParser.hasDataForFile(path))
+                    .count();
+            if (absentFiles > 0) {
+                System.err.println("WARNING: " + absentFiles + " of " + methodsByFile.size()
+                        + " analyzed files are not present in the JaCoCo report — coverage is"
+                        + " treated as unknown for them (multiplier = 1.0). Supply a report"
+                        + " covering all modules to score them by coverage.");
+            }
+        }
+
         boolean excludeCoverage = Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
 
         List<FileHotspot> files = buildFileHotspots(
@@ -256,12 +272,13 @@ public class HotspotAnalyzer {
             double decayed = fileDecayed.getOrDefault(path, 0.0);
             double cc = 0.0;
             for (MethodInfo m : e.getValue()) cc += m.cognitiveComplexity();
-            Double rawCoverage = jacocoSupplied ? jacoco.getFileCoverage(path) : null;
+            boolean hasCoverageData = jacocoSupplied && jacoco.hasDataForFile(path);
+            Double rawCoverage = hasCoverageData ? jacoco.getFileCoverage(path) : null;
             double mult = excludeCoverage
                     ? 1.0
                     : scoreCalculator.multiplier(
-                            jacocoSupplied ? OptionalDouble.of(rawCoverage)
-                                           : OptionalDouble.empty());
+                            hasCoverageData ? OptionalDouble.of(rawCoverage)
+                                            : OptionalDouble.empty());
             double composite = excludeCoverage
                     ? scoreCalculator.composite(cc, decayed)
                     : scoreCalculator.composite(cc, decayed, mult);
@@ -282,19 +299,20 @@ public class HotspotAnalyzer {
         List<MethodHotspot> out = new ArrayList<>();
         for (Map.Entry<String, List<MethodInfo>> e : methodsByFile.entrySet()) {
             String path = e.getKey();
+            boolean hasCoverageData = jacocoSupplied && jacoco.hasDataForFile(path);
             for (MethodInfo m : e.getValue()) {
                 int revisions = methodRevisions.getOrDefault(m.signature(), 0);
                 int loc = m.lineCount();
                 double simple = scoreCalculator.simple(revisions, loc);
                 double decayed = methodDecayed.getOrDefault(m.signature(), 0.0);
                 double cc = m.cognitiveComplexity();
-                Double rawCoverage = jacocoSupplied
+                Double rawCoverage = hasCoverageData
                         ? jacoco.getMethodCoverage(path, m.startLine(), m.endLine())
                         : null;
                 double mult = excludeCoverage
                         ? 1.0
                         : scoreCalculator.multiplier(
-                                jacocoSupplied
+                                hasCoverageData
                                         ? OptionalDouble.of(rawCoverage)
                                         : OptionalDouble.empty());
                 double composite = excludeCoverage
@@ -344,7 +362,7 @@ public class HotspotAnalyzer {
                 methodCcs.put(m.signature(), (double) m.cognitiveComplexity());
                 methodFile.put(m.signature(), path);
                 methodInfos.put(m.signature(), m);
-                if (jacocoSupplied) {
+                if (jacocoSupplied && jacoco.hasDataForFile(path)) {
                     methodCovs.put(m.signature(),
                             jacoco.getMethodCoverage(path, m.startLine(), m.endLine()));
                     methodLineCounts.put(m.signature(),
@@ -387,10 +405,12 @@ public class HotspotAnalyzer {
             double simple = scoreCalculator.simple(revs, loc);
             double decayed = methodDecayed.getOrDefault(sharedSig, 0.0);
             double cc = methodCcs.getOrDefault(sharedSig, 0.0);
-            Double rawCoverage = jacocoSupplied ? methodCovs.getOrDefault(sharedSig, 0.0) : null;
+            // Absent from methodCovs = the file has no data in the (partial)
+            // report → coverage unknown, multiplier 1.0 — never the 10x penalty.
+            Double rawCoverage = jacocoSupplied ? methodCovs.get(sharedSig) : null;
             double mult = excludeCoverage
                     ? 1.0
-                    : (jacocoSupplied
+                    : (rawCoverage != null
                             ? scoreCalculator.multiplier(OptionalDouble.of(rawCoverage))
                             : 1.0);
             double composite = excludeCoverage

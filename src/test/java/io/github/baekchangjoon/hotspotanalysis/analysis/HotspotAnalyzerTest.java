@@ -278,6 +278,74 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("files absent from a partial jacoco report get multiplier 1.0 (not the 10x penalty) + a warning")
+    void shouldNotPenalizeFilesAbsentFromPartialJacocoReport() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Covered.java",
+                    "package com.example;\npublic class Covered {\n  int m(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, T1, "c1");
+            writeJava("src/main/java/com/example/Absent.java",
+                    "package com.example;\npublic class Absent {\n  int n(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, T2, "c2");
+        }
+
+        // A partial report (e.g. one module of a multi-module build) mentions
+        // only Covered.java. Files it does not mention must NOT be treated as
+        // 0% covered — that would inflate their multiplier to 1/0.1 = 10 and
+        // silently distort the ranking (exploratory finding F1).
+        Path report = repoRoot.resolve("jacoco-partial.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Covered.java">
+                            <line nr="3" mi="0" ci="4" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(
+                TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(),
+                null, report.toString());
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0);
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        AnalysisResult result;
+        try {
+            result = analyzer.analyze(new AnalysisConfig(section, output));
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        FileHotspot covered = result.fileHotspots().stream()
+                .filter(f -> f.path().endsWith("Covered.java")).findFirst().orElseThrow();
+        FileHotspot absent = result.fileHotspots().stream()
+                .filter(f -> f.path().endsWith("Absent.java")).findFirst().orElseThrow();
+        // Covered.java: 1/1 lines covered → multiplier 1/(1.0+0.1) ≈ 0.909
+        assertThat(covered.coverageMultiplier()).isCloseTo(1.0 / 1.1, org.assertj.core.data.Offset.offset(1e-9));
+        // Absent.java: no data → coverage unknown → multiplier 1.0, coverage null
+        assertThat(absent.coverageMultiplier()).isEqualTo(1.0);
+        assertThat(absent.lineCoverage()).isNull();
+        // Method-level rows of the absent file get the same treatment.
+        assertThat(result.methodHotspots().stream()
+                .filter(m -> m.filePath().endsWith("Absent.java")))
+                .allSatisfy(m -> assertThat(m.coverageMultiplier()).isEqualTo(1.0));
+        // One explicit warning so the partial report does not pass silently.
+        assertThat(errCapture.toString()).contains("not present in the JaCoCo report");
+    }
+
+    @Test
     @DisplayName("rejects github target with a clear remediation message in Phase 1")
     void shouldRejectGithubTargetInPhase1() {
         AnalysisConfig githubConfig = githubTargetConfig();

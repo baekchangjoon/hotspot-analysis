@@ -27,6 +27,10 @@ public class JacocoReportParser {
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
             dbFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
             DocumentBuilder dBuilder = dbFactory.newDocumentBuilder();
+            // The JDK's default handler sprays locale-dependent "[Fatal Error]"
+            // lines onto stderr before our own warning; parse errors are
+            // already surfaced via the catch below.
+            dBuilder.setErrorHandler(new org.xml.sax.helpers.DefaultHandler());
             Document doc = dBuilder.parse(is);
             doc.getDocumentElement().normalize();
 
@@ -49,7 +53,10 @@ public class JacocoReportParser {
                         int lineNr = Integer.parseInt(lineElement.getAttribute("nr"));
                         int coveredInstructions = Integer.parseInt(lineElement.getAttribute("ci"));
 
-                        fileLines.put(lineNr, coveredInstructions > 0);
+                        // Merged reports repeat <sourcefile> for the same file:
+                        // a line executed in ANY entry is covered (OR), never
+                        // last-wins (which would erase earlier coverage).
+                        fileLines.merge(lineNr, coveredInstructions > 0, Boolean::logicalOr);
                     }
                 }
             }
@@ -78,6 +85,15 @@ public class JacocoReportParser {
     public boolean hasCoveredLines() {
         return lineCoverageMap.values().stream()
                 .anyMatch(lines -> lines.values().stream().anyMatch(Boolean::booleanValue));
+    }
+
+    /**
+     * True when the report carries line data for this file. Callers must not
+     * treat an absent file as 0% covered — a partial report (e.g. one module
+     * of a multi-module build) says nothing about files it does not mention.
+     */
+    public boolean hasDataForFile(String filePath) {
+        return findCoverageForPath(normalizePath(filePath)) != null;
     }
 
     public LineCounts getFileLineCounts(String filePath) {
