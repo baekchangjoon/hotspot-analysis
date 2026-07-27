@@ -46,6 +46,9 @@ dependencies {
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testImplementation("org.assertj:assertj-core")
     testImplementation("org.wiremock:wiremock-standalone:3.10.0")
+    // Executes the report's embedded JS (sort/filter/x-ray) in tests — string
+    // matching alone let a fully broken sort ship (eval finding).
+    testImplementation("org.htmlunit:htmlunit:4.13.0")
 }
 
 tasks.withType<JavaCompile> {

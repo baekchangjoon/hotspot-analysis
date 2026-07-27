@@ -619,14 +619,23 @@ public class HtmlOutputWriter implements OutputWriter {
                       if (!table) return;
                       var q = input.value.trim().toLowerCase();
                       var rows = table.tBodies[0].rows;
-                      var shown = 0;
+                      var shown = 0, total = 0;
                       for (var i = 0; i < rows.length; i++) {
-                        var match = !q || rows[i].textContent.toLowerCase().indexOf(q) !== -1;
-                        rows[i].style.display = match ? '' : 'none';
+                        var row = rows[i];
+                        if (row.classList.contains('xray-row')) {
+                          // Drill-down rows are not data rows: filtering always
+                          // collapses them (and never counts them).
+                          row.style.display = 'none';
+                          continue;
+                        }
+                        total++;
+                        var match = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+                        row.style.display = match ? '' : 'none';
+                        row.classList.remove('expanded');
                         if (match) shown++;
                       }
                       var countEl = document.querySelector('[data-count-target="' + sel + '"]');
-                      if (countEl) countEl.textContent = shown + ' / ' + rows.length;
+                      if (countEl) countEl.textContent = shown + ' / ' + total;
                     }
                     document.querySelectorAll('input[type="search"][data-filter-target]')
                       .forEach(function (input) {
@@ -646,27 +655,46 @@ public class HtmlOutputWriter implements OutputWriter {
                       if (av > bv) return asc ? 1 : -1;
                       return 0;
                     }
-                    document.querySelectorAll('table.sortable thead th').forEach(function (th, idx) {
+                    document.querySelectorAll('table.sortable thead th').forEach(function (th) {
                       th.addEventListener('click', function () {
                         var table = th.closest('table');
+                        // Per-table column index — the forEach index is
+                        // document-global and breaks every table after the
+                        // first (cells[idx] is undefined there).
+                        var idx = th.cellIndex;
                         var type = th.getAttribute('data-sort-type') || 'string';
                         var asc = th.getAttribute('aria-sort') !== 'ascending';
                         table.querySelectorAll('thead th').forEach(function (h) {
                           h.removeAttribute('aria-sort');
                         });
                         th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
-                        var rows = Array.prototype.slice.call(table.tBodies[0].rows);
-                        rows.sort(function (r1, r2) {
+                        // Sort only data rows; x-ray drill-down rows (single
+                        // colspan cell) are carried along behind their parent.
+                        var tbody = table.tBodies[0];
+                        var all = Array.prototype.slice.call(tbody.rows);
+                        var dataRows = [];
+                        for (var i = 0; i < all.length; i++) {
+                          if (all[i].classList.contains('xray-row')) {
+                            if (dataRows.length > 0) {
+                              dataRows[dataRows.length - 1]._xrayRow = all[i];
+                            }
+                          } else {
+                            dataRows.push(all[i]);
+                          }
+                        }
+                        dataRows.sort(function (r1, r2) {
                           var c1 = r1.cells[idx];
                           var c2 = r2.cells[idx];
-                          var v1 = c1.getAttribute('data-sort-value');
-                          var v2 = c2.getAttribute('data-sort-value');
-                          if (v1 === null) v1 = c1.textContent;
-                          if (v2 === null) v2 = c2.textContent;
+                          var v1 = c1 ? c1.getAttribute('data-sort-value') : null;
+                          var v2 = c2 ? c2.getAttribute('data-sort-value') : null;
+                          if (v1 === null) v1 = c1 ? c1.textContent : '';
+                          if (v2 === null) v2 = c2 ? c2.textContent : '';
                           return compare(v1, v2, type, asc);
                         });
-                        var tbody = table.tBodies[0];
-                        rows.forEach(function (r) { tbody.appendChild(r); });
+                        dataRows.forEach(function (r) {
+                          tbody.appendChild(r);
+                          if (r._xrayRow) tbody.appendChild(r._xrayRow);
+                        });
                       });
                     });
                   })();
