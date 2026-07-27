@@ -257,4 +257,28 @@ class JacocoReportParserTest {
         assertThat(err).contains("WARNING"); // our own diagnostic stays
     }
 
+    @Test
+    @DisplayName("a <sourcefile> with no <line> children counts as NO data for that file")
+    void emptySourcefileEntryIsNoData(@TempDir Path tempDir) throws Exception {
+        // JaCoCo emits line-less sourcefile entries for interfaces/annotations.
+        // Treating them as "has data" would resurrect the 10x penalty
+        // (getFileCoverage would report 0.0 for an unknown).
+        Path report = tempDir.resolve("jacoco.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Marker.java"/>
+                        <sourcefile name="Real.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(report);
+        assertThat(parser.hasDataForFile("com/example/Marker.java")).isFalse();
+        assertThat(parser.hasDataForFile("com/example/Real.java")).isTrue();
+    }
+
 }

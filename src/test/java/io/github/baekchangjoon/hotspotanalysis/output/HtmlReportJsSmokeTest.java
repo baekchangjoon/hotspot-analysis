@@ -49,12 +49,16 @@ class HtmlReportJsSmokeTest {
                     .as("file table sorted by LOC descending")
                     .containsExactly("30", "20", "10");
 
-            // x-ray drilldown rows must still immediately follow their parent.
+            // Each x-ray drilldown must follow ITS OWN parent (the parent's
+            // onclick names the x-ray row id) and stay collapsed after sorting.
             List<HtmlTableRow> rows = fileTable.getBodies().get(0).getRows();
             for (int i = 0; i < rows.size(); i++) {
                 if (rows.get(i).getAttribute("class").contains("xray-row")) {
                     assertThat(i).isGreaterThan(0);
-                    assertThat(rows.get(i - 1).getAttribute("class")).contains("file-row");
+                    assertThat(rows.get(i - 1).getAttribute("onclick"))
+                            .contains("'" + rows.get(i).getId() + "'");
+                    assertThat(rows.get(i).getAttribute("style").replace(";", ""))
+                            .contains("display: none");
                 }
             }
 

@@ -21,7 +21,8 @@ public class VcsProviderFactory {
     public VcsProvider create(TargetConfig target) {
         return switch (target.type()) {
             case LOCAL_GIT -> new LocalGitProvider(
-                    Path.of(target.path()).toAbsolutePath().normalize());
+                    Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion
+                            .expand(target.path())).toAbsolutePath().normalize());
             case GITHUB -> new GithubProvider(new KohsukeGithubClient(target.github()));
         };
     }

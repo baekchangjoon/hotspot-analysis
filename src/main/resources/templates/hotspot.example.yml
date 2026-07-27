@@ -18,7 +18,8 @@ analysis:
     # Mode A: relative window (last N days from "now") -- safe default for
     # actively maintained repositories.
     days: 365
-    # Mode B: absolute ISO-8601 date range (use INSTEAD of `days`).
+    # Mode B: absolute ISO-8601 date range (use INSTEAD of `days` — comment
+    # the `days:` line out first; specifying both is a validation error).
     # Switch to this when the repo has been inactive for longer than `days`,
     # otherwise the analysis will report "Commits: 0".
     # since: "2024-01-01"

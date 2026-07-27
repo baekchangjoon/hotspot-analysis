@@ -341,13 +341,19 @@ public class HotspotAnalyzer {
                 double simple = scoreCalculator.simple(revisions, loc);
                 double decayed = methodDecayed.getOrDefault(m.signature(), 0.0);
                 double cc = m.cognitiveComplexity();
-                Double rawCoverage = hasCoverageData
-                        ? jacoco.getMethodCoverage(path, m.startLine(), m.endLine())
+                // Gate per method range, not just per file: a method with no
+                // instrumented lines (interface/abstract declarations) has
+                // unknown coverage, not 0% — same rule as absent files.
+                JacocoReportParser.LineCounts counts = hasCoverageData
+                        ? jacoco.getMethodLineCounts(path, m.startLine(), m.endLine())
+                        : ZERO_COVERAGE;
+                Double rawCoverage = counts.executable() > 0
+                        ? (double) counts.covered() / counts.executable()
                         : null;
                 double mult = excludeCoverage
                         ? 1.0
                         : scoreCalculator.multiplier(
-                                hasCoverageData
+                                rawCoverage != null
                                         ? OptionalDouble.of(rawCoverage)
                                         : OptionalDouble.empty());
                 double composite = excludeCoverage
@@ -398,10 +404,15 @@ public class HotspotAnalyzer {
                 methodFile.put(m.signature(), path);
                 methodInfos.put(m.signature(), m);
                 if (jacocoSupplied && jacoco.hasDataForFile(path)) {
-                    methodCovs.put(m.signature(),
-                            jacoco.getMethodCoverage(path, m.startLine(), m.endLine()));
-                    methodLineCounts.put(m.signature(),
-                            jacoco.getMethodLineCounts(path, m.startLine(), m.endLine()));
+                    JacocoReportParser.LineCounts counts =
+                            jacoco.getMethodLineCounts(path, m.startLine(), m.endLine());
+                    // No instrumented lines in range = unknown coverage; an
+                    // absent methodCovs entry yields multiplier 1.0 downstream.
+                    if (counts.executable() > 0) {
+                        methodCovs.put(m.signature(),
+                                (double) counts.covered() / counts.executable());
+                        methodLineCounts.put(m.signature(), counts);
+                    }
                 }
                 if (m.apiMappings() != null && !m.apiMappings().isEmpty()) {
                     apiMappingsMap.put(m.signature(), m.apiMappings());
