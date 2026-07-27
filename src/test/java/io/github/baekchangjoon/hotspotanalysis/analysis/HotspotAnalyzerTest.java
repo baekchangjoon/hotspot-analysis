@@ -346,6 +346,122 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("an unparseable .java file is skipped with a warning instead of aborting the whole run")
+    void shouldSkipUnparseableFileWithWarning() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Good.java",
+                    "package com.example; public class Good { void g() { int a = 1; } }", git, T1, "c1");
+            writeJava("src/main/java/com/example/Broken.java",
+                    "package com.example; class Broken { void x( { if }}}", git, T2, "c2");
+        }
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        AnalysisResult result;
+        try {
+            result = analyzer.analyze(configFor(repoRoot, 0));
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        assertThat(result.fileHotspots()).extracting(FileHotspot::path)
+                .containsExactly("src/main/java/com/example/Good.java");
+        assertThat(errCapture.toString()).contains("Broken.java").contains("skip");
+    }
+
+    @Test
+    @DisplayName("a shallow clone (truncated history) triggers a warning — revisions would be undercounted")
+    void shouldWarnOnShallowClone() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/A.java",
+                    "package com.example; public class A { void m() { int a = 1; } }", git, T1, "c1");
+        }
+        // CI checkouts (actions/checkout default depth=1) leave .git/shallow.
+        Files.writeString(repoRoot.resolve(".git/shallow"),
+                "0123456789012345678901234567890123456789\n");
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        try {
+            analyzer.analyze(configFor(repoRoot, 0));
+        } finally {
+            System.setErr(originalErr);
+        }
+        assertThat(errCapture.toString()).contains("shallow");
+    }
+
+    @Test
+    @DisplayName("jacoco line numbers beyond the file's length trigger a stale-report warning")
+    void shouldWarnWhenJacocoLinesExceedFileLength() throws Exception {
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/Hot.java",
+                    "package com.example;\npublic class Hot {\n  int m(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, T1, "c1");
+        }
+        // Line 100 does not exist in the 4-line file — the report was
+        // generated against a different (older/newer) version of the source.
+        Path report = repoRoot.resolve("jacoco-stale.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="Hot.java">
+                            <line nr="3" mi="0" ci="1" mb="0" cb="0"/>
+                            <line nr="100" mi="2" ci="0" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(
+                TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(
+                LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE),
+                List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(),
+                null, report.toString());
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0);
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        try {
+            analyzer.analyze(new AnalysisConfig(section, output));
+        } finally {
+            System.setErr(originalErr);
+        }
+        assertThat(errCapture.toString()).contains("beyond the file's length");
+    }
+
+    @Test
+    @DisplayName("POSIX file names containing a backslash are reported verbatim and keep their git history")
+    void shouldPreserveBackslashInPosixFileNames() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeFalse(
+                System.getProperty("os.name").toLowerCase().contains("win"));
+        // Legal on POSIX; a blanket replace('\\','/') would turn it into a
+        // phantom path that no longer matches the git log, producing rows
+        // with revisions=0 that contradict the method-level rows.
+        String name = "Weird\\Name.java";
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/" + name,
+                    "package com.example; public class WeirdName { void m() { int a = 1; } }",
+                    git, T1, "c1");
+        }
+
+        AnalysisResult result = analyzer.analyze(configFor(repoRoot, 0));
+
+        FileHotspot f = result.fileHotspots().stream()
+                .filter(h -> h.path().endsWith(name)).findFirst().orElseThrow();
+        assertThat(f.revisions()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("rejects github target with a clear remediation message in Phase 1")
     void shouldRejectGithubTargetInPhase1() {
         AnalysisConfig githubConfig = githubTargetConfig();

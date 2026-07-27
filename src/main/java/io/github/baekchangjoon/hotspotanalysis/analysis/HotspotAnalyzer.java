@@ -112,6 +112,13 @@ public class HotspotAnalyzer {
         }
 
         Path repoRoot = Path.of(target.path()).toAbsolutePath().normalize();
+        if (java.nio.file.Files.isRegularFile(repoRoot.resolve(".git/shallow"))) {
+            // actions/checkout defaults to depth=1: every file would report
+            // revisions=1 and the ranking silently inverts.
+            System.err.println("WARNING: " + repoRoot + " is a shallow clone — git history is"
+                    + " truncated, so revision counts and recency decay are undercounted."
+                    + " Fetch the full history (e.g. 'git fetch --unshallow') for trustworthy scores.");
+        }
         VcsProvider provider = providerFactory.create(target);
         List<CommitRecord> commits = provider.loadCommits(config.analysis().window());
 
@@ -192,6 +199,22 @@ public class HotspotAnalyzer {
                         + " treated as unknown for them (multiplier = 1.0). Supply a report"
                         + " covering all modules to score them by coverage.");
             }
+            // Line numbers beyond a file's actual length mean the report was
+            // generated against a different version of the source: coverage
+            // would silently mis-align. Warn, do not fail (line counts drift
+            // legitimately by small amounts during refactors).
+            long staleFiles = methodsByFile.keySet().stream()
+                    .filter(path -> {
+                        int loc = fileLoc.getOrDefault(path, 0);
+                        return loc > 0 && jacocoParser.getMaxLineNumber(path) > loc;
+                    })
+                    .count();
+            if (staleFiles > 0) {
+                System.err.println("WARNING: the JaCoCo report references lines beyond the file's"
+                        + " length for " + staleFiles + " file(s) — it was likely generated from a"
+                        + " different commit than the sources being analyzed. Regenerate the report"
+                        + " from the same checkout for trustworthy coverage.");
+            }
         }
 
         boolean excludeCoverage = Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
@@ -249,8 +272,20 @@ public class HotspotAnalyzer {
     private Map<String, List<MethodInfo>> parseAll(Path repoRoot, List<Path> javaFiles) {
         Map<String, List<MethodInfo>> result = new HashMap<>();
         for (Path file : javaFiles) {
-            String relative = repoRoot.relativize(file).toString().replace('\\', '/');
-            result.put(relative, sourceParser.parse(file));
+            // Normalize only the platform separator (Windows '\') to '/'. A
+            // blanket replace('\\','/') would corrupt POSIX file names that
+            // legitimately contain a backslash.
+            String relative = repoRoot.relativize(file).toString()
+                    .replace(java.io.File.separatorChar, '/');
+            try {
+                result.put(relative, sourceParser.parse(file));
+            } catch (io.github.baekchangjoon.hotspotanalysis.parser.SourceParseException e) {
+                // Legacy repos routinely contain .java files that are not valid
+                // Java (templates, generated fragments). One bad file must not
+                // abort the whole analysis.
+                System.err.println("WARNING: skipping unparseable source file " + relative
+                        + " (" + e.getMessage() + "). Add it to scope.exclude to silence this.");
+            }
         }
         return result;
     }
