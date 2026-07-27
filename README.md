@@ -213,10 +213,11 @@ analysis:
       - build/libs
 
   # JaCoCo XML 리포트(선택). 실제 리포트가 있을 때만 주석을 해제하세요.
-  # 커버리지가 점수에 반영됩니다(배수 1/(coverage+0.1)). 존재하지 않는 경로를
-  # 가리키거나, 리포트가 실행 데이터 없이 생성돼 커버된 라인이 0인 경우
-  # (스테일 .exec, 테스트 스킵), 커버리지 없이 진행한다는 경고가 출력됩니다
-  # (점수는 왜곡되지 않음).
+  # 커버리지가 점수에 반영됩니다(배수 1/(coverage+0.1)). 반드시 분석 대상과
+  # 같은 커밋에서 생성된 리포트를 쓰세요(어긋나면 라인 번호 초과 경고).
+  # 존재하지 않는 경로, 커버된 라인이 0인 리포트(스테일 .exec, 테스트 스킵),
+  # 그리고 리포트에 없는 파일(멀티모듈의 부분 리포트)은 모두 커버리지 미상으로
+  # 처리되어 배수 1.0 + 경고가 출력됩니다(점수는 왜곡되지 않음).
   # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
@@ -259,9 +260,10 @@ hotspot-report/
 
 > **HTML 리포트 기능.** `hotspots.html`은 단일 자체 완결형 파일입니다
 > (원격 CSS/JS 없음, CDN 없음). 아무 열 헤더나 클릭해 오름/내림차순 정렬;
-> 검색 박스에 입력해 경로·클래스·메서드·매개변수로 행 필터링. 라이트/다크 모드는
-> 브라우저 설정을 따릅니다. 사용자 제어 값은 모두 HTML 이스케이프되어, 악의적인
-> 파일 경로가 스크립트 태그를 주입할 수 없습니다.
+> 검색 박스에 입력해 경로·클래스·메서드·매개변수로 행 필터링; **파일 행을
+> 클릭하면 X-Ray 드릴다운**으로 그 파일의 메서드별 기여(Share%)가 펼쳐집니다.
+> 라이트/다크 모드는 브라우저 설정을 따릅니다. 사용자 제어 값은 모두 HTML
+> 이스케이프되어, 악의적인 파일 경로가 스크립트 태그를 주입할 수 없습니다.
 
 ---
 
@@ -326,12 +328,18 @@ Commands:
 | `analysis.apiAnalysis.enabled` | boolean | REST API 엔드포인트 + 공유 컴포넌트 단위 활성화; 기본 `false` |
 | `analysis.apiAnalysis.sharedComponentMode` | `CUMULATIVE` \| `SEPARATE` \| `BOTH` | 2개 이상 엔드포인트가 공유하는 메서드의 집계/리포트 방식; 기본 `BOTH` |
 | `analysis.apiAnalysis.classpathDirectories[]` | string[] | 콜그래프 심볼 해석을 돕는 의존성 jar/클래스 디렉터리 |
-| `analysis.jacocoReportPath` | string | JaCoCo XML 리포트 경로; 커버리지 배수 `1/(coverage+0.1)` 활성화. 없으면 배수 1.0 |
+| `analysis.jacocoReportPath` | string | JaCoCo XML 리포트 경로; 커버리지 배수 `1/(coverage+0.1)` 활성화. 리포트가 없거나, 커버된 라인이 0이거나, 파일이 리포트에 없으면(부분 리포트) 배수 1.0 + 경고 |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | 최소 한 개 |
 | `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | API/공유 테이블 위치: `hotspots.*`에 통합, 독립 `api_report.*`, 또는 둘 다; 기본 `BOTH` |
 | `output.coverageBreakdown` | boolean | `true`면(+JaCoCo 제공 시) 모든 커버리지 수치의 계산 근거 — 파일별 counted 라인, 엔드포인트별 메서드 기여(covered/실행가능 라인) — 를 `coverage_breakdown.yml`로 출력; 기본 `false` |
 | `output.path` | string | 출력 디렉터리 |
-| `output.topN` | integer ≥ 0 | `0`은 "모든 행" |
+| `output.topN` | integer ≥ 0 | `0`은 "모든 행"; 생략 시 `0` |
+
+> **경로 해석 규칙.** 설정 파일 안의 상대 경로(`target.path`, `output.path`,
+> `jacocoReportPath`)는 설정 파일 위치가 아니라 **명령을 실행한 디렉터리(cwd)
+> 기준**으로 해석됩니다. 맨 앞의 `~/`는 홈 디렉터리로 확장됩니다.
+> **윈도우 규칙.** `window.days`와 `since`/`until`은 상호 배타입니다 — 함께
+> 지정하면 검증 에러가 납니다(둘 중 하나만 사용).
 
 문자열 값의 환경변수는 `${VAR_NAME}` 구문으로 치환됩니다. `#`로 시작하는 줄
 (YAML 주석)은 그대로 두어 문서 예시가 오류를 일으키지 않습니다.
@@ -353,7 +361,12 @@ Commands:
 | Coverage Multiplier | JaCoCo XML 기준 `1 / (line_coverage + 0.1)`; 리포트 없으면 1.0 |
 | Composite Score | `Cognitive Complexity × Recency Decay × Coverage Multiplier` |
 
-행은 **Composite Score 내림차순**으로 정렬됩니다(동점은 경로 / 표준 시그니처로 처리).
+행은 **Composite Score 내림차순**으로 정렬됩니다(동점은 경로 / 표준 시그니처
+알파벳순으로 순차 rank가 부여됩니다 — rank 공유 없음).
+
+> **Composite가 0인 행.** 인지 복잡도가 0인 아티팩트(분기 없는 record/DTO/예외
+> 클래스 등)는 곱셈 모델의 귀결로 churn과 무관하게 Composite가 항상 0입니다.
+> 그런 "분기 없는 뜨거운 파일"은 `simple_score`(Revisions × LOC) 열로 관측하세요.
 
 CSV는 단위별로 분리(파일 10열, 메서드 15열); YAML/MD/HTML은 모든 단위를 한 문서에 묶습니다.
 CSV는 위 표의 요인 앞에 `simple_rank`, `composite_rank` 두 열이 먼저 옵니다 — 즉
@@ -493,9 +506,8 @@ end-to-end로 연결**되어 있고, GitHub 프로바이더는 WireMock 계약 �
 3. **Merge 커밋**: 변경 이력은 각 커밋의 **첫 번째 부모**와의 diff로 계산합니다.
    따라서 fast-forward 없이 머지된 브랜치 쪽 변경은 revision/recency 집계에서
    누락될 수 있습니다.
-4. **소스 파싱 실패**: 스코프 내 `.java` 파일 하나라도 파싱에 실패하면 분석
-   전체가 중단됩니다(부분 결과를 내지 않음). 손상·비표준 소스는 `scope.exclude`로
-   제외하세요.
+4. **소스 파싱 실패**: 파싱에 실패한 `.java` 파일은 경고 후 건너뛰고 나머지로
+   분석을 계속합니다. 경고를 없애려면 해당 파일을 `scope.exclude`에 추가하세요.
 
 이 결정들과 대안의 태스크별 분석은 `docs/reports/*`를 참고하세요.
 

@@ -221,9 +221,12 @@ analysis:
 
   # JaCoCo XML report (optional). Uncomment ONLY when you actually have a
   # report. Coverage then feeds the score (multiplier 1/(coverage+0.1)).
-  # Pointing at a non-existent path — or at a report generated without test
-  # execution data, i.e. zero covered lines (stale .exec, skipped tests) —
-  # prints a warning and proceeds without coverage (scores stay correct).
+  # Use a report generated from the SAME commit as the analyzed sources
+  # (a mismatch triggers a line-number warning). A non-existent path, a
+  # report with zero covered lines (stale .exec, skipped tests), and files
+  # missing from a partial report (one module of a multi-module build) are
+  # all treated as unknown coverage: multiplier 1.0 plus a warning
+  # (scores stay correct).
   # jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml
 
 output:
@@ -268,9 +271,10 @@ hotspot-report/
 > **HTML report features.** `hotspots.html` is a single self-contained file
 > (no remote CSS/JS, no CDN). Click any column header to sort
 > ascending/descending; type into the search box to filter rows by path,
-> class, method, or parameters. Light/dark mode follows your browser's
-> preference. Every user-controlled value is HTML-escaped, so a malicious
-> file path can't inject script tags.
+> class, method, or parameters; **click a file row for an X-Ray drill-down**
+> of that file's per-method contributions (Share%). Light/dark mode follows
+> your browser's preference. Every user-controlled value is HTML-escaped, so
+> a malicious file path can't inject script tags.
 
 ---
 
@@ -335,12 +339,19 @@ Commands:
 | `analysis.apiAnalysis.enabled` | boolean | Turn on the REST API endpoint + shared-component granularities; default `false` |
 | `analysis.apiAnalysis.sharedComponentMode` | `CUMULATIVE` \| `SEPARATE` \| `BOTH` | How methods shared by ≥2 endpoints are aggregated/reported; default `BOTH` |
 | `analysis.apiAnalysis.classpathDirectories[]` | string[] | Dirs with dependency jars/classes to improve call-graph symbol resolution |
-| `analysis.jacocoReportPath` | string | JaCoCo XML report path; enables the coverage multiplier `1/(coverage+0.1)`. Absent → multiplier 1.0 |
+| `analysis.jacocoReportPath` | string | JaCoCo XML report path; enables the coverage multiplier `1/(coverage+0.1)`. A missing report, a zero-covered-lines report, or a file absent from a partial report → multiplier 1.0 + warning |
 | `output.formats[]` | `CSV` \| `YAML` \| `MD` \| `HTML` | At least one |
 | `output.apiLayout` | `COMBINED` \| `STANDALONE` \| `BOTH` | Where API/shared tables go: into `hotspots.*`, a standalone `api_report.*`, or both; default `BOTH` |
 | `output.coverageBreakdown` | boolean | When `true` (and a JaCoCo report is supplied), also writes `coverage_breakdown.yml` — the calculation trace behind every coverage number (per-file counts; per-endpoint per-method covered/executable lines); default `false` |
 | `output.path` | string | Output directory |
-| `output.topN` | integer ≥ 0 | `0` means "all rows" |
+| `output.topN` | integer ≥ 0 | `0` means "all rows"; defaults to `0` when omitted |
+
+> **Path resolution.** Relative paths inside the config file (`target.path`,
+> `output.path`, `jacocoReportPath`) resolve against the **current working
+> directory**, not the config file's location. A leading `~/` expands to the
+> home directory.
+> **Window rule.** `window.days` and `since`/`until` are mutually exclusive —
+> specifying both is a validation error (pick one mode).
 
 Environment variables in any string value are substituted with `${VAR_NAME}`
 syntax; lines starting with `#` (YAML comments) are left untouched so
@@ -362,7 +373,13 @@ Every report now carries **two scores** and **four input factors** side by side,
 | Coverage Multiplier | `1 / (line_coverage + 0.1)` from JaCoCo XML; 1.0 if no report supplied |
 | Composite Score | `Cognitive Complexity × Recency Decay × Coverage Multiplier` |
 
-Rows are sorted by **Composite Score DESC** (ties broken by path / canonical signature).
+Rows are sorted by **Composite Score DESC** (ties get sequential ranks in
+path / canonical-signature order — no shared ranks).
+
+> **Rows with Composite 0.** Artifacts with zero cognitive complexity
+> (branch-free records/DTOs/exceptions) always score Composite 0 regardless
+> of churn — a consequence of the multiplicative model. Watch such
+> "branch-free but hot" files via the `simple_score` (Revisions × LOC) column.
 
 CSVs split per granularity (10 columns for files, 15 for methods); YAML/MD/HTML bundle every granularity into one document.
 CSV prefixes the factors above with two columns, `simple_rank` and `composite_rank` — so the
@@ -505,9 +522,9 @@ and point `target.type: local-git` at the working tree.
 3. **Merge commits**: change history is computed from each commit's diff against
    its **first parent**. Changes that landed on the merged-in branch (without a
    fast-forward) may therefore be missed in the revision/recency aggregates.
-4. **Source parse failures**: if any single `.java` file in scope fails to parse,
-   the whole analysis aborts (it does not emit partial results). Exclude
-   corrupt/non-standard sources via `scope.exclude`.
+4. **Source parse failures**: unparseable `.java` files are skipped with a
+   warning and the analysis continues with the rest. Add them to
+   `scope.exclude` to silence the warning.
 
 See `docs/reports/*` for a per-task breakdown of these decisions and their
 alternatives.

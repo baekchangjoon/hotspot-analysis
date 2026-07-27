@@ -269,12 +269,13 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   `@RestController`/`@Controller` + a mapping annotation, and
   `apiAnalysis.classpathDirectories` includes the dependency jars/classes so
   cross-type calls resolve. Do **not** report "no endpoints".
-- **IF** every `coverageMultiplier` is `10` (or every `lineCoverage` is `0`)
-  **THEN** the JaCoCo report doesn't match the analyzed sources — supply a report
-  from the **same** build/module; do not conclude "nothing is tested".
-  (A report with zero covered lines overall — generated without test execution
-  data — is auto-detected: the CLI warns and proceeds without coverage,
-  multiplier `1.0`. Regenerate it, e.g. `./gradlew test jacocoTestReport`.)
+- **IF** the run warns that files are "not present in the JaCoCo report" (their
+  `coverageMultiplier` stays `1.0`) **THEN** the report doesn't cover those
+  files — supply a report from the **same** build/module; do not conclude
+  "nothing is tested". Broken/zero-coverage/partial reports are all
+  auto-detected and treated as unknown coverage (multiplier `1.0` + warning),
+  never as a silent 10x penalty. Regenerate with e.g.
+  `./gradlew test jacocoTestReport` from the same checkout.
 - **IF** the summary shows `Files: 0` **THEN** fix `scope.include` (single-module
   needs `src/main/java/**/*.java`, multi-module needs `**/src/main/java/**/*.java`;
   list both).
