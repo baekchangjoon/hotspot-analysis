@@ -373,6 +373,7 @@ CSV는 위 표의 요인 앞에 `simple_rank`, `composite_rank` 두 열이 먼�
 ```
 docs/
   phase1-design.md            ← 아키텍처 & 결정
+  RELEASING.md                ← 릴리스 파이프라인 운영 가이드
   reports/T1…T11-*.md         ← 태스크별 완료 리포트
 src/main/java/io/github/baekchangjoon/hotspotanalysis/
   HotspotApplication.java     ← Spring Boot 진입점
