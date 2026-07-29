@@ -281,4 +281,40 @@ class JacocoReportParserTest {
         assertThat(parser.hasDataForFile("com/example/Real.java")).isTrue();
     }
 
+    @Test
+    @DisplayName("path matching respects segment boundaries — no suffix false-positives")
+    void pathMatchingRespectsSegmentBoundaries(@TempDir Path tempDir) throws Exception {
+        Path report = tempDir.resolve("jacoco.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="">
+                        <sourcefile name="Foo.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                    <package name="com/example">
+                        <sourcefile name="Bar.java">
+                            <line nr="5" mi="0" ci="1" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+        JacocoReportParser parser = new JacocoReportParser();
+        parser.parse(report);
+
+        // Exact and separator-bounded suffix matches work.
+        assertThat(parser.hasDataForFile("Foo.java")).isTrue();
+        assertThat(parser.hasDataForFile("src/main/java/Foo.java")).isTrue();
+        assertThat(parser.hasDataForFile("src/main/java/com/example/Bar.java")).isTrue();
+
+        // A file merely ENDING with a key's text must not match: default-package
+        // key "Foo.java" vs MyFoo.java, and key "com/example/Bar.java" vs a path
+        // in package mycom.example — both matched the old unbounded endsWith and
+        // silently borrowed another file's coverage (post-F1 the match also
+        // decides whether the multiplier applies at all).
+        assertThat(parser.hasDataForFile("src/main/java/MyFoo.java")).isFalse();
+        assertThat(parser.hasDataForFile("src/main/java/mycom/example/Bar.java")).isFalse();
+    }
+
 }

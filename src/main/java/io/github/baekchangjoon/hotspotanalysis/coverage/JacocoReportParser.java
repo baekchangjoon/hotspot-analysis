@@ -162,7 +162,15 @@ public class JacocoReportParser {
 
     private Map<Integer, Boolean> findCoverageForPath(String normalizedPath) {
         for (Map.Entry<String, Map<Integer, Boolean>> entry : lineCoverageMap.entrySet()) {
-            if (normalizedPath.endsWith(entry.getKey())) {
+            // Suffix match bounded at a path-segment boundary: the report key
+            // "com/example/Foo.java" must match ".../com/example/Foo.java" but
+            // never ".../mycom/example/Foo.java" (nor may a default-package
+            // "Foo.java" match "MyFoo.java") — an unbounded endsWith would
+            // silently borrow another file's coverage. When identically named
+            // files exist in several modules the first match still wins; use a
+            // per-module report for exact attribution.
+            String key = entry.getKey();
+            if (normalizedPath.equals(key) || normalizedPath.endsWith("/" + key)) {
                 return entry.getValue();
             }
         }

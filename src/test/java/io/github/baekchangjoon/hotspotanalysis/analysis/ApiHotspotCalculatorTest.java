@@ -286,6 +286,49 @@ class ApiHotspotCalculatorTest {
         });
     }
 
+    @Test
+    @DisplayName("a shared component whose file is absent from a partial jacoco report gets multiplier 1.0, not 10x")
+    void sharedComponentAbsentFromPartialReportIsUnknownCoverage() throws Exception {
+        writeTwoEndpointFixture();
+        Path destDir = repoRoot.resolve("build/classes/java/main");
+        compileJavaFiles(repoRoot.resolve("src/main/java"), destDir);
+
+        // The report knows the CONTROLLER file only — MyService.java (which
+        // hosts the shared commonMethod) is absent, e.g. another module's
+        // report. Unknown coverage must never become the 10x penalty.
+        Path report = repoRoot.resolve("jacoco-partial.xml");
+        Files.writeString(report, """
+                <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+                <report name="test">
+                    <package name="com/example">
+                        <sourcefile name="MyController.java">
+                            <line nr="8" mi="0" ci="2" mb="0" cb="0"/>
+                        </sourcefile>
+                    </package>
+                </report>
+                """);
+
+        TargetConfig target = new TargetConfig(TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(LocalDate.parse("2026-01-01"), LocalDate.parse("2026-12-31"), null);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
+                List.of("**/*.java"), List.of());
+        ApiAnalysisConfig apiConfig = new ApiAnalysisConfig(
+                true, ApiAnalysisConfig.SharedComponentMode.BOTH, List.of("build/classes/java/main"));
+        AnalysisSection section = new AnalysisSection(
+                target, window, scope, new ScoringConfig(), apiConfig, report.toString());
+        OutputConfig output = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.CSV), "./out", 0, OutputConfig.ApiLayout.BOTH);
+
+        AnalysisResult result = analyzer.analyze(new AnalysisConfig(section, output));
+
+        assertThat(result.sharedComponents()).hasSize(1);
+        SharedComponentHotspot shared = result.sharedComponents().get(0);
+        assertThat(shared.method().methodName()).isEqualTo("commonMethod");
+        assertThat(shared.coverageMultiplier()).isEqualTo(1.0);
+        assertThat(shared.lineCoverage()).isNull();
+    }
+
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {
         Files.createDirectories(destDir);
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -335,4 +378,54 @@ class ApiHotspotCalculatorTest {
                 List.of(OutputConfig.OutputFormat.CSV), "./out", 0, OutputConfig.ApiLayout.BOTH);
         return new AnalysisConfig(section, output);
     }
+
+    private void writeTwoEndpointFixture() throws Exception {
+        Path springDir = repoRoot.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping {
+                    String[] value() default {};
+                    String[] path() default {};
+                }
+                """);
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/MyController.java", """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    @RestController
+                    public class MyController {
+                        private final MyService service = new MyService();
+                        @GetMapping("/api/a")
+                        public void apiA() {
+                            service.commonMethod();
+                        }
+                        @GetMapping("/api/b")
+                        public void apiB() {
+                            service.commonMethod();
+                        }
+                    }
+                    """, T1, "c1");
+            writeJava(git, "src/main/java/com/example/MyService.java", """
+                    package com.example;
+                    public class MyService {
+                        public void commonMethod() {
+                            int x = 1;
+                            int y = 2;
+                        }
+                    }
+                    """, T1, "c2");
+        }
+    }
+
 }
