@@ -1,0 +1,47 @@
+name: SonarQube
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Build and analyze
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          PR_KEY: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.head_ref }}
+          PR_BASE: ${{ github.base_ref }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          GRADLE="gradle"; [ -x ./gradlew ] && GRADLE="./gradlew"
+          cat > /tmp/sonar-init.gradle <<'IEOF'
+          initscript {
+            repositories { maven { url "https://plugins.gradle.org/m2/" } }
+            dependencies { classpath "org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:7.4.0.8496" }
+          }
+          allprojects { apply plugin: org.sonarqube.gradle.SonarQubePlugin }
+          IEOF
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+            SONAR_ARGS="-Dsonar.pullrequest.key=$PR_KEY -Dsonar.pullrequest.branch=$PR_BRANCH -Dsonar.pullrequest.base=$PR_BASE"
+          else
+            SONAR_ARGS="-Dsonar.branch.name=$REF_NAME"
+          fi
+          $GRADLE -I /tmp/sonar-init.gradle assemble sonar -x test \
+            -Dsonar.projectKey=hotspot-analysis $SONAR_ARGS
