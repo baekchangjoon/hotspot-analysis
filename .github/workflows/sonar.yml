@@ -43,5 +43,6 @@ jobs:
           else
             SONAR_ARGS="-Dsonar.branch.name=$REF_NAME"
           fi
-          $GRADLE -I /tmp/sonar-init.gradle assemble sonar -x test \
+          $GRADLE assemble -x test
+          $GRADLE -I /tmp/sonar-init.gradle sonar \
             -Dsonar.projectKey=hotspot-analysis $SONAR_ARGS
