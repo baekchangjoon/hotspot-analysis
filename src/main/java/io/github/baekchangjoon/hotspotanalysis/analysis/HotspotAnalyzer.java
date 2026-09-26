@@ -387,6 +387,7 @@ public class HotspotAnalyzer {
         CallGraphBuilder.CallGraphResult cgResult = callGraphBuilder.buildCallGraphs(
                 repoRoot, javaFiles, apiConfig.classpathDirectories());
         warnUnresolvedEndpoints(cgResult);
+        warnIncompleteCallGraphs(cgResult);
 
         // Per-method auxiliary maps: LOC, cognitive complexity, precomputed
         // coverage, source location, and API mappings.
@@ -609,18 +610,41 @@ public class HotspotAnalyzer {
         if (unresolved.isEmpty()) {
             return;
         }
-        int shown = Math.min(5, unresolved.size());
-        StringBuilder names = new StringBuilder();
-        for (int i = 0; i < shown; i++) {
-            names.append(i == 0 ? "" : ", ").append(unresolved.get(i).toCanonicalString());
-        }
-        if (unresolved.size() > shown) {
-            names.append(", ... (").append(unresolved.size() - shown).append(" more)");
-        }
         System.err.println("WARNING: " + unresolved.size() + " controller endpoint(s) were skipped"
-                + " because their parameter/return types could not be resolved: " + names
+                + " because their parameter/return types could not be resolved: " + preview(unresolved)
                 + ". Add the project's dependency jars (e.g. the Gradle/Maven cache or a"
                 + " build/install/*/lib dir) to analysis.apiAnalysis.classpathDirectories"
                 + " so every endpoint is ranked.");
+    }
+
+    /**
+     * A resolved endpoint whose call walk hit a {@link LinkageError} stays in
+     * the ranking, but edges past the missing class are gone. That used to
+     * abort the whole run; it must still be visible.
+     */
+    private static void warnIncompleteCallGraphs(CallGraphBuilder.CallGraphResult cgResult) {
+        List<MethodSignature> incomplete = cgResult.incompleteCallGraphs();
+        if (incomplete.isEmpty()) {
+            return;
+        }
+        System.err.println("WARNING: " + incomplete.size() + " controller endpoint(s) were ranked"
+                + " with an incomplete call graph because a classpath jar references a missing"
+                + " class: " + preview(incomplete)
+                + ". Add the full dependency closure to analysis.apiAnalysis.classpathDirectories.");
+    }
+
+    private static String preview(List<MethodSignature> items) {
+        int shown = Math.min(5, items.size());
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < shown; i++) {
+            if (i > 0) {
+                names.append(", ");
+            }
+            names.append(items.get(i).toCanonicalString());
+        }
+        if (items.size() > shown) {
+            names.append(", ... (").append(items.size() - shown).append(" more)");
+        }
+        return names.toString();
     }
 }

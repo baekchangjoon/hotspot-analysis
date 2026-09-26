@@ -179,8 +179,10 @@ class AnalyzeCommandTest {
                 List.of("CSV"), "**/*.java",
                 "2020-01-01", "2020-12-31");
 
+        StringWriter outWriter = new StringWriter();
         StringWriter errWriter = new StringWriter();
         CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(outWriter));
         cli.setErr(new PrintWriter(errWriter));
 
         int exit = cli.execute("--config", configFile.toString(), "--strict");
@@ -189,6 +191,8 @@ class AnalyzeCommandTest {
         String stderr = errWriter.toString();
         assertThat(stderr).contains("--strict");
         assertThat(stderr).contains("Commits matching window: 0");
+        assertThat(outWriter.toString()).doesNotContain("Hotspot analysis complete.");
+        assertThat(Files.exists(outputDir.resolve("file_hotspots.csv"))).isFalse();
     }
 
     @Test
@@ -224,6 +228,47 @@ class AnalyzeCommandTest {
         int exit = cli.execute("--config", configFile.toString(), "--strict");
 
         assertThat(exit).isZero();
+    }
+
+    @Test
+    @DisplayName("composite summary keeps digits below 1, and a multi-year window warns about decay")
+    void shouldKeepSmallCompositeDigitsAndWarnOnLongWindow() throws Exception {
+        assertThat(AnalyzeCommand.formatComposite(959.62)).isEqualTo("959.6");
+        assertThat(AnalyzeCommand.formatComposite(1.26)).isEqualTo("1.26");
+        assertThat(AnalyzeCommand.formatComposite(0.00432)).isEqualTo("0.0043");
+
+        Path configFile = writeConfigWithAbsoluteWindow(
+                repoRoot.toString(), outputDir.toString(),
+                List.of("CSV"), "**/*.java",
+                "2017-01-01", "2023-01-01");
+        StringWriter errWriter = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(errWriter));
+
+        assertThat(cli.execute("--config", configFile.toString())).isZero();
+        assertThat(errWriter.toString()).contains("decayHalfLifeDays");
+
+        Path shortWindow = tempDir.resolve("short-window.yml");
+        Files.writeString(shortWindow, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: %s
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                output:
+                  formats: [csv]
+                  path: %s
+                  topN: 0
+                """.formatted(repoRoot, outputDir));
+        StringWriter shortErr = new StringWriter();
+        CommandLine shortCli = new CommandLine(command);
+        shortCli.setErr(new PrintWriter(shortErr));
+        assertThat(shortCli.execute("--config", shortWindow.toString())).isZero();
+        assertThat(shortErr.toString()).doesNotContain("decayHalfLifeDays");
     }
 
     @Test

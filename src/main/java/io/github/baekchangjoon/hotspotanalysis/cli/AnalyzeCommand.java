@@ -11,6 +11,8 @@ import io.github.baekchangjoon.hotspotanalysis.config.ConfigSerializer;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesisException;
 import io.github.baekchangjoon.hotspotanalysis.config.ConfigSynthesizer;
 import io.github.baekchangjoon.hotspotanalysis.config.OutputConfig;
+import io.github.baekchangjoon.hotspotanalysis.config.ScoringConfig;
+import io.github.baekchangjoon.hotspotanalysis.config.WindowConfig;
 import io.github.baekchangjoon.hotspotanalysis.output.OutputDispatcher;
 import org.springframework.stereotype.Component;
 import picocli.CommandLine.Command;
@@ -22,6 +24,9 @@ import picocli.CommandLine.Model.CommandSpec;
 import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
@@ -161,20 +166,22 @@ public class AnalyzeCommand implements Callable<Integer> {
             return EXIT_FAILURE;
         }
 
-        // 3. Analyse.
+        // 3. Analyse. An empty --strict run must not write a report or print
+        // "complete": the flag exists to fail instead of producing an empty report.
         try {
             AnalysisResult result = analyzer.analyze(config);
+            if (strict && isEmpty(result)) {
+                printStrictFailure(err, result);
+                return EXIT_STRICT_EMPTY;
+            }
             boolean apiEnabled = config.analysis().apiAnalysis() != null
                     && config.analysis().apiAnalysis().enabled();
             boolean excludeCoverage = config.analysis().scoring() != null
                     && Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
             outputDispatcher.dispatch(result, config.output(), apiEnabled, excludeCoverage);
+            warnIfDecayCollapses(err, config);
             if (!quiet) {
                 printSummary(out, result, config.output());
-            }
-            if (strict && isEmpty(result)) {
-                printStrictFailure(err, result);
-                return EXIT_STRICT_EMPTY;
             }
             return EXIT_OK;
         } catch (UnsupportedOperationException e) {
@@ -200,20 +207,64 @@ public class AnalyzeCommand implements Callable<Integer> {
                 o.formats(), outputDir.toString(), o.topN(), o.apiLayout(), o.coverageBreakdown()));
     }
 
+    /** Oldest-commit weight is 1/256 once the window spans more than this many half-lives. */
+    private static final int DECAY_COLLAPSE_HALF_LIVES = 8;
+
+    static String formatComposite(double score) {
+        double magnitude = Math.abs(score);
+        String pattern = magnitude >= 10.0 ? "%.1f" : magnitude >= 1.0 ? "%.2f" : "%.4f";
+        return String.format(Locale.ROOT, pattern, score);
+    }
+
+    private static void warnIfDecayCollapses(PrintWriter err, AnalysisConfig config) {
+        WindowConfig window = config.analysis().window();
+        ScoringConfig scoring = config.analysis().scoring();
+        if (window == null || scoring == null) {
+            return;
+        }
+        long windowDays = windowLengthDays(window);
+        int halfLife = scoring.decayHalfLifeDays();
+        if (windowDays <= (long) DECAY_COLLAPSE_HALF_LIVES * halfLife) {
+            return;
+        }
+        err.println("WARNING: analysis window is " + windowDays + " days but scoring.decayHalfLifeDays is "
+                + halfLife + ". Commits older than a few half-lives decay toward zero, so composite"
+                + " scores collapse and the ranking mostly reflects the newest commits. Raise"
+                + " decayHalfLifeDays, or narrow the window, to keep older history visible.");
+    }
+
+    private static long windowLengthDays(WindowConfig window) {
+        if (window.days() != null) {
+            return window.days();
+        }
+        if (window.since() == null || window.until() == null) {
+            return 0;
+        }
+        return ChronoUnit.DAYS.between(window.since(), window.until());
+    }
+
     private static boolean isEmpty(AnalysisResult result) {
         return result.meta().totalCommits() == 0 || result.meta().totalFiles() == 0;
     }
 
     private static void printDetectionSummary(PrintWriter err, AnalysisConfig config) {
-        boolean multiModule = config.analysis().scope().include().stream()
-                .anyMatch(glob -> glob.startsWith("**/"));
+        List<String> includes = config.analysis().scope().include();
+        boolean rootSources = includes.stream().anyMatch(glob -> glob.startsWith("src/main/java"));
+        boolean multiModule = includes.stream().anyMatch(glob -> glob.startsWith("**/"));
+        String layout;
+        if (rootSources && multiModule) {
+            layout = "root + modules (src/main/java and **/src/main/java)";
+        } else if (multiModule) {
+            layout = "multi-module (**/src/main/java)";
+        } else {
+            layout = "single-module (src/main/java)";
+        }
         String jacoco = config.analysis().jacocoReportPath();
         boolean api = config.analysis().apiAnalysis() != null
                 && config.analysis().apiAnalysis().enabled();
         err.println("Detected (zero-config):");
         err.println("  Repo:           " + config.analysis().target().path() + " (.git found)");
-        err.println("  Module layout:  " + (multiModule ? "multi-module (**/src/main/java)"
-                : "single-module (src/main/java)"));
+        err.println("  Module layout:  " + layout);
         err.println("  JaCoCo:         " + (jacoco != null ? jacoco : "none"));
         if (jacoco == null) {
             err.println("                  (no XML report found → coverage multiplier stays 1.0;"
@@ -256,8 +307,8 @@ public class AnalyzeCommand implements Callable<Integer> {
             int n = Math.min(3, files.size());
             for (int i = 0; i < n; i++) {
                 FileHotspot f = files.get(i);
-                out.printf("    %d. %s (composite=%.1f, rev=%d, loc=%d)%n",
-                        i + 1, f.path(), f.compositeScore(), f.revisions(), f.loc());
+                out.printf("    %d. %s (composite=%s, rev=%d, loc=%d)%n",
+                        i + 1, f.path(), formatComposite(f.compositeScore()), f.revisions(), f.loc());
             }
         }
         if (output.formats().contains(OutputConfig.OutputFormat.HTML)) {

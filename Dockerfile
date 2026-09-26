@@ -12,5 +12,8 @@ LABEL org.opencontainers.image.source="https://github.com/baekchangjoon/hotspot-
 LABEL org.opencontainers.image.description="Rank Java files, methods, and REST API endpoints by a deterministic Composite Hotspot Score to prioritize test generation."
 LABEL org.opencontainers.image.licenses="MIT"
 WORKDIR /work
+# A POSIX locale makes non-ASCII repo paths throw InvalidPathException.
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
 COPY --from=build /src/build/libs/hotspot-*.jar /app/hotspot.jar
 ENTRYPOINT ["java", "-jar", "/app/hotspot.jar"]

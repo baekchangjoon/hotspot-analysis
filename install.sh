@@ -242,6 +242,14 @@ info "writing wrapper → $WRAPPER"
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
 # hotspot-analysis wrapper (installed by install.sh)
+# C/POSIX makes the JVM's path charset US-ASCII. Fill in UTF-8 only when the
+# user has not chosen a locale, and do it before java starts.
+case "\${LC_ALL:-\${LANG:-}}" in
+  ""|C|POSIX)
+    export LANG=C.UTF-8
+    export LC_ALL=C.UTF-8
+    ;;
+esac
 JAVA="\$("$ENSURE_JAVA")" || exit 1
 exec "\$JAVA" -jar "$JAR_PATH" "\$@"
 EOF

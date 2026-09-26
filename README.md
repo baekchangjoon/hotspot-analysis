@@ -293,14 +293,14 @@ Commands:
 | `--print-config`      |   | off | 자동 감지된 설정을 YAML로 stdout에 출력하고 종료(분석하지 않음). zero-config 모드 전용 — `--config`와 함께 쓸 수 없음 |
 | `--output-dir, -o <dir>` |   | 설정의 `output.path` (zero-config: `./hotspot-report`) | 리포트를 쓸 디렉터리. 설정 파일의 `output.path`보다 우선 |
 | `--quiet, -q`         |   | off  | stdout 요약 출력 억제 |
-| `--strict, -s`        |   | off  | 결과가 비면 종료 코드 3 (윈도우 내 커밋 0건 또는 스코프 매칭 파일 0건). CI 게이팅용. |
+| `--strict, -s`        |   | off  | 결과가 비면 리포트를 쓰지 않고 종료 코드 3 (윈도우 내 커밋 0건 또는 스코프 매칭 파일 0건). CI 게이팅용. |
 
 | 종료 코드 | 의미 |
 |:---:|---|
 | 0 | 분석 완료; 출력 기록됨 |
 | 1 | 설정 무효 / 파이프라인 실패 / 미지원 대상 |
 | 2 | Picocli 사용법 오류 |
-| 3 | `--strict` 설정 상태에서 결과가 비어 있음 |
+| 3 | `--strict` 설정 상태에서 결과가 비어 있음 (리포트 미생성) |
 
 ### `hotspot init`
 
@@ -454,8 +454,8 @@ git -C <repo> log --since=<since> --until=<until> --name-only \
 ```
 
 > **CI 팁:** `hotspot analyze` 호출에 `--strict`를 추가하세요. 커밋이나 파일이
-> 비어 돌아오면 종료 코드 **3**으로 끝나, 잘못 설정된 CI 파이프라인이 빈
-> 리포트를 만드는 대신 큰 소리로 실패합니다.
+> 비어 돌아오면 리포트를 쓰지 않고 종료 코드 **3**으로 끝나, 잘못 설정된 CI
+> 파이프라인이 빈 리포트를 만드는 대신 큰 소리로 실패합니다.
 >
 > ```bash
 > java -jar hotspot.jar analyze --config hotspot.yml --strict
@@ -514,7 +514,14 @@ end-to-end로 연결**되어 있고, GitHub 프로바이더는 WireMock 계약 �
    `apiAnalysis.classpathDirectories`에 **의존성 jar 전체**가 있는 디렉터리(예:
    `~/.m2/repository`, `~/.gradle/caches/modules-2/files-2.1`, 또는
    `build/install/<app>/lib`)를 추가하세요. jar 일부만 넣으면 그 jar가 참조하는
-   클래스가 없어 해석에 실패할 수 있습니다(치명 오류가 아니라 경고로 처리).
+   클래스가 없어 해석이 두 갈래로 실패합니다. 엔드포인트 시그니처 자체가 해석되지
+   않으면 해당 엔드포인트는 순위에서 빠지고 경고가 납니다. 시그니처는 해석되지만
+   호출 그래프를 걷는 중 클래스가 없으면 엔드포인트는 순위에 남고, 콜그래프가
+   불완전하다는 별도 경고가 납니다. 어느 쪽이든 치명 오류는 아닙니다.
+6. **긴 분석 윈도우**: Composite의 감쇠는 윈도우 끝을 기준으로 합니다. 윈도우가
+   반감기(기본 90일)의 8배를 넘으면 오래된 커밋 가중치가 사실상 0이 되어
+   순위가 최근 커밋만 반영합니다. 이때 stderr에 경고가 나오고, 요약의
+   `composite=`는 1 미만이면 소수 4자리까지 표시합니다.
 
 이 결정들과 대안의 태스크별 분석은 `docs/reports/*`를 참고하세요.
 

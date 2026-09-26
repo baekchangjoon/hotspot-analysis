@@ -32,18 +32,18 @@
 | ID | 심각도 | 내용 | 상태 |
 |---|---|---|---|
 | F-M | **High** | 컨트롤러 메서드의 매개변수·반환 타입이 심볼 해석에 실패하면(`Model`, `BindingResult`, `RedirectAttributes` 등 의존성 jar 전용 타입) 엔드포인트가 `api_report`에서 **무경고 누락**. petclinic 17개 중 8개(POST 전부) 소실. SKILL.md의 "비어 있으면 classpath 확인" 규칙은 *부분* 누락을 잡지 못함 | **수정**: 누락 엔드포인트 수집 + WARNING(이름·해결책) |
-| F-N | **High** | classpath jar가 참조하는 클래스가 없으면 `NoClassDefFoundError`(Error라 `catch (Exception)` 미포착) → 전체 분석 크래시 | **수정**: `LinkageError` 포착, 경고로 강등 |
-| F-H | **High** | zero-config 모듈 스캔이 루트 `src/main/java`에서 멈춰 하위 모듈 무시 (wiremock 1,327 → 3 파일). `--strict`도 통과해 사용자가 알 수 없음 | **수정**: 스캔 계속 + 두 glob 동시 포함 |
+| F-N | **High** | classpath jar가 참조하는 클래스가 없으면 `NoClassDefFoundError`(Error라 `catch (Exception)` 미포착) → 전체 분석 크래시 | **수정**: `LinkageError` 포착. 엔드포인트는 순위에 남기고 콜그래프가 불완전하다는 별도 경고 |
+| F-H | **High** | zero-config 모듈 스캔이 루트 `src/main/java`에서 멈춰 하위 모듈 무시 (wiremock 1,327 → 3 파일). `--strict`도 통과해 사용자가 알 수 없음 | **수정**: 스캔 계속 + 두 glob 동시 포함. 둘 다면 라벨은 `root + modules` |
 | F-K | Medium | 테스트 픽스처가 개발자 전역 `~/.gitconfig`(`gpg.format=ssh`)에 영향받아 61건 실패. CI는 green이라 로컬 개발 경험만 깨짐 | **수정**: 픽스처에 빈 `GpgConfig` 명시 |
 | F-I | Medium | `apiAnalysis: { enabled: true }`만 쓰면 "sharedComponentMode is required" 검증 실패. README는 기본 BOTH라고 문서화 | **수정**: 레코드 기본값 BOTH |
 | F-A | Low | `System.err` 경고의 `—`가 POSIX 로케일에서 `?`로 출력. 같은 실행의 Picocli 출력(`→`)은 정상 → 불일치 | **수정**: `ConsoleEncoding`이 Picocli 규칙으로 stderr 정렬 |
 | F-B | Low | zero-config에서 JaCoCo 미검출 시 생성 방법 힌트 없음 | **수정**: 힌트 1줄 |
 | F-D | Low | README "CI 자체 분석 데모"가 실제로는 합성 2커밋 mock 저장소 분석 | **수정**: 실제 자체 분석 잡 추가 + 문구 정정 |
-| F-C | Medium | PR #49(커버리지 차용 버그 수정)가 두 달째 미릴리스. 스킬·installer·brew 사용자 전원이 버그 포함 v0.1.6 사용 | 미수정 (릴리스 결정 필요) |
-| F-G | Medium | 절대 윈도우로 오래된 히스토리를 볼 때 감쇠 기준이 `until`이라 설계는 맞으나, 반감기 90일 vs 6년 윈도우에서 Composite가 0.0x로 붕괴하고 요약은 소수 1자리(`composite=0.0`)만 표시해 순위 근거가 안 보임 | 미수정 (요약 정밀도·반감기 힌트 제안) |
-| F-E | Low | `--strict` 빈 결과에서 exit 3이지만 리포트 파일과 "complete" 요약이 먼저 출력됨. README의 "빈 리포트 대신 실패"와 어긋남 | 미수정 (제품 결정) |
-| F-L | Low | POSIX 로케일 + 비ASCII 경로에서 JVM 자체 `InvalidPathException`. 래퍼·Docker·스킬이 `LC_ALL` 폴백을 세팅하면 회피 가능 | 미수정 (래퍼 개선 제안) |
-| F-O | Low | CI 액션들(checkout@v4 등 5종)이 Node 20 deprecation 경고, 매일 cron이 변경 없이도 아티팩트 5종 업로드 | 미수정 (외부 저장소 태그 조회 불가로 버전 미검증) |
+| F-C | Medium | PR #49(커버리지 차용 버그 수정)가 두 달째 미릴리스. 스킬·installer·brew 사용자 전원이 버그 포함 v0.1.6 사용 | 미수정 (릴리스는 `docs/RELEASING.md`. 이 작업에서 버전을 올리지 않음) |
+| F-G | Medium | 절대 윈도우로 오래된 히스토리를 볼 때 감쇠 기준이 `until`이라 설계는 맞으나, 반감기 90일 vs 6년 윈도우에서 Composite가 0.0x로 붕괴하고 요약은 소수 1자리(`composite=0.0`)만 표시해 순위 근거가 안 보임 | **수정**: `|score|≥10`은 소수 1자리, `≥1`은 2자리, 그 미만은 4자리. 윈도우가 반감기의 8배를 넘으면 stderr 경고. 반감기 자동 스케일은 점수를 바꾸므로 하지 않음 |
+| F-E | Low | `--strict` 빈 결과에서 exit 3이지만 리포트 파일과 "complete" 요약이 먼저 출력됨. README의 "빈 리포트 대신 실패"와 어긋남 | **수정**: 빈 `--strict`는 리포트를 쓰지 않고 "complete"도 출력하지 않음 |
+| F-L | Low | POSIX 로케일 + 비ASCII 경로에서 JVM 자체 `InvalidPathException`. 래퍼·Docker·스킬이 `LC_ALL` 폴백을 세팅하면 회피 가능 | **수정**: `LC_ALL`/`LANG`이 비어 있거나 `C`/`POSIX`일 때만 설치 래퍼와 `run-analysis.sh`가 `C.UTF-8`을 설정. Dockerfile `ENV`. `ensure-java.sh`는 부모에 export가 전달되지 않아 건드리지 않음 |
+| F-O | Low | CI 액션들(checkout@v4 등 5종)이 Node 20 deprecation 경고, 매일 cron이 변경 없이도 아티팩트 5종 업로드 | **수정**: checkout/setup-java v5, setup-gradle v5, upload/download-artifact v7, junit-report v6, Docker 액션 v4/v7. 자체 분석 상위 5개를 Step Summary에 표시. jar는 `ls -t`. cron은 매일 유지(아티팩트 용량은 비용 문제이지 매일 실행을 막는 결함이 아님) |
 
 ## 3. 적용한 수정 (브랜치 `claude/brave-carson-7r8s20`, 커밋 6794de9)
 
@@ -62,6 +62,8 @@
 
 검증: 292 테스트 0 실패(로컬, gpg 격리 후). 재빌드 jar로 S10(경고 8건 명시), S12(크래시 → 정상 완료, 17 엔드포인트), S16(3 → 873 파일), F-A(`?` → `—`) 재실행 확인.
 
+같은 브랜치의 후속 작업(커밋 전)에서 남은 항목을 닫았다. 중첩 `@RestController` 메서드는 바깥 클래스에 한 번 더 세지 않는다. `traverse` 중 `LinkageError`는 엔드포인트를 순위에 남기고 `incompleteCallGraphs`로 경고한다. F-G·F-E·F-L·F-O는 위 상태 표 참고. 이 작업 트리 기준 `./gradlew test`는 294건 0 실패. F-C(릴리스)만 남는다.
+
 **주의**: `ci.yml`의 push 트리거는 `main`, `feat/**`, `fix/**`, `chore/**`, `docs/**`만 대상이라 `claude/**` 브랜치 푸시로는 CI가 돌지 않았습니다. 새 자체 분석 스텝은 PR을 열어야 CI에서 검증됩니다.
 
 ## 4. 개선 방향 (우선순위 제안)
@@ -72,7 +74,7 @@
 4. **절대 윈도우 UX(F-G)** — 요약 출력 정밀도(유효숫자) 개선 + "윈도우 길이 ≫ 반감기" 경고. 선택지: `scoring.decayHalfLifeDays` 자동 스케일 제안.
 5. **래퍼·Docker의 로케일 폴백(F-L)** — `hotspot` 래퍼와 `ensure-java.sh` 경로에서 `LC_ALL`이 비어 있으면 `C.UTF-8` 설정, Dockerfile에 `ENV LANG=C.UTF-8`.
 6. **`--strict` 의미 정리(F-E)** — 빈 결과면 리포트 파일을 쓰지 않거나, 문서를 "리포트는 생성되지만 exit 3"으로 정정.
-7. **CI 위생(F-O)** — 액션 메이저 버전 업(Node 24 대응), 일일 cron은 `paths`/변경 감지로 스킵 또는 주 1회, `hotspot-self-report` 결과를 Step Summary에 상위 5개 표로 노출.
+7. **CI 위생(F-O)** — 액션 메이저 버전은 Node 24 대응으로 올렸고, `hotspot-self-report` 상위 5개는 Step Summary에 표시한다. 일일 cron은 유지한다. 변경 없는 날의 아티팩트 업로드는 비용이지, 매일 실행을 막는 결함은 아니다.
 8. **회귀 방지용 독 푸딩 자동화** — 이번 세션의 S10/S13/S16 시나리오를 `scripts/e2e-dogfood.sh`(petclinic 클론 → 빌드 → 엔드포인트 수 17 단언)로 고정. CI 주간 잡으로 실행.
 
 ## 5. 반론·리스크

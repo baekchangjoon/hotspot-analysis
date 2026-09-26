@@ -304,14 +304,14 @@ Commands:
 | `--print-config`      |   | off | Print the auto-detected configuration as YAML to stdout and exit (no analysis). Zero-config mode only — cannot be combined with `--config` |
 | `--output-dir, -o <dir>` |   | config's `output.path` (zero-config: `./hotspot-report`) | Directory to write the reports into. Overrides `output.path` from the config file |
 | `--quiet, -q`         |   | off  | Suppress the summary on stdout |
-| `--strict, -s`        |   | off  | Exit with code 3 when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
+| `--strict, -s`        |   | off  | Exit with code 3 and write no report when the result is empty (zero commits in window or zero files matching scope). Designed for CI gating. |
 
 | Exit code | Meaning |
 |:---:|---|
 | 0 | Analysis completed; outputs were written |
 | 1 | Configuration invalid / pipeline failure / unsupported target |
 | 2 | Picocli usage error |
-| 3 | `--strict` set and the analysis produced an empty result |
+| 3 | `--strict` set and the analysis produced an empty result (no report written) |
 
 ### `hotspot init`
 
@@ -467,9 +467,9 @@ git -C <repo> log --since=<since> --until=<until> --name-only \
 ```
 
 > **CI tip:** add `--strict` to your `hotspot analyze` invocation. The
-> command will exit with code **3** when commits or files come back empty,
-> so a misconfigured CI pipeline fails loudly instead of producing empty
-> reports.
+> command exits with code **3** and writes no report when commits or files
+> come back empty, so a misconfigured CI pipeline fails loudly instead of
+> producing empty reports.
 >
 > ```bash
 > java -jar hotspot.jar analyze --config hotspot.yml --strict
@@ -532,8 +532,17 @@ and point `target.type: local-git` at the working tree.
    prints how many and which. To rank every endpoint, add a directory holding
    the **complete dependency closure** to `apiAnalysis.classpathDirectories`
    (e.g. `~/.m2/repository`, `~/.gradle/caches/modules-2/files-2.1`, or
-   `build/install/<app>/lib`). A partial set of jars can fail resolution for the
-   classes those jars reference (handled as a warning, not a crash).
+   `build/install/<app>/lib`). A partial set of jars fails in one of two ways,
+   both as a warning rather than a crash: an endpoint whose own signature
+   cannot be resolved is left out of the ranking, and an endpoint that
+   resolves but whose call walk hits a missing class stays ranked with an
+   incomplete call graph (a separate warning names it).
+6. **Long analysis windows**: composite decay is relative to the end of the
+   window. When the window is longer than 8 half-lives (the default half-life
+   is 90 days), older commits weigh about zero and the ranking mostly
+   reflects the newest commits. stderr warns in that case, and the summary
+   prints `composite=` to 4 decimal places when the score is below 1.
+
 See `docs/reports/*` for a per-task breakdown of these decisions and their
 alternatives.
 
