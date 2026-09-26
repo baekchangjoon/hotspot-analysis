@@ -386,6 +386,7 @@ public class HotspotAnalyzer {
         ApiAnalysisConfig apiConfig = config.analysis().apiAnalysis();
         CallGraphBuilder.CallGraphResult cgResult = callGraphBuilder.buildCallGraphs(
                 repoRoot, javaFiles, apiConfig.classpathDirectories());
+        warnUnresolvedEndpoints(cgResult);
 
         // Per-method auxiliary maps: LOC, cognitive complexity, precomputed
         // coverage, source location, and API mappings.
@@ -594,5 +595,32 @@ public class HotspotAnalyzer {
 
     private static int countMethods(Map<String, List<MethodInfo>> methodsByFile) {
         return methodsByFile.values().stream().mapToInt(List::size).sum();
+    }
+
+    /**
+     * A controller method whose types the symbol solver could not resolve is
+     * dropped from the API ranking. Without this warning a Spring app analysed
+     * without its dependency jars on {@code apiAnalysis.classpathDirectories}
+     * silently reports only the endpoints whose parameters are JDK/project
+     * types (dogfooding: 9 of 17 spring-petclinic endpoints).
+     */
+    private static void warnUnresolvedEndpoints(CallGraphBuilder.CallGraphResult cgResult) {
+        List<MethodSignature> unresolved = cgResult.unresolvedEndpoints();
+        if (unresolved.isEmpty()) {
+            return;
+        }
+        int shown = Math.min(5, unresolved.size());
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < shown; i++) {
+            names.append(i == 0 ? "" : ", ").append(unresolved.get(i).toCanonicalString());
+        }
+        if (unresolved.size() > shown) {
+            names.append(", ... (").append(unresolved.size() - shown).append(" more)");
+        }
+        System.err.println("WARNING: " + unresolved.size() + " controller endpoint(s) were skipped"
+                + " because their parameter/return types could not be resolved: " + names
+                + ". Add the project's dependency jars (e.g. the Gradle/Maven cache or a"
+                + " build/install/*/lib dir) to analysis.apiAnalysis.classpathDirectories"
+                + " so every endpoint is ranked.");
     }
 }

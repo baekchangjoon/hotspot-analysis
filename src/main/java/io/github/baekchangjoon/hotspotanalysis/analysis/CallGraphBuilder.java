@@ -27,9 +27,30 @@ import java.util.*;
 @Component
 public class CallGraphBuilder {
 
+    /**
+     * @param callGraphs           entry (controller endpoint) → reachable methods
+     * @param unresolvedEndpoints  controller methods that carry a mapping annotation
+     *                             but could not be resolved by the symbol solver
+     *                             (typically a parameter or return type from a
+     *                             dependency that is not on
+     *                             {@code apiAnalysis.classpathDirectories}); they
+     *                             are absent from {@code callGraphs}, so callers
+     *                             must surface them instead of reporting a
+     *                             silently shorter endpoint list
+     */
     public record CallGraphResult(
-            Map<MethodSignature, List<MethodSignature>> callGraphs
-    ) {}
+            Map<MethodSignature, List<MethodSignature>> callGraphs,
+            List<MethodSignature> unresolvedEndpoints
+    ) {
+        public CallGraphResult {
+            unresolvedEndpoints = (unresolvedEndpoints == null)
+                    ? List.of() : List.copyOf(unresolvedEndpoints);
+        }
+
+        public CallGraphResult(Map<MethodSignature, List<MethodSignature>> callGraphs) {
+            this(callGraphs, List.of());
+        }
+    }
 
     public CallGraphResult buildCallGraphs(Path repoRoot, List<Path> javaFiles, List<String> classpathDirectories) {
         setupSymbolSolver(repoRoot, classpathDirectories);
@@ -39,6 +60,7 @@ public class CallGraphBuilder {
         Map<String, MethodDeclaration> resolvedKeyToNode = new HashMap<>();
         Map<String, List<String>> interfaceCallToImplKeys = new HashMap<>();
         List<MethodDeclaration> controllerMethods = new ArrayList<>();
+        List<MethodSignature> unresolvedEndpoints = new ArrayList<>();
 
         for (Path file : javaFiles) {
             try {
@@ -75,12 +97,27 @@ public class CallGraphBuilder {
                                             interfaceCallToImplKeys.computeIfAbsent(ancestorMethodKey, k -> new ArrayList<>()).add(resolvedKey);
                                         }
                                     }
-                                } catch (Exception e) {
-                                    // Skip unresolved method
+                                } catch (Exception | LinkageError e) {
+                                    // Unresolvable method (unknown parameter/return
+                                    // type). A LinkageError (NoClassDefFoundError)
+                                    // surfaces when a classpath jar references a
+                                    // class that is not on the classpath; it must
+                                    // not abort the whole analysis.
+                                    if (isController && hasApiMapping(md)) {
+                                        unresolvedEndpoints.add(buildMethodSignature(cu, md));
+                                    }
                                 }
                             }
-                        } catch (Exception e) {
-                            // Skip unresolved class
+                        } catch (Exception | LinkageError e) {
+                            // Unresolvable class: every mapped method in it is an
+                            // endpoint the report will lack.
+                            if (isController) {
+                                for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+                                    if (hasApiMapping(md)) {
+                                        unresolvedEndpoints.add(buildMethodSignature(cu, md));
+                                    }
+                                }
+                            }
                         }
                     } else {
                         for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
@@ -90,13 +127,13 @@ public class CallGraphBuilder {
                                 MethodSignature signature = buildMethodSignature(cu, md);
                                 resolvedToSignature.put(resolvedKey, signature);
                                 resolvedKeyToNode.put(resolvedKey, md);
-                            } catch (Exception e) {
+                            } catch (Exception | LinkageError e) {
                                 // Skip
                             }
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (Exception | LinkageError e) {
                 // Skip unparseable files
             }
         }
@@ -125,12 +162,13 @@ public class CallGraphBuilder {
                     }
                 }
                 callGraphs.put(entrySignature, calledSignatures);
-            } catch (Exception e) {
-                // Skip
+            } catch (Exception | LinkageError e) {
+                unresolvedEndpoints.add(buildMethodSignature(
+                        controllerMethod.findCompilationUnit().orElseThrow(), controllerMethod));
             }
         }
 
-        return new CallGraphResult(callGraphs);
+        return new CallGraphResult(callGraphs, unresolvedEndpoints);
     }
 
     private void traverse(String methodKey,
@@ -170,7 +208,7 @@ public class CallGraphBuilder {
                         }
                     }
                 }
-            } catch (Exception e) {
+            } catch (Exception | LinkageError e) {
                 // Skip unsolved calls
             }
         }

@@ -205,8 +205,8 @@ public class AnalyzeCommand implements Callable<Integer> {
     }
 
     private static void printDetectionSummary(PrintWriter err, AnalysisConfig config) {
-        String include = config.analysis().scope().include().get(0);
-        boolean multiModule = include.startsWith("**/");
+        boolean multiModule = config.analysis().scope().include().stream()
+                .anyMatch(glob -> glob.startsWith("**/"));
         String jacoco = config.analysis().jacocoReportPath();
         boolean api = config.analysis().apiAnalysis() != null
                 && config.analysis().apiAnalysis().enabled();
@@ -215,6 +215,11 @@ public class AnalyzeCommand implements Callable<Integer> {
         err.println("  Module layout:  " + (multiModule ? "multi-module (**/src/main/java)"
                 : "single-module (src/main/java)"));
         err.println("  JaCoCo:         " + (jacoco != null ? jacoco : "none"));
+        if (jacoco == null) {
+            err.println("                  (no XML report found → coverage multiplier stays 1.0;"
+                    + " run the tests with JaCoCo first, e.g. './gradlew test jacocoTestReport'"
+                    + " or 'mvn verify', then re-run)");
+        }
         err.println("  API analysis:   " + (api ? "ON (spring-web detected)"
                 : "OFF (no spring-web on build)"));
         if (!api) {

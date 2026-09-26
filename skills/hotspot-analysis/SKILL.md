@@ -228,7 +228,8 @@ analysis:
   apiAnalysis:
     enabled: true            # off by default; required for api/shared granularities
     sharedComponentMode: BOTH        # CUMULATIVE | SEPARATE | BOTH
-    classpathDirectories: []         # dirs with dependency jars/classes for symbol resolution
+    classpathDirectories: []         # dirs with compiled classes AND the full dependency
+                                     # jar closure (e.g. ~/.m2/repository); partial = skipped endpoints
   jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml   # optional
 output:
   formats: [csv, yaml, md, html]   # case-insensitive; ≥1 required
@@ -269,6 +270,16 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   `@RestController`/`@Controller` + a mapping annotation, and
   `apiAnalysis.classpathDirectories` includes the dependency jars/classes so
   cross-type calls resolve. Do **not** report "no endpoints".
+- **IF** the run warns `N controller endpoint(s) were skipped because their
+  parameter/return types could not be resolved` **THEN** the ranking is
+  incomplete (every endpoint taking `Model`, `BindingResult`,
+  `RedirectAttributes`, ... is missing). Add a directory holding the **whole
+  dependency closure** to `apiAnalysis.classpathDirectories` — the local
+  Maven repo (`~/.m2/repository`), the Gradle cache
+  (`~/.gradle/caches/modules-2/files-2.1`), or an app distribution's
+  `build/install/<app>/lib` — and re-run before handing the list to test
+  generation. A partial set of jars is not enough (classes they reference
+  must be present too).
 - **IF** the run warns that files are "not present in the JaCoCo report" (their
   `coverageMultiplier` stays `1.0`) **THEN** the report doesn't cover those
   files — supply a report from the **same** build/module; do not conclude
@@ -294,6 +305,9 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
 - **Don't treat an empty `apiHotspots` as "no endpoints."** It almost always
   means `apiAnalysis` is off or the call graph couldn't resolve (missing
   `classpathDirectories`).
+- **Don't hand over a ranking that came with a "controller endpoint(s) were
+  skipped" warning.** Fix the classpath first; a silently shorter list is
+  the most expensive mistake this skill can make.
 - **Don't feed a JaCoCo report from a different module/build.** Path mismatch
   reads as 0% coverage → every multiplier maxes at 10 and the ranking is bogus.
 - **Don't run the jar on JDK < 21** — it's compiled for 21 (`UnsupportedClassVersionError`);

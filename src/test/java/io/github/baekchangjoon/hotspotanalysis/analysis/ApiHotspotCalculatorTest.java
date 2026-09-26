@@ -7,6 +7,8 @@ import io.github.baekchangjoon.hotspotanalysis.config.*;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Config;
+import org.eclipse.jgit.lib.GpgConfig;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -329,6 +331,64 @@ class ApiHotspotCalculatorTest {
         assertThat(shared.lineCoverage()).isNull();
     }
 
+    @Test
+    @DisplayName("an endpoint dropped by symbol resolution is named in a WARNING instead of vanishing silently")
+    void unresolvedEndpointIsWarnedAbout() throws Exception {
+        // spring-petclinic dogfooding: without dependency jars, endpoints whose
+        // parameters are Spring types (Model, BindingResult, ...) were missing
+        // from api_report with no hint at all.
+        Path springDir = repoRoot.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping { String[] value() default {}; }
+                """);
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/FormController.java", """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    import org.springframework.ui.Model;
+                    @RestController
+                    public class FormController {
+                        @GetMapping("/plain")
+                        public String plain(int page) { return "p" + page; }
+                        @GetMapping("/form")
+                        public String form(Model model) { return "f"; }
+                    }
+                    """, T1, "c1");
+        }
+        // No build/classes dir on purpose: with no ClassLoaderTypeSolver the
+        // solver sees only the JRE + these sources, so org.springframework.ui.Model
+        // is unresolvable (creating the dir would expose the test JVM's own
+        // Spring jars through the parent class loader and resolve it).
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        AnalysisResult result;
+        try {
+            result = analyzer.analyze(apiConfigFor(repoRoot, ApiAnalysisConfig.SharedComponentMode.BOTH));
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        assertThat(result.apiHotspots()).extracting(ApiHotspot::route).containsExactly("/plain");
+        String err = errCapture.toString();
+        assertThat(err).contains("WARNING: 1 controller endpoint(s) were skipped")
+                .contains("com.example.FormController#form(Model)")
+                .contains("apiAnalysis.classpathDirectories");
+    }
+
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {
         Files.createDirectories(destDir);
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
@@ -362,7 +422,10 @@ class ApiHotspotCalculatorTest {
         Files.writeString(file, body);
         git.add().addFilepattern(relativePath).call();
         PersonIdent ident = new PersonIdent("alice", "alice@example.com", Date.from(timestamp), TimeZone.getTimeZone("UTC"));
-        git.commit().setAuthor(ident).setCommitter(ident).setMessage(message).call();
+        // Isolate the fixture from the developer's global gpg.* settings: JGit 6.x
+        // rejects gpg.format=ssh (common with SSH commit signing) while building
+        // GpgConfig, even for unsigned commits.
+        git.commit().setGpgConfig(new GpgConfig(new Config())).setAuthor(ident).setCommitter(ident).setMessage(message).call();
     }
 
     private static AnalysisConfig apiConfigFor(Path repoRoot, ApiAnalysisConfig.SharedComponentMode mode) {

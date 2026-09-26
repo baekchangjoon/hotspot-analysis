@@ -59,7 +59,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 - **Java 21 parsing** — JavaParser 3.26 understands records, sealed types, switch expressions, pattern matching.
 - **YAML configuration** — strongly typed, validated via Jakarta Bean Validation, env-var substitution.
 - **Four output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly), **HTML (browser-ready, sortable, filterable, XSS-safe, dark-mode aware)**.
-- **Self-analysis demo in CI** — every CI run produces a fresh `hotspot-demo-report-<N>` artifact you can download and open in a browser.
+- **Self-analysis in CI** — every CI run analyses this very repository (full history + JaCoCo) into a `hotspot-self-report-<N>` artifact, plus a `hotspot-demo-report-<N>` API-analysis demo over a synthetic Spring sample; download and open either in a browser.
 - **Comprehensive tests across every layer** — contract tests + unit + Spring Boot E2E, 0 failures.
 
 ---
@@ -526,6 +526,14 @@ and point `target.type: local-git` at the working tree.
    warning and the analysis continues with the rest. Add them to
    `scope.exclude` to silence the warning.
 
+5. **API endpoint symbol resolution**: a controller method whose parameter or
+   return type cannot be resolved (e.g. `Model`, `BindingResult` — types that
+   only exist in dependency jars) is left out of `api_report`, and a warning
+   prints how many and which. To rank every endpoint, add a directory holding
+   the **complete dependency closure** to `apiAnalysis.classpathDirectories`
+   (e.g. `~/.m2/repository`, `~/.gradle/caches/modules-2/files-2.1`, or
+   `build/install/<app>/lib`). A partial set of jars can fail resolution for the
+   classes those jars reference (handled as a warning, not a crash).
 See `docs/reports/*` for a per-task breakdown of these decisions and their
 alternatives.
 
@@ -549,7 +557,8 @@ Continuous Integration runs on every push and on a **daily schedule**
 | `test-results-<N>` | JUnit XML for every test class |
 | `test-report-<N>` | Gradle's full HTML test report |
 | `test-summary-<N>` | Markdown summary surfaced on the GitHub Step Summary panel |
-| `hotspot-demo-report-<N>` | **Self-analysis output** — `file_hotspots.csv`, `method_hotspots.csv`, `hotspots.yml`, `hotspots.md`, `hotspots.html`, plus the `hotspot.yml` used to produce them. Download and open `hotspots.html` directly in your browser. |
+| `hotspot-self-report-<N>` | **Self-analysis output (real dogfooding)** — this repository analysed zero-config over its full git history with the JaCoCo XML produced moments earlier: `file_hotspots.csv`, `method_hotspots.csv`, `hotspots.{yml,md,html}`. Runs with `--strict`, so an empty result fails CI. |
+| `hotspot-demo-report-<N>` | **API-analysis demo output** — a synthetic Spring sample (one controller, one service, two commits) analysed into `hotspots.*` + `api_report.*` + `api_hotspots.csv` + `shared_components.csv`, plus the `hotspot.yml` used. Open its `api_report.html` to see the endpoint / shared-component report shape. |
 
 ---
 
