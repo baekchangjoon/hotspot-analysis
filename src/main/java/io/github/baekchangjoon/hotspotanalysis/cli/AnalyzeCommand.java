@@ -55,6 +55,8 @@ import java.util.concurrent.Callable;
 )
 public class AnalyzeCommand implements Callable<Integer> {
 
+    private static final String ERROR_PREFIX = "ERROR: ";
+
     static final int EXIT_OK = 0;
     static final int EXIT_FAILURE = 1;
     static final int EXIT_STRICT_EMPTY = 3;
@@ -129,18 +131,18 @@ public class AnalyzeCommand implements Callable<Integer> {
     /** Option validation before any I/O; null when the options are consistent. */
     private Integer preflight(PrintWriter err) {
         if (configPath != null && path != null) {
-            err.println("ERROR: --config and [path] are mutually exclusive.");
+            error(err, "--config and [path] are mutually exclusive.");
             return EXIT_FAILURE;
         }
         if (outputDir != null && outputDir.toString().isBlank()) {
             // Guards the `-o "$OUT_DIR"` case with OUT_DIR unset: a blank path
             // would bypass output.path's @NotBlank (only enforced by
             // ConfigLoader) and scatter reports over the cwd.
-            err.println("ERROR: --output-dir must not be blank.");
+            error(err, "--output-dir must not be blank.");
             return EXIT_FAILURE;
         }
         if (configPath != null && printConfig) {
-            err.println("ERROR: --print-config applies only to zero-config mode (remove --config).");
+            error(err, "--print-config applies only to zero-config mode (remove --config).");
             return EXIT_FAILURE;
         }
         return null;
@@ -161,10 +163,10 @@ public class AnalyzeCommand implements Callable<Integer> {
         try {
             return (configPath == null) ? synthesizeConfig(out, err) : loadConfigFile(err);
         } catch (ConfigSynthesisException | ConfigSerializeException e) {
-            err.println("ERROR: " + e.getMessage());
+            error(err, e.getMessage());
             return ConfigOutcome.stop(EXIT_FAILURE);
         } catch (ConfigLoadException e) {
-            err.println("ERROR: invalid configuration: " + e.getMessage());
+            error(err, "invalid configuration: " + e.getMessage());
             return ConfigOutcome.stop(EXIT_FAILURE);
         }
     }
@@ -186,11 +188,11 @@ public class AnalyzeCommand implements Callable<Integer> {
 
     private ConfigOutcome loadConfigFile(PrintWriter err) {
         if (Files.isDirectory(configPath)) {
-            err.println("ERROR: " + configPath + " is a directory, not a configuration file.");
+            error(err, configPath + " is a directory, not a configuration file.");
             return ConfigOutcome.stop(EXIT_FAILURE);
         }
         if (!Files.isRegularFile(configPath)) {
-            err.println("ERROR: configuration file not found: " + configPath);
+            error(err, "configuration file not found: " + configPath);
             return ConfigOutcome.stop(EXIT_FAILURE);
         }
         return ConfigOutcome.proceed(withOutputDir(configLoader.load(configPath)));
@@ -219,10 +221,10 @@ public class AnalyzeCommand implements Callable<Integer> {
             }
             return EXIT_OK;
         } catch (UnsupportedOperationException e) {
-            err.println("ERROR: " + e.getMessage());
+            error(err, e.getMessage());
             return EXIT_FAILURE;
         } catch (RuntimeException e) {
-            err.println("ERROR: analysis failed: " + e.getMessage());
+            error(err, "analysis failed: " + e.getMessage());
             return EXIT_FAILURE;
         }
     }
@@ -287,6 +289,10 @@ public class AnalyzeCommand implements Callable<Integer> {
         return ChronoUnit.DAYS.between(window.since(), window.until());
     }
 
+    private static void error(PrintWriter err, String message) {
+        err.println(ERROR_PREFIX + message);
+    }
+
     private static boolean isEmpty(AnalysisResult result) {
         return result.meta().totalCommits() == 0 || result.meta().totalFiles() == 0;
     }
@@ -325,7 +331,7 @@ public class AnalyzeCommand implements Callable<Integer> {
     }
 
     private static void printStrictFailure(PrintWriter err, AnalysisResult result) {
-        err.println("ERROR: --strict was set but the analysis produced an empty result.");
+        error(err, "--strict was set but the analysis produced an empty result.");
         err.println("  Commits matching window: " + result.meta().totalCommits());
         err.println("  Files matching scope:   " + result.meta().totalFiles());
         err.println("  Methods extracted:      " + result.meta().totalMethods());
