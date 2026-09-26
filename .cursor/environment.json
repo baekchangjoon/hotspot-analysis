@@ -1,0 +1,4 @@
+{
+  "name": "hotspot-analysis",
+  "install": "./gradlew assemble testClasses --no-daemon"
+}
