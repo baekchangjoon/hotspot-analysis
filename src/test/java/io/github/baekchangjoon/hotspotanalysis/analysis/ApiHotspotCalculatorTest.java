@@ -389,6 +389,66 @@ class ApiHotspotCalculatorTest {
                 .contains("apiAnalysis.classpathDirectories");
     }
 
+    @Test
+    @DisplayName("a partial classpath ranks the endpoint and warns that its call graph is incomplete")
+    void incompleteCallGraphIsWarnedAbout() throws Exception {
+        Path springDir = repoRoot.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping { String[] value() default {}; }
+                """);
+        Path libSrc = tempDir.resolve("lib-src/com/lib");
+        Files.createDirectories(libSrc);
+        Files.writeString(libSrc.resolve("Dep.java"), "package com.lib; public class Dep {}");
+        Files.writeString(libSrc.resolve("Lib.java"),
+                "package com.lib; public class Lib { public Dep make() { return new Dep(); } public int size() { return 1; } }");
+        Path classDir = repoRoot.resolve("build/classes/java/main");
+        compileJavaFiles(libSrc, classDir);
+        Files.delete(classDir.resolve("com/lib/Dep.class"));
+
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/LibController.java", """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    import com.lib.Lib;
+                    @RestController
+                    public class LibController {
+                        @GetMapping("/lib")
+                        public int lib(Lib lib) { return lib.size(); }
+                        @GetMapping("/ok")
+                        public int ok() { return 1; }
+                    }
+                    """, T1, "c1");
+        }
+
+        java.io.ByteArrayOutputStream errCapture = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream originalErr = System.err;
+        System.setErr(new java.io.PrintStream(errCapture));
+        AnalysisResult result;
+        try {
+            result = analyzer.analyze(apiConfigFor(repoRoot, ApiAnalysisConfig.SharedComponentMode.BOTH));
+        } finally {
+            System.setErr(originalErr);
+        }
+
+        assertThat(result.apiHotspots()).extracting(ApiHotspot::route).contains("/lib", "/ok");
+        assertThat(errCapture.toString())
+                .contains("WARNING: 1 controller endpoint(s) were ranked with an incomplete call graph")
+                .contains("com.example.LibController#lib(Lib)")
+                .doesNotContain("were skipped");
+    }
+
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {
         Files.createDirectories(destDir);
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();

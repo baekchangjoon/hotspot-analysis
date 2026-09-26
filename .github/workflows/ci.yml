@@ -182,6 +182,11 @@ jobs:
           java -jar "$JAR" analyze . --strict -o build/hotspot-self
           echo "--- Self-analysis report directory ---"
           ls -la build/hotspot-self
+          # Guard the dogfooding miss where this step analysed a 2-commit mock
+          # repo instead of this checkout.
+          test -s build/hotspot-self/file_hotspots.csv
+          grep -q 'src/main/java/io/github/baekchangjoon/hotspotanalysis/analysis/CallGraphBuilder.java' \
+            build/hotspot-self/file_hotspots.csv
           {
             echo "### Hotspot self-analysis (top 5 by composite rank)"
             echo
