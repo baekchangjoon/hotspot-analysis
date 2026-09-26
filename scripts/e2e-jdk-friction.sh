@@ -41,8 +41,8 @@ DESC="scripts pass bash -n"
 check bash -n "$ROOT/install.sh" "$ROOT/skills/hotspot-analysis/scripts/ensure-java.sh" \
   "$ROOT/skills/hotspot-analysis/scripts/get-jar.sh" "$ROOT/skills/hotspot-analysis/scripts/run-analysis.sh"
 
-locale_case() { # print the LC_ALL case statement; $1 = file
-  awk '/LC_ALL/ && /LANG/ {p=1} p {print} p && /^esac$/ {exit}' "$1"
+locale_case() { # print the locale fallback case statement; $1 = file
+  awk '/LC_ALL:-/ && /LANG:-/ {p=1} p {print} p && /^esac$/ {exit}' "$1"
 }
 
 DESC="installed wrapper locale fallback matches run-analysis.sh"
@@ -50,20 +50,26 @@ locale_case "$ROOT/skills/hotspot-analysis/scripts/run-analysis.sh" > "$TMP/loca
 locale_case "$ROOT/install.sh" | sed 's/\\\$/$/g' > "$TMP/locale-install.txt"
 check diff "$TMP/locale-skill.txt" "$TMP/locale-install.txt"
 
-run_locale_case() { # remaining args are env assignments; prints LC_ALL then LANG
+run_locale_case() { # remaining args are env assignments; prints "LC_ALL LC_CTYPE LANG"
   local snippet
   snippet="$(locale_case "$ROOT/skills/hotspot-analysis/scripts/run-analysis.sh")"
-  env -i "$@" bash -c "$snippet; printf '%s\n%s\n' \"\${LC_ALL-unset}\" \"\${LANG-unset}\""
+  env -i "$@" bash -c "$snippet; printf '%s %s %s\n' \"\${LC_ALL-unset}\" \"\${LC_CTYPE-unset}\" \"\${LANG-unset}\""
 }
 
-DESC="LC_ALL=C falls back to C.UTF-8 before the JVM starts"
-check test "$(run_locale_case LC_ALL=C | head -1)" = "C.UTF-8"
-DESC="LC_ALL=POSIX falls back to C.UTF-8 before the JVM starts"
-check test "$(run_locale_case LC_ALL=POSIX | head -1)" = "C.UTF-8"
-DESC="an empty locale falls back to C.UTF-8 before the JVM starts"
-check test "$(run_locale_case | head -1)" = "C.UTF-8"
-DESC="a chosen locale is left alone"
-check test "$(run_locale_case LANG=en_US.UTF-8 | tail -1)" = "en_US.UTF-8"
+# LC_ALL pins every category, so it is the one variable that has to be replaced.
+DESC="LC_ALL=C is replaced by C.UTF-8 before the JVM starts"
+check test "$(run_locale_case LC_ALL=C)" = "C.UTF-8 unset unset"
+DESC="LC_ALL=POSIX is replaced by C.UTF-8 before the JVM starts"
+check test "$(run_locale_case LC_ALL=POSIX)" = "C.UTF-8 unset unset"
+# Without LC_ALL only LC_CTYPE is filled in; LANG and the other categories stay.
+DESC="an empty locale sets LC_CTYPE=C.UTF-8 only"
+check test "$(run_locale_case)" = "unset C.UTF-8 unset"
+DESC="LANG=C sets LC_CTYPE=C.UTF-8 and leaves LANG alone"
+check test "$(run_locale_case LANG=C)" = "unset C.UTF-8 C"
+DESC="a chosen LANG is left alone"
+check test "$(run_locale_case LANG=en_US.UTF-8)" = "unset unset en_US.UTF-8"
+DESC="a chosen LC_CTYPE is left alone"
+check test "$(run_locale_case LC_CTYPE=ko_KR.UTF-8)" = "unset ko_KR.UTF-8 unset"
 DESC="Docker image sets a UTF-8 locale"
 check grep -q 'ENV LANG=C.UTF-8' "$ROOT/Dockerfile"
 check grep -q 'ENV LC_ALL=C.UTF-8' "$ROOT/Dockerfile"

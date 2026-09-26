@@ -88,7 +88,7 @@ public class CallGraphBuilder {
                             ResolvedReferenceTypeDeclaration resolvedClass = decl.resolve();
                             List<ResolvedReferenceType> ancestors = resolvedClass.getAllAncestors();
 
-                            for (MethodDeclaration md : decl.getMethods()) {
+                            for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
                                 try {
                                     ResolvedMethodDeclaration resolvedM = md.resolve();
                                     String resolvedKey = toResolvedCanonicalString(resolvedM);
@@ -124,7 +124,7 @@ public class CallGraphBuilder {
                             // Unresolvable class: every mapped method in it is an
                             // endpoint the report will lack.
                             if (isController) {
-                                for (MethodDeclaration md : decl.getMethods()) {
+                                for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
                                     if (hasApiMapping(md)) {
                                         unresolvedEndpoints.add(buildMethodSignature(cu, md));
                                     }

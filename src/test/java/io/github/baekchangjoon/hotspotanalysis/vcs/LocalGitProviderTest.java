@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Runs the shared {@link VcsProviderContract} against {@link LocalGitProvider}
@@ -158,6 +159,9 @@ class LocalGitProviderTest extends VcsProviderContract {
     @Test
     @DisplayName("an empty GpgConfig still commits when gpg.format=ssh is configured")
     void isolatedGpgConfigSurvivesSshFormat(@TempDir Path dir) throws Exception {
+        // JGit 6.x rejects gpg.format=ssh while building GpgConfig; 7.x supports
+        // it. Only the isolated path is asserted so a JGit upgrade cannot break
+        // this test — the fixture contract is "commits regardless of gpg.*".
         try (Git git = Git.init().setDirectory(dir.toFile()).call()) {
             var config = git.getRepository().getConfig();
             config.setString("gpg", null, "format", "ssh");
@@ -165,12 +169,6 @@ class LocalGitProviderTest extends VcsProviderContract {
             Files.writeString(dir.resolve("A.java"), "class A {}");
             git.add().addFilepattern("A.java").call();
             PersonIdent ident = new PersonIdent("alice", "alice@example.com");
-            assertThatThrownBy(() -> git.commit()
-                    .setAuthor(ident)
-                    .setCommitter(ident)
-                    .setMessage("unsafe")
-                    .call())
-                    .hasMessageContaining("gpg.format=ssh");
             git.commit().setGpgConfig(new GpgConfig(new Config()))
                     .setAuthor(ident)
                     .setCommitter(ident)
@@ -181,10 +179,13 @@ class LocalGitProviderTest extends VcsProviderContract {
     }
 
     @Test
-    @DisplayName("every test commit chain isolates GpgConfig, except the assertion that ssh format throws")
+    @DisplayName("every test commit chain isolates GpgConfig")
     void everyTestCommitChainIsolatesGpgConfig() throws IOException {
+        Path testRoot = Path.of("src/test/java");
+        // Gradle runs tests from the project dir; an IDE may not.
+        assumeTrue(Files.isDirectory(testRoot), "run from the project root");
         List<String> offenders = new ArrayList<>();
-        try (Stream<Path> files = Files.walk(Path.of("src/test/java"))) {
+        try (Stream<Path> files = Files.walk(testRoot)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 String text = Files.readString(file);
                 String needle = "git." + "commit()";
@@ -199,8 +200,7 @@ class LocalGitProviderTest extends VcsProviderContract {
                         break;
                     }
                     String span = text.substring(at, call);
-                    String before = text.substring(Math.max(0, at - 120), at);
-                    if (!span.contains("setGpgConfig") && !before.contains("assertThatThrownBy")) {
+                    if (!span.contains("setGpgConfig")) {
                         offenders.add(file + " :: " + span.strip());
                     }
                     from = call + ".call()".length();

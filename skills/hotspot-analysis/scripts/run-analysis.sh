@@ -14,12 +14,18 @@ CONFIG="${1:?usage: run-analysis.sh <config.yml> [extra analyze args...]}"
 shift
 
 # C/POSIX makes the JVM's path charset US-ASCII, so a non-ASCII path throws
-# InvalidPathException. Set this before the JVM starts, and only when the
-# user has not already chosen a locale.
-case "${LC_ALL:-${LANG:-}}" in
+# InvalidPathException. Only LC_CTYPE decides that charset, so change the
+# narrowest variable that fixes it, before the JVM starts, and only when the
+# user has not chosen a locale: LC_ALL must be replaced when it is what pins
+# C/POSIX (nothing else can override it); otherwise set LC_CTYPE alone and
+# leave LANG and the other LC_* categories untouched.
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
   ""|C|POSIX)
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
+    if [ -n "${LC_ALL:-}" ]; then
+      export LC_ALL=C.UTF-8
+    else
+      export LC_CTYPE=C.UTF-8
+    fi
     ;;
 esac
 

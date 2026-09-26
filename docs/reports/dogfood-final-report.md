@@ -62,7 +62,7 @@
 
 검증: 292 테스트 0 실패(로컬, gpg 격리 후). 재빌드 jar로 S10(경고 8건 명시), S12(크래시 → 정상 완료, 17 엔드포인트), S16(3 → 873 파일), F-A(`?` → `—`) 재실행 확인.
 
-같은 브랜치의 후속 작업(커밋 전)에서 남은 항목을 닫았다. 중첩 `@RestController` 메서드는 바깥 클래스에 한 번 더 세지 않는다. `traverse` 중 `LinkageError`는 엔드포인트를 순위에 남기고 `incompleteCallGraphs`로 경고한다. F-G·F-E·F-L·F-O는 위 상태 표 참고. 이 작업 트리 기준 `./gradlew test`는 294건 0 실패. F-C(릴리스)만 남는다.
+후속 브랜치 `fix/dogfood-followups`에서 남은 항목을 닫았다. 중첩 `@RestController` 메서드는 바깥 클래스에 한 번 더 세지 않는다. `traverse` 중 `LinkageError`는 엔드포인트를 순위에 남기고 `incompleteCallGraphs`로 경고한다. F-G·F-E·F-L·F-O는 위 상태 표 참고. `./gradlew test`는 300건 0 실패. F-C(릴리스)만 남는다.
 
 **주의**: `ci.yml`의 push 트리거는 `main`, `feat/**`, `fix/**`, `chore/**`, `docs/**`만 대상이라 `claude/**` 브랜치 푸시로는 CI가 돌지 않았습니다. 새 자체 분석 스텝은 PR을 열어야 CI에서 검증됩니다.
 
@@ -71,9 +71,9 @@
 1. **v0.1.7 릴리스** — PR #49 + 이번 수정. 스킬 사용자가 받는 jar가 두 달째 버그 포함(F-C). 릴리스 버튼 절차는 `docs/RELEASING.md` 그대로.
 2. **엔드포인트 해석을 심볼 해석과 분리** — 지금은 경고로 가시화했지만, 해석 실패 엔드포인트도 구문 시그니처로 `api_report`에 포함(콜그래프만 비움)하면 "우선순위 큐" 자체가 완전해진다. 중간 규모 변경.
 3. **classpath 자동 감지 확장** — zero-config가 `~/.m2/repository`·Gradle 캐시를 후보로 제안하거나, Gradle `build/install/*/lib`·Maven `target/dependency`를 감지. 현재는 사용자가 직접 알아야 한다.
-4. **절대 윈도우 UX(F-G)** — 요약 출력 정밀도(유효숫자) 개선 + "윈도우 길이 ≫ 반감기" 경고. 선택지: `scoring.decayHalfLifeDays` 자동 스케일 제안.
-5. **래퍼·Docker의 로케일 폴백(F-L)** — `hotspot` 래퍼와 `ensure-java.sh` 경로에서 `LC_ALL`이 비어 있으면 `C.UTF-8` 설정, Dockerfile에 `ENV LANG=C.UTF-8`.
-6. **`--strict` 의미 정리(F-E)** — 빈 결과면 리포트 파일을 쓰지 않거나, 문서를 "리포트는 생성되지만 exit 3"으로 정정.
+4. **절대 윈도우 UX(F-G)** — 완료. 요약은 크기별 소수 자릿수(1/2/4자리), 윈도우가 반감기의 8배를 넘으면 경고. 반감기 자동 스케일은 점수를 바꾸므로 채택하지 않음.
+5. **래퍼·Docker의 로케일 폴백(F-L)** — 완료. `hotspot` 래퍼와 `run-analysis.sh`는 `LC_ALL`이 C/POSIX를 고정할 때만 `LC_ALL`을, 그 외에는 `LC_CTYPE`만 `C.UTF-8`로 채움(JVM 경로 문자셋은 `LC_CTYPE`만 본다). Dockerfile `ENV`. `ensure-java.sh`는 export가 부모에 전달되지 않아 제외.
+6. **`--strict` 의미 정리(F-E)** — 완료. 빈 결과면 리포트를 쓰지 않고 exit 3.
 7. **CI 위생(F-O)** — 액션 메이저 버전은 Node 24 대응으로 올렸고, `hotspot-self-report` 상위 5개는 Step Summary에 표시한다. 일일 cron은 유지한다. 변경 없는 날의 아티팩트 업로드는 비용이지, 매일 실행을 막는 결함은 아니다.
 8. **회귀 방지용 독 푸딩 자동화** — petclinic 클론은 CI 시간과 Maven Central 의존 때문에 넣지 않는다. 같은 불변조건(매핑된 메서드는 순위에 있거나 누락 경고에 이름이 있다, `@ModelAttribute`만 있는 메서드는 엔드포인트가 아니다, 누락이 5건을 넘으면 `(N more)`)은 `HotspotCliE2ETest`의 합성 픽스처가 잠근다.
 

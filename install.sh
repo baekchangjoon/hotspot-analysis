@@ -242,12 +242,16 @@ info "writing wrapper → $WRAPPER"
 cat > "$WRAPPER" <<EOF
 #!/usr/bin/env bash
 # hotspot-analysis wrapper (installed by install.sh)
-# C/POSIX makes the JVM's path charset US-ASCII. Fill in UTF-8 only when the
-# user has not chosen a locale, and do it before java starts.
-case "\${LC_ALL:-\${LANG:-}}" in
+# C/POSIX makes the JVM's path charset US-ASCII. Only LC_CTYPE decides that
+# charset: replace LC_ALL only when it is what pins C/POSIX, otherwise set
+# LC_CTYPE alone, and only when the user has not chosen a locale.
+case "\${LC_ALL:-\${LC_CTYPE:-\${LANG:-}}}" in
   ""|C|POSIX)
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
+    if [ -n "\${LC_ALL:-}" ]; then
+      export LC_ALL=C.UTF-8
+    else
+      export LC_CTYPE=C.UTF-8
+    fi
     ;;
 esac
 JAVA="\$("$ENSURE_JAVA")" || exit 1
