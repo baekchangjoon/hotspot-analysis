@@ -43,6 +43,12 @@ jobs:
           else
             SONAR_ARGS="-Dsonar.branch.name=$REF_NAME"
           fi
-          $GRADLE assemble -x test
+          # Run the tests first: the Quality Gate measures coverage on new code,
+          # and `assemble -x test` produced no JaCoCo XML, so every PR that
+          # adds Java failed the gate with "0.00% Coverage on New Code".
+          # (test is finalizedBy jacocoTestReport in build.gradle.kts.)
+          $GRADLE test
           $GRADLE -I /tmp/sonar-init.gradle sonar \
-            -Dsonar.projectKey=hotspot-analysis $SONAR_ARGS
+            -Dsonar.projectKey=hotspot-analysis \
+            -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml \
+            $SONAR_ARGS
