@@ -237,6 +237,9 @@ public class AnalyzeCommand implements Callable<Integer> {
         if (window.days() != null) {
             return window.days();
         }
+        // WindowConfig validation admits only `days` or the (since, until) pair,
+        // so a lone since/until cannot reach here; 0 keeps the warning silent
+        // rather than guessing a window end if that invariant ever changes.
         if (window.since() == null || window.until() == null) {
             return 0;
         }

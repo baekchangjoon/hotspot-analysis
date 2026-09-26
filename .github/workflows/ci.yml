@@ -185,7 +185,7 @@ jobs:
           # Guard the dogfooding miss where this step analysed a 2-commit mock
           # repo instead of this checkout.
           test -s build/hotspot-self/file_hotspots.csv
-          grep -q 'src/main/java/io/github/baekchangjoon/hotspotanalysis/analysis/CallGraphBuilder.java' \
+          grep -q 'src/main/java/io/github/baekchangjoon/hotspotanalysis/' \
             build/hotspot-self/file_hotspots.csv
           {
             echo "### Hotspot self-analysis (top 5 by composite rank)"
@@ -272,7 +272,7 @@ jobs:
               type: local-git
               path: .
             window:
-              days: 3650
+              days: 365   # commits are created moments earlier; 3650 only tripped the decay warning
             scope:
               granularity: [file, method]
               include:

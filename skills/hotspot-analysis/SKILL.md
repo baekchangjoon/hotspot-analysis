@@ -109,6 +109,12 @@ The steps below show the explicit form.
    #   skills/hotspot-analysis/scripts/run-analysis.sh hotspot.yml --strict
    ```
 
+   Under a C/POSIX shell locale (minimal containers, CI images) the JVM's
+   path charset is US-ASCII and a non-ASCII repo path fails with
+   `InvalidPathException`. `run-analysis.sh` and the installed `hotspot`
+   wrapper fill in `LC_CTYPE=C.UTF-8` for you; when calling `java -jar`
+   directly, `export LC_CTYPE=C.UTF-8` first.
+
    Outputs land in `output.path`. With API analysis on and `apiLayout: BOTH`:
 
    ```
