@@ -316,6 +316,54 @@ class CallGraphBuilderTest {
     }
 
     @Test
+    @DisplayName("a mapped method on a nested controller is reported once, not also via the outer type")
+    void nestedControllerEndpointIsNotDoubleCounted(@TempDir Path tempDir) throws Exception {
+        Path srcDir = tempDir.resolve("src/main/java/com/example");
+        Files.createDirectories(srcDir);
+        Path springDir = tempDir.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(springDir);
+        Files.writeString(springDir.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(springDir.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD)
+                @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping { String[] value() default {}; }
+                """);
+        Files.writeString(srcDir.resolve("Outer.java"), """
+                package com.example;
+                import org.springframework.web.bind.annotation.*;
+                import org.springframework.ui.Model;
+                @RestController
+                public class Outer {
+                    @GetMapping("/a")
+                    public String a(Model model) { return "a"; }
+                    @RestController
+                    public static class Inner {
+                        @GetMapping("/b")
+                        public String b(Model model) { return "b"; }
+                    }
+                }
+                """);
+
+        CallGraphResult result = callGraphBuilder.buildCallGraphs(
+                tempDir,
+                List.of(springDir.resolve("RestController.java"), springDir.resolve("GetMapping.java"),
+                        srcDir.resolve("Outer.java")),
+                List.of());
+
+        assertThat(result.unresolvedEndpoints())
+                .extracting(MethodSignature::toCanonicalString)
+                .containsExactly("com.example.Outer#a(Model)", "com.example.Outer.Inner#b(Model)");
+    }
+
+    @Test
     @DisplayName("a classpath jar with a missing dependency (NoClassDefFoundError) does not abort the analysis")
     void linkageErrorFromPartialClasspathIsSurvived(@TempDir Path tempDir) throws Exception {
         // Dogfooding finding: spring-petclinic + a partial set of Spring jars
@@ -369,10 +417,12 @@ class CallGraphBuilderTest {
                         srcDir.resolve("LibController.java")),
                 List.of("build/classes/java/main"));
 
-        // Whatever the solver makes of Lib, the run completes and /ok is ranked.
         assertThat(result.callGraphs()).containsKey(
                 new MethodSignature("com.example.LibController", "ok", List.of()));
-        assertThat(result.callGraphs().size() + result.unresolvedEndpoints().size()).isEqualTo(2);
+        assertThat(result.unresolvedEndpoints()).isEmpty();
+        assertThat(result.incompleteCallGraphs())
+                .extracting(MethodSignature::toCanonicalString)
+                .containsExactly("com.example.LibController#lib(Lib)");
     }
 
     private void compileJavaFiles(Path srcDir, Path destDir) throws IOException {

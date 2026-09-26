@@ -37,18 +37,29 @@ public class CallGraphBuilder {
      *                             are absent from {@code callGraphs}, so callers
      *                             must surface them instead of reporting a
      *                             silently shorter endpoint list
+     * @param incompleteCallGraphs endpoints that were ranked, but whose call
+     *                             graph stopped early because a classpath jar
+     *                             referenced a missing class ({@link LinkageError})
      */
     public record CallGraphResult(
             Map<MethodSignature, List<MethodSignature>> callGraphs,
-            List<MethodSignature> unresolvedEndpoints
+            List<MethodSignature> unresolvedEndpoints,
+            List<MethodSignature> incompleteCallGraphs
     ) {
         public CallGraphResult {
             unresolvedEndpoints = (unresolvedEndpoints == null)
                     ? List.of() : List.copyOf(unresolvedEndpoints);
+            incompleteCallGraphs = (incompleteCallGraphs == null)
+                    ? List.of() : List.copyOf(incompleteCallGraphs);
+        }
+
+        public CallGraphResult(Map<MethodSignature, List<MethodSignature>> callGraphs,
+                                List<MethodSignature> unresolvedEndpoints) {
+            this(callGraphs, unresolvedEndpoints, List.of());
         }
 
         public CallGraphResult(Map<MethodSignature, List<MethodSignature>> callGraphs) {
-            this(callGraphs, List.of());
+            this(callGraphs, List.of(), List.of());
         }
     }
 
@@ -61,6 +72,7 @@ public class CallGraphBuilder {
         Map<String, List<String>> interfaceCallToImplKeys = new HashMap<>();
         List<MethodDeclaration> controllerMethods = new ArrayList<>();
         List<MethodSignature> unresolvedEndpoints = new ArrayList<>();
+        List<MethodSignature> incompleteCallGraphs = new ArrayList<>();
 
         for (Path file : javaFiles) {
             try {
@@ -76,7 +88,7 @@ public class CallGraphBuilder {
                             ResolvedReferenceTypeDeclaration resolvedClass = decl.resolve();
                             List<ResolvedReferenceType> ancestors = resolvedClass.getAllAncestors();
 
-                            for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+                            for (MethodDeclaration md : decl.getMethods()) {
                                 try {
                                     ResolvedMethodDeclaration resolvedM = md.resolve();
                                     String resolvedKey = toResolvedCanonicalString(resolvedM);
@@ -112,7 +124,7 @@ public class CallGraphBuilder {
                             // Unresolvable class: every mapped method in it is an
                             // endpoint the report will lack.
                             if (isController) {
-                                for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+                                for (MethodDeclaration md : decl.getMethods()) {
                                     if (hasApiMapping(md)) {
                                         unresolvedEndpoints.add(buildMethodSignature(cu, md));
                                     }
@@ -152,7 +164,8 @@ public class CallGraphBuilder {
                 Set<String> callGraphKeys = new LinkedHashSet<>();
                 Set<String> visited = new HashSet<>();
 
-                traverse(entryKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
+                boolean incomplete = traverse(
+                        entryKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
 
                 List<MethodSignature> calledSignatures = new ArrayList<>();
                 for (String key : callGraphKeys) {
@@ -162,30 +175,44 @@ public class CallGraphBuilder {
                     }
                 }
                 callGraphs.put(entrySignature, calledSignatures);
+                if (incomplete) {
+                    incompleteCallGraphs.add(entrySignature);
+                }
             } catch (Exception | LinkageError e) {
                 unresolvedEndpoints.add(buildMethodSignature(
                         controllerMethod.findCompilationUnit().orElseThrow(), controllerMethod));
             }
         }
 
-        return new CallGraphResult(callGraphs, unresolvedEndpoints);
+        return new CallGraphResult(
+                callGraphs, distinct(unresolvedEndpoints), distinct(incompleteCallGraphs));
     }
 
-    private void traverse(String methodKey,
+    private static List<MethodSignature> distinct(List<MethodSignature> items) {
+        Map<String, MethodSignature> unique = new LinkedHashMap<>();
+        for (MethodSignature item : items) {
+            unique.putIfAbsent(item.toCanonicalString(), item);
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    /** @return true when a classpath jar referenced a class that is not loadable */
+    private boolean traverse(String methodKey,
                           Map<String, MethodDeclaration> resolvedKeyToNode,
                           Map<String, List<String>> interfaceCallToImplKeys,
                           Set<String> callGraphKeys,
                           Set<String> visited) {
         if (visited.contains(methodKey)) {
-            return;
+            return false;
         }
         visited.add(methodKey);
 
         MethodDeclaration node = resolvedKeyToNode.get(methodKey);
         if (node == null) {
-            return;
+            return false;
         }
 
+        boolean linkageFailure = false;
         for (MethodCallExpr mc : node.findAll(MethodCallExpr.class)) {
             try {
                 ResolvedMethodDeclaration resolvedCall = mc.resolve();
@@ -198,20 +225,27 @@ public class CallGraphBuilder {
                         for (String implKey : interfaceCallToImplKeys.get(resolvedCallKey)) {
                             if (!callGraphKeys.contains(implKey)) {
                                 callGraphKeys.add(implKey);
-                                traverse(implKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
+                                linkageFailure |= traverse(
+                                        implKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
                             }
                         }
                     } else {
                         if (!callGraphKeys.contains(resolvedCallKey)) {
                             callGraphKeys.add(resolvedCallKey);
-                            traverse(resolvedCallKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
+                            linkageFailure |= traverse(
+                                    resolvedCallKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
                         }
                     }
                 }
-            } catch (Exception | LinkageError e) {
-                // Skip unsolved calls
+            } catch (LinkageError e) {
+                // A missing class referenced by a classpath jar. The endpoint
+                // stays ranked; the caller warns that this edge is absent.
+                linkageFailure = true;
+            } catch (Exception e) {
+                // Skip unsolved calls (types outside the analysed sources).
             }
         }
+        return linkageFailure;
     }
 
     private void setupSymbolSolver(Path repoRoot, List<String> classpathDirectories) {

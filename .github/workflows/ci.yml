@@ -36,18 +36,18 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0   # full history so JGit-backed tests have something to walk
 
       - name: Set up JDK 21 (Temurin)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - name: Set up Gradle (with build cache)
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
         with:
           gradle-home-cache-cleanup: true
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
@@ -136,7 +136,7 @@ jobs:
 
       - name: Upload test results (JUnit XML)
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results-${{ github.run_number }}
           path: |
@@ -146,7 +146,7 @@ jobs:
 
       - name: Upload HTML test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report-${{ github.run_number }}
           path: build/reports/tests/test
@@ -155,7 +155,7 @@ jobs:
 
       - name: Upload test summary
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-summary-${{ github.run_number }}
           path: ci-summary/summary.md
@@ -164,7 +164,7 @@ jobs:
 
       - name: Upload built jar
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hotspot-jar-${{ github.run_number }}
           path: build/libs/hotspot-*.jar
@@ -178,14 +178,22 @@ jobs:
         # --strict fails the job if the run ever comes back empty.
         if: success()
         run: |
-          JAR=$(ls build/libs/hotspot-*.jar | head -1)
+          JAR=$(ls -t build/libs/hotspot-*.jar | head -1)
           java -jar "$JAR" analyze . --strict -o build/hotspot-self
           echo "--- Self-analysis report directory ---"
           ls -la build/hotspot-self
+          {
+            echo "### Hotspot self-analysis (top 5 by composite rank)"
+            echo
+            echo "| composite_rank | path | composite_score |"
+            echo "|---:|---|---:|"
+            tail -n +2 build/hotspot-self/file_hotspots.csv | head -5 \
+              | awk -F, '{print "| "$2" | "$3" | "$NF" |"}'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload hotspot self-analysis report
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hotspot-self-report-${{ github.run_number }}
           path: build/hotspot-self
@@ -277,7 +285,7 @@ jobs:
           EOF
           
           # 6. Run analysis
-          JAR=$(ls ../../../build/libs/hotspot-*.jar | head -1)
+          JAR=$(ls -t ../../../build/libs/hotspot-*.jar | head -1)
           echo "Using $JAR"
           java -jar "$JAR" analyze --config ../hotspot.yml
           echo "--- Demo report directory ---"
@@ -285,7 +293,7 @@ jobs:
 
       - name: Upload hotspot API demo report (synthetic sample: hotspot files, API reports, shared components)
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hotspot-demo-report-${{ github.run_number }}
           path: |
@@ -304,7 +312,7 @@ jobs:
 
       - name: Publish test results to PR (always run)
         if: always()
-        uses: mikepenz/action-junit-report@v5
+        uses: mikepenz/action-junit-report@v6
         with:
           report_paths: "build/test-results/test/TEST-*.xml"
           check_name: "JUnit Report"

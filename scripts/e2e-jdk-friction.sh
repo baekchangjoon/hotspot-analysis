@@ -41,6 +41,11 @@ DESC="scripts pass bash -n"
 check bash -n "$ROOT/install.sh" "$ROOT/skills/hotspot-analysis/scripts/ensure-java.sh" \
   "$ROOT/skills/hotspot-analysis/scripts/get-jar.sh" "$ROOT/skills/hotspot-analysis/scripts/run-analysis.sh"
 
+DESC="POSIX locale fallback is set before the JVM starts"
+check grep -q 'C.UTF-8' "$ROOT/install.sh"
+DESC="POSIX locale fallback is set before the JVM starts"
+check grep -q 'C.UTF-8' "$ROOT/skills/hotspot-analysis/scripts/run-analysis.sh"
+
 DESC="REQ-011: install.sh heredoc is byte-identical to ensure-java.sh"
 sed -n "/<<'ENSURE_JAVA_EOF'\$/,/^ENSURE_JAVA_EOF\$/p" "$ROOT/install.sh" | sed '1d;$d' > "$TMP/embedded.sh"
 check diff "$TMP/embedded.sh" "$ROOT/skills/hotspot-analysis/scripts/ensure-java.sh"

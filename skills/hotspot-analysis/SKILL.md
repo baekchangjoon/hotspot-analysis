@@ -229,7 +229,8 @@ analysis:
     enabled: true            # off by default; required for api/shared granularities
     sharedComponentMode: BOTH        # CUMULATIVE | SEPARATE | BOTH
     classpathDirectories: []         # dirs with compiled classes AND the full dependency
-                                     # jar closure (e.g. ~/.m2/repository); partial = skipped endpoints
+                                     # jar closure (e.g. ~/.m2/repository). A partial set
+                                     # warns: skipped endpoints, or an incomplete call graph
   jacocoReportPath: build/reports/jacoco/test/jacocoTestReport.xml   # optional
 output:
   formats: [csv, yaml, md, html]   # case-insensitive; ≥1 required
@@ -257,7 +258,7 @@ Env vars substitute as `${VAR_NAME}` in any string value; YAML comment lines
 | `--config, -c <file>` | Path to the YAML config (required) |
 | `--output-dir, -o <dir>` | Directory to write the reports into (overrides `output.path`) |
 | `--quiet, -q` | Suppress the stdout summary |
-| `--strict, -s` | Exit code **3** on empty result (zero commits or zero files) — for CI gating |
+| `--strict, -s` | Exit code **3** on an empty result, and write no report (zero commits or zero files) — for CI gating |
 
 Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--strict` empty result.
 
@@ -280,6 +281,10 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   `build/install/<app>/lib` — and re-run before handing the list to test
   generation. A partial set of jars is not enough (classes they reference
   must be present too).
+- **IF** the run warns `ranked with an incomplete call graph` **THEN** the
+  endpoint is still in the ranking, but edges past a missing class were
+  dropped. Add the full dependency closure the same way and re-run; do not
+  treat the call graph as complete.
 - **IF** the run warns that files are "not present in the JaCoCo report" (their
   `coverageMultiplier` stays `1.0`) **THEN** the report doesn't cover those
   files — supply a report from the **same** build/module; do not conclude
@@ -294,7 +299,8 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   absolute `window.since`/`window.until` overlapping real activity.
 - **IF** `target.type` is `github` **THEN** clone the repo locally and re-run with
   `target.type: local-git` (Phase 1 wires only `local-git` end-to-end).
-- **IF** running in CI **THEN** pass `--strict` so an empty result fails loudly.
+- **IF** running in CI **THEN** pass `--strict` so an empty result fails
+  loudly and writes no report.
 - **IF** you only need observational coverage, not coverage-driven scoring
   **THEN** set `scoring.excludeCoverage: true` (Composite becomes `CC × Decay`).
 
@@ -306,7 +312,8 @@ Exit codes: `0` ok · `1` config/pipeline failure · `2` usage error · `3` `--s
   means `apiAnalysis` is off or the call graph couldn't resolve (missing
   `classpathDirectories`).
 - **Don't hand over a ranking that came with a "controller endpoint(s) were
-  skipped" warning.** Fix the classpath first; a silently shorter list is
+  skipped" warning, or an "incomplete call graph" warning.** Fix the classpath
+  first; a silently shorter list, or a ranked endpoint with missing edges, is
   the most expensive mistake this skill can make.
 - **Don't feed a JaCoCo report from a different module/build.** Path mismatch
   reads as 0% coverage → every multiplier maxes at 10 and the ranking is bogus.
