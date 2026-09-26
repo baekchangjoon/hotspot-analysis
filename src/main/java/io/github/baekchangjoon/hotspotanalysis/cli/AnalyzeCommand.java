@@ -115,7 +115,19 @@ public class AnalyzeCommand implements Callable<Integer> {
         PrintWriter out = spec.commandLine().getOut();
         PrintWriter err = spec.commandLine().getErr();
 
-        // 1. Preflight validation (before any I/O).
+        Integer preflightFailure = preflight(err);
+        if (preflightFailure != null) {
+            return preflightFailure;
+        }
+        ConfigOutcome loaded = loadConfig(out, err);
+        if (loaded.config() == null) {
+            return loaded.exitCode();
+        }
+        return analyse(out, err, loaded.config());
+    }
+
+    /** Option validation before any I/O; null when the options are consistent. */
+    private Integer preflight(PrintWriter err) {
         if (configPath != null && path != null) {
             err.println("ERROR: --config and [path] are mutually exclusive.");
             return EXIT_FAILURE;
@@ -131,43 +143,65 @@ public class AnalyzeCommand implements Callable<Integer> {
             err.println("ERROR: --print-config applies only to zero-config mode (remove --config).");
             return EXIT_FAILURE;
         }
+        return null;
+    }
 
-        // 2. Build the config.
-        AnalysisConfig config;
-        boolean zeroConfig = configPath == null;
-        try {
-            if (zeroConfig) {
-                Path base = (path != null) ? path : Path.of("").toAbsolutePath();
-                config = withOutputDir(configSynthesizer.synthesize(base));
-                if (printConfig) {
-                    out.print(configSerializer.serialize(config));
-                    out.flush();
-                    return EXIT_OK;
-                }
-                if (!quiet) {
-                    printDetectionSummary(err, config);
-                }
-            } else {
-                if (Files.isDirectory(configPath)) {
-                    err.println("ERROR: " + configPath + " is a directory, not a configuration file.");
-                    return EXIT_FAILURE;
-                }
-                if (!Files.isRegularFile(configPath)) {
-                    err.println("ERROR: configuration file not found: " + configPath);
-                    return EXIT_FAILURE;
-                }
-                config = withOutputDir(configLoader.load(configPath));
-            }
-        } catch (ConfigSynthesisException | ConfigSerializeException e) {
-            err.println("ERROR: " + e.getMessage());
-            return EXIT_FAILURE;
-        } catch (ConfigLoadException e) {
-            err.println("ERROR: invalid configuration: " + e.getMessage());
-            return EXIT_FAILURE;
+    /** Either a config to analyse, or the exit code to stop with (config null). */
+    private record ConfigOutcome(AnalysisConfig config, int exitCode) {
+        static ConfigOutcome proceed(AnalysisConfig config) {
+            return new ConfigOutcome(config, EXIT_OK);
         }
 
-        // 3. Analyse. An empty --strict run must not write a report or print
-        // "complete": the flag exists to fail instead of producing an empty report.
+        static ConfigOutcome stop(int exitCode) {
+            return new ConfigOutcome(null, exitCode);
+        }
+    }
+
+    private ConfigOutcome loadConfig(PrintWriter out, PrintWriter err) {
+        try {
+            return (configPath == null) ? synthesizeConfig(out, err) : loadConfigFile(err);
+        } catch (ConfigSynthesisException | ConfigSerializeException e) {
+            err.println("ERROR: " + e.getMessage());
+            return ConfigOutcome.stop(EXIT_FAILURE);
+        } catch (ConfigLoadException e) {
+            err.println("ERROR: invalid configuration: " + e.getMessage());
+            return ConfigOutcome.stop(EXIT_FAILURE);
+        }
+    }
+
+    /** Zero-config mode: detect from [path]; --print-config prints and stops. */
+    private ConfigOutcome synthesizeConfig(PrintWriter out, PrintWriter err) {
+        Path base = (path != null) ? path : Path.of("").toAbsolutePath();
+        AnalysisConfig config = withOutputDir(configSynthesizer.synthesize(base));
+        if (printConfig) {
+            out.print(configSerializer.serialize(config));
+            out.flush();
+            return ConfigOutcome.stop(EXIT_OK);
+        }
+        if (!quiet) {
+            printDetectionSummary(err, config);
+        }
+        return ConfigOutcome.proceed(config);
+    }
+
+    private ConfigOutcome loadConfigFile(PrintWriter err) {
+        if (Files.isDirectory(configPath)) {
+            err.println("ERROR: " + configPath + " is a directory, not a configuration file.");
+            return ConfigOutcome.stop(EXIT_FAILURE);
+        }
+        if (!Files.isRegularFile(configPath)) {
+            err.println("ERROR: configuration file not found: " + configPath);
+            return ConfigOutcome.stop(EXIT_FAILURE);
+        }
+        return ConfigOutcome.proceed(withOutputDir(configLoader.load(configPath)));
+    }
+
+    /**
+     * Runs the pipeline and writes the reports. An empty --strict run must
+     * not write a report or print "complete": the flag exists to fail instead
+     * of producing an empty report.
+     */
+    private int analyse(PrintWriter out, PrintWriter err, AnalysisConfig config) {
         try {
             AnalysisResult result = analyzer.analyze(config);
             if (strict && isEmpty(result)) {
@@ -212,7 +246,14 @@ public class AnalyzeCommand implements Callable<Integer> {
 
     static String formatComposite(double score) {
         double magnitude = Math.abs(score);
-        String pattern = magnitude >= 10.0 ? "%.1f" : magnitude >= 1.0 ? "%.2f" : "%.4f";
+        String pattern;
+        if (magnitude >= 10.0) {
+            pattern = "%.1f";
+        } else if (magnitude >= 1.0) {
+            pattern = "%.2f";
+        } else {
+            pattern = "%.4f";
+        }
         return String.format(Locale.ROOT, pattern, score);
     }
 

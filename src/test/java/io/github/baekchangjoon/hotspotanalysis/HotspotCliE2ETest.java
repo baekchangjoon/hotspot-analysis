@@ -619,8 +619,7 @@ class HotspotCliE2ETest {
         int skipped = skippedCount(bareErr);
         assertThat(dataRows(bareOut.resolve("api_hotspots.csv")) + skipped).isEqualTo(7);
         assertThat(skipped).isEqualTo(6);
-        assertThat(bareErr).contains("(1 more)");
-        assertThat(bareErr).doesNotContain("populatePetTypes");
+        assertThat(bareErr).contains("(1 more)").doesNotContain("populatePetTypes");
         assertThat(Files.readString(bareOut.resolve("api_hotspots.csv"))).doesNotContain("populatePetTypes");
 
         Path typeSrc = tempDir.resolve("lib-src/com/example/MissingType.java");
