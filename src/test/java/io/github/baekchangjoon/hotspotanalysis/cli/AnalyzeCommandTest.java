@@ -203,8 +203,10 @@ class AnalyzeCommandTest {
                 List.of("CSV"), "**/non-existent-folder/**/*.java",
                 "2020-01-01", "2026-12-31");
 
+        StringWriter outWriter = new StringWriter();
         StringWriter errWriter = new StringWriter();
         CommandLine cli = new CommandLine(command);
+        cli.setOut(new PrintWriter(outWriter));
         cli.setErr(new PrintWriter(errWriter));
 
         int exit = cli.execute("--config", configFile.toString(), "--strict");
@@ -213,6 +215,8 @@ class AnalyzeCommandTest {
         String stderr = errWriter.toString();
         assertThat(stderr).contains("Files matching scope:   0");
         assertThat(stderr).contains("scope.include");
+        assertThat(outWriter.toString()).doesNotContain("Hotspot analysis complete.");
+        assertThat(Files.exists(outputDir.resolve("file_hotspots.csv"))).isFalse();
     }
 
     @Test
@@ -654,6 +658,19 @@ class AnalyzeCommandTest {
                 .contains("no XML report found")
                 .contains("jacocoTestReport");
         assertThat(Files.exists(Path.of("hotspot-report"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("zero-config: root sources beside a module are labeled root + modules")
+    void zeroConfigLabelsRootBesideModules() throws Exception {
+        Files.createDirectories(repoRoot.resolve("core/src/main/java"));
+
+        StringWriter ew = new StringWriter();
+        CommandLine cli = new CommandLine(command);
+        cli.setErr(new PrintWriter(ew));
+
+        assertThat(cli.execute(repoRoot.toString(), "-o", outputDir.toString())).isZero();
+        assertThat(ew.toString()).contains("root + modules (src/main/java and **/src/main/java)");
     }
 
     @Test

@@ -12,13 +12,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -150,6 +153,61 @@ class LocalGitProviderTest extends VcsProviderContract {
         List<CommitRecord> commits = providerWithKnownHistory().loadCommits(narrow);
 
         assertThat(commits).isEmpty();
+    }
+
+    @Test
+    @DisplayName("an empty GpgConfig still commits when gpg.format=ssh is configured")
+    void isolatedGpgConfigSurvivesSshFormat(@TempDir Path dir) throws Exception {
+        try (Git git = Git.init().setDirectory(dir.toFile()).call()) {
+            var config = git.getRepository().getConfig();
+            config.setString("gpg", null, "format", "ssh");
+            config.save();
+            Files.writeString(dir.resolve("A.java"), "class A {}");
+            git.add().addFilepattern("A.java").call();
+            PersonIdent ident = new PersonIdent("alice", "alice@example.com");
+            assertThatThrownBy(() -> git.commit()
+                    .setAuthor(ident)
+                    .setCommitter(ident)
+                    .setMessage("unsafe")
+                    .call())
+                    .hasMessageContaining("gpg.format=ssh");
+            git.commit().setGpgConfig(new GpgConfig(new Config()))
+                    .setAuthor(ident)
+                    .setCommitter(ident)
+                    .setMessage("isolated")
+                    .call();
+            assertThat(git.log().call().iterator().next().getFullMessage()).isEqualTo("isolated");
+        }
+    }
+
+    @Test
+    @DisplayName("every test commit chain isolates GpgConfig, except the assertion that ssh format throws")
+    void everyTestCommitChainIsolatesGpgConfig() throws IOException {
+        List<String> offenders = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(Path.of("src/test/java"))) {
+            for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
+                String text = Files.readString(file);
+                String needle = "git." + "commit()";
+                int from = 0;
+                while (true) {
+                    int at = text.indexOf(needle, from);
+                    if (at < 0) {
+                        break;
+                    }
+                    int call = text.indexOf(".call()", at);
+                    if (call < 0) {
+                        break;
+                    }
+                    String span = text.substring(at, call);
+                    String before = text.substring(Math.max(0, at - 120), at);
+                    if (!span.contains("setGpgConfig") && !before.contains("assertThatThrownBy")) {
+                        offenders.add(file + " :: " + span.strip());
+                    }
+                    from = call + ".call()".length();
+                }
+            }
+        }
+        assertThat(offenders).isEmpty();
     }
 
     private static void commitFile(Git git,

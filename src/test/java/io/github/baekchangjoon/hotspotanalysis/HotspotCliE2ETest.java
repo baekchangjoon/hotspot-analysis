@@ -14,6 +14,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
+import javax.tools.ToolProvider;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -22,6 +24,8 @@ import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -556,6 +560,121 @@ class HotspotCliE2ETest {
 
         assertThat(application.getExitCode()).isZero();
         assertThat(Files.exists(Path.of("hotspot-report").resolve("file_hotspots.csv"))).isTrue();
+    }
+
+    @Test
+    @DisplayName("mapped endpoints are ranked or named, and a classpath makes the skip list empty")
+    void mappedEndpointsAreRankedOrNamed(CapturedOutput output, @TempDir Path tempDir) throws Exception {
+        // Same invariant as the spring-petclinic dogfood (9 ranked + 8 skipped
+        // = 17), without cloning it. Six unresolvable parameters force the
+        // warning preview past five names. populatePetTypes is @ModelAttribute
+        // only, so it is not an endpoint.
+        Path repo = tempDir.resolve("repo");
+        Path src = repo.resolve("src/main/java/com/example");
+        Path spring = repo.resolve("src/main/java/org/springframework/web/bind/annotation");
+        Files.createDirectories(src);
+        Files.createDirectories(spring);
+        Files.writeString(spring.resolve("RestController.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.TYPE) @Retention(RetentionPolicy.RUNTIME)
+                public @interface RestController {}
+                """);
+        Files.writeString(spring.resolve("GetMapping.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME)
+                public @interface GetMapping { String[] value() default {}; }
+                """);
+        Files.writeString(spring.resolve("ModelAttribute.java"), """
+                package org.springframework.web.bind.annotation;
+                import java.lang.annotation.*;
+                @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME)
+                public @interface ModelAttribute { String[] value() default {}; }
+                """);
+        try (Git git = Git.init().setDirectory(repo.toFile()).call()) {
+            writeJava(git, "src/main/java/com/example/ClinicController.java", """
+                    package com.example;
+                    import org.springframework.web.bind.annotation.*;
+                    @RestController
+                    public class ClinicController {
+                        @GetMapping("/ok")
+                        public String ok(int page) { return "ok"; }
+                        @GetMapping("/m1") public String m1(MissingType body) { return "1"; }
+                        @GetMapping("/m2") public String m2(MissingType body) { return "2"; }
+                        @GetMapping("/m3") public String m3(MissingType body) { return "3"; }
+                        @GetMapping("/m4") public String m4(MissingType body) { return "4"; }
+                        @GetMapping("/m5") public String m5(MissingType body) { return "5"; }
+                        @GetMapping("/m6") public String m6(MissingType body) { return "6"; }
+                        @ModelAttribute("types")
+                        public String populatePetTypes() { return "types"; }
+                    }
+                    """, Instant.now().minus(Duration.ofDays(1)));
+        }
+
+        Path bareOut = tempDir.resolve("bare");
+        application.run("analyze", "--config", config(tempDir, repo, bareOut, false).toString(), "--quiet");
+        assertThat(application.getExitCode()).isZero();
+        String bareErr = output.getErr();
+        int skipped = skippedCount(bareErr);
+        assertThat(dataRows(bareOut.resolve("api_hotspots.csv")) + skipped).isEqualTo(7);
+        assertThat(skipped).isEqualTo(6);
+        assertThat(bareErr).contains("(1 more)");
+        assertThat(bareErr).doesNotContain("populatePetTypes");
+        assertThat(Files.readString(bareOut.resolve("api_hotspots.csv"))).doesNotContain("populatePetTypes");
+
+        Path typeSrc = tempDir.resolve("lib-src/com/example/MissingType.java");
+        Files.createDirectories(typeSrc.getParent());
+        Files.writeString(typeSrc, "package com.example; public class MissingType {}");
+        Path classes = repo.resolve("ext-classes");
+        assertThat(ToolProvider.getSystemJavaCompiler().run(
+                null, null, null, "-d", classes.toString(), typeSrc.toString())).isZero();
+
+        int errMark = output.getErr().length();
+        Path fullOut = tempDir.resolve("full");
+        application.run("analyze", "--config", config(tempDir, repo, fullOut, true).toString(), "--quiet");
+        assertThat(application.getExitCode()).isZero();
+        assertThat(dataRows(fullOut.resolve("api_hotspots.csv"))).isEqualTo(7);
+        String fullErr = output.getErr().substring(errMark);
+        assertThat(fullErr).doesNotContain("were skipped");
+        assertThat(Files.readString(fullOut.resolve("api_hotspots.csv"))).doesNotContain("populatePetTypes");
+    }
+
+    private static Path config(Path tempDir, Path repo, Path out, boolean withClasspath) throws IOException {
+        String classpath = withClasspath
+                ? "    classpathDirectories:\n      - \"ext-classes\"\n"
+                : "";
+        Path config = tempDir.resolve(withClasspath ? "full.yml" : "bare.yml");
+        Files.writeString(config, """
+                analysis:
+                  target:
+                    type: local-git
+                    path: "%s"
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file, method]
+                    include:
+                      - "src/main/java/**/*.java"
+                  apiAnalysis:
+                    enabled: true
+                %soutput:
+                  formats: [csv]
+                  path: "%s"
+                  topN: 0
+                """.formatted(repo, classpath, out));
+        return config;
+    }
+
+    private static int dataRows(Path csv) throws IOException {
+        return (int) Files.readAllLines(csv).stream().skip(1).filter(line -> !line.isBlank()).count();
+    }
+
+    private static int skippedCount(String stderr) {
+        Matcher matcher = Pattern.compile(
+                "WARNING: (\\d+) controller endpoint\\(s\\) were skipped").matcher(stderr);
+        assertThat(matcher.find()).isTrue();
+        return Integer.parseInt(matcher.group(1));
     }
 
     private static void deleteRecursively(Path root) throws IOException {

@@ -75,7 +75,7 @@
 5. **래퍼·Docker의 로케일 폴백(F-L)** — `hotspot` 래퍼와 `ensure-java.sh` 경로에서 `LC_ALL`이 비어 있으면 `C.UTF-8` 설정, Dockerfile에 `ENV LANG=C.UTF-8`.
 6. **`--strict` 의미 정리(F-E)** — 빈 결과면 리포트 파일을 쓰지 않거나, 문서를 "리포트는 생성되지만 exit 3"으로 정정.
 7. **CI 위생(F-O)** — 액션 메이저 버전은 Node 24 대응으로 올렸고, `hotspot-self-report` 상위 5개는 Step Summary에 표시한다. 일일 cron은 유지한다. 변경 없는 날의 아티팩트 업로드는 비용이지, 매일 실행을 막는 결함은 아니다.
-8. **회귀 방지용 독 푸딩 자동화** — 이번 세션의 S10/S13/S16 시나리오를 `scripts/e2e-dogfood.sh`(petclinic 클론 → 빌드 → 엔드포인트 수 17 단언)로 고정. CI 주간 잡으로 실행.
+8. **회귀 방지용 독 푸딩 자동화** — petclinic 클론은 CI 시간과 Maven Central 의존 때문에 넣지 않는다. 같은 불변조건(매핑된 메서드는 순위에 있거나 누락 경고에 이름이 있다, `@ModelAttribute`만 있는 메서드는 엔드포인트가 아니다, 누락이 5건을 넘으면 `(N more)`)은 `HotspotCliE2ETest`의 합성 픽스처가 잠근다.
 
 ## 5. 반론·리스크
 
