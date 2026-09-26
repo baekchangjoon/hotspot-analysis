@@ -66,126 +66,150 @@ public class CallGraphBuilder {
     public CallGraphResult buildCallGraphs(Path repoRoot, List<Path> javaFiles, List<String> classpathDirectories) {
         setupSymbolSolver(repoRoot, classpathDirectories);
 
-        List<CompilationUnit> cus = new ArrayList<>();
-        Map<String, MethodSignature> resolvedToSignature = new HashMap<>();
-        Map<String, MethodDeclaration> resolvedKeyToNode = new HashMap<>();
-        Map<String, List<String>> interfaceCallToImplKeys = new HashMap<>();
-        List<MethodDeclaration> controllerMethods = new ArrayList<>();
-        List<MethodSignature> unresolvedEndpoints = new ArrayList<>();
-        List<MethodSignature> incompleteCallGraphs = new ArrayList<>();
-
+        Index index = new Index();
         for (Path file : javaFiles) {
-            try {
-                CompilationUnit cu = StaticJavaParser.parse(file);
-                cus.add(cu);
-
-                for (ClassOrInterfaceDeclaration decl : cu.findAll(ClassOrInterfaceDeclaration.class)) {
-                    boolean isController = decl.isAnnotationPresent("RestController") ||
-                                           decl.isAnnotationPresent("Controller");
-
-                    if (!decl.isInterface()) {
-                        try {
-                            ResolvedReferenceTypeDeclaration resolvedClass = decl.resolve();
-                            List<ResolvedReferenceType> ancestors = resolvedClass.getAllAncestors();
-
-                            for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
-                                try {
-                                    ResolvedMethodDeclaration resolvedM = md.resolve();
-                                    String resolvedKey = toResolvedCanonicalString(resolvedM);
-
-                                    MethodSignature signature = buildMethodSignature(cu, md);
-                                    resolvedToSignature.put(resolvedKey, signature);
-                                    resolvedKeyToNode.put(resolvedKey, md);
-
-                                    if (isController && hasApiMapping(md)) {
-                                        controllerMethods.add(md);
-                                    }
-
-                                    String params = getParamTypeString(resolvedM);
-                                    for (ResolvedReferenceType ancestor : ancestors) {
-                                        if (ancestor.getTypeDeclaration().isPresent()) {
-                                            String ancestorFqcn = ancestor.getTypeDeclaration().get().getQualifiedName();
-                                            String ancestorMethodKey = ancestorFqcn + "#" + resolvedM.getName() + "(" + params + ")";
-                                            interfaceCallToImplKeys.computeIfAbsent(ancestorMethodKey, k -> new ArrayList<>()).add(resolvedKey);
-                                        }
-                                    }
-                                } catch (Exception | LinkageError e) {
-                                    // Unresolvable method (unknown parameter/return
-                                    // type). A LinkageError (NoClassDefFoundError)
-                                    // surfaces when a classpath jar references a
-                                    // class that is not on the classpath; it must
-                                    // not abort the whole analysis.
-                                    if (isController && hasApiMapping(md)) {
-                                        unresolvedEndpoints.add(buildMethodSignature(cu, md));
-                                    }
-                                }
-                            }
-                        } catch (Exception | LinkageError e) {
-                            // Unresolvable class: every mapped method in it is an
-                            // endpoint the report will lack.
-                            if (isController) {
-                                for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
-                                    if (hasApiMapping(md)) {
-                                        unresolvedEndpoints.add(buildMethodSignature(cu, md));
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
-                            try {
-                                ResolvedMethodDeclaration resolvedM = md.resolve();
-                                String resolvedKey = toResolvedCanonicalString(resolvedM);
-                                MethodSignature signature = buildMethodSignature(cu, md);
-                                resolvedToSignature.put(resolvedKey, signature);
-                                resolvedKeyToNode.put(resolvedKey, md);
-                            } catch (Exception | LinkageError e) {
-                                // Skip
-                            }
-                        }
-                    }
-                }
-            } catch (Exception | LinkageError e) {
-                // Skip unparseable files
-            }
+            indexFile(file, index);
         }
-
-        Map<MethodSignature, List<MethodSignature>> callGraphs = new HashMap<>();
-
-        for (MethodDeclaration controllerMethod : controllerMethods) {
-            try {
-                ResolvedMethodDeclaration resolvedM = controllerMethod.resolve();
-                String entryKey = toResolvedCanonicalString(resolvedM);
-                MethodSignature entrySignature = resolvedToSignature.get(entryKey);
-                if (entrySignature == null) {
-                    continue;
-                }
-
-                Set<String> callGraphKeys = new LinkedHashSet<>();
-                Set<String> visited = new HashSet<>();
-
-                boolean incomplete = traverse(
-                        entryKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
-
-                List<MethodSignature> calledSignatures = new ArrayList<>();
-                for (String key : callGraphKeys) {
-                    MethodSignature sig = resolvedToSignature.get(key);
-                    if (sig != null && !sig.equals(entrySignature)) {
-                        calledSignatures.add(sig);
-                    }
-                }
-                callGraphs.put(entrySignature, calledSignatures);
-                if (incomplete) {
-                    incompleteCallGraphs.add(entrySignature);
-                }
-            } catch (Exception | LinkageError e) {
-                unresolvedEndpoints.add(buildMethodSignature(
-                        controllerMethod.findCompilationUnit().orElseThrow(), controllerMethod));
-            }
+        for (MethodDeclaration controllerMethod : index.controllerMethods) {
+            buildEntryGraph(controllerMethod, index);
         }
-
         return new CallGraphResult(
-                callGraphs, distinct(unresolvedEndpoints), distinct(incompleteCallGraphs));
+                index.callGraphs, distinct(index.unresolvedEndpoints), distinct(index.incompleteCallGraphs));
+    }
+
+    /** Working state shared by the indexing pass and the per-endpoint walk. */
+    private static final class Index {
+        final Map<String, MethodSignature> resolvedToSignature = new HashMap<>();
+        final Map<String, MethodDeclaration> resolvedKeyToNode = new HashMap<>();
+        final Map<String, List<String>> interfaceCallToImplKeys = new HashMap<>();
+        final List<MethodDeclaration> controllerMethods = new ArrayList<>();
+        final List<MethodSignature> unresolvedEndpoints = new ArrayList<>();
+        final List<MethodSignature> incompleteCallGraphs = new ArrayList<>();
+        final Map<MethodSignature, List<MethodSignature>> callGraphs = new HashMap<>();
+    }
+
+    private void indexFile(Path file, Index index) {
+        try {
+            CompilationUnit cu = StaticJavaParser.parse(file);
+            for (ClassOrInterfaceDeclaration decl : cu.findAll(ClassOrInterfaceDeclaration.class)) {
+                if (decl.isInterface()) {
+                    indexInterface(cu, decl, index);
+                } else {
+                    indexClass(cu, decl, index);
+                }
+            }
+        } catch (Exception | LinkageError e) {
+            // Skip unparseable files
+        }
+    }
+
+    private void indexInterface(CompilationUnit cu, ClassOrInterfaceDeclaration decl, Index index) {
+        for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+            try {
+                registerMethod(cu, md, md.resolve(), index);
+            } catch (Exception | LinkageError e) {
+                // Skip
+            }
+        }
+    }
+
+    private void indexClass(CompilationUnit cu, ClassOrInterfaceDeclaration decl, Index index) {
+        boolean isController = decl.isAnnotationPresent("RestController")
+                || decl.isAnnotationPresent("Controller");
+        List<ResolvedReferenceType> ancestors;
+        try {
+            ancestors = decl.resolve().getAllAncestors();
+        } catch (Exception | LinkageError e) {
+            // Unresolvable class: every mapped method in it is an endpoint the
+            // report will lack.
+            if (isController) {
+                collectMappedSignatures(cu, decl, index.unresolvedEndpoints);
+            }
+            return;
+        }
+        for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+            indexClassMethod(cu, md, ancestors, isController, index);
+        }
+    }
+
+    private void indexClassMethod(CompilationUnit cu, MethodDeclaration md,
+                                  List<ResolvedReferenceType> ancestors,
+                                  boolean isController, Index index) {
+        boolean endpoint = isController && hasApiMapping(md);
+        try {
+            ResolvedMethodDeclaration resolvedM = md.resolve();
+            String resolvedKey = registerMethod(cu, md, resolvedM, index);
+            if (endpoint) {
+                index.controllerMethods.add(md);
+            }
+            linkAncestors(resolvedM, resolvedKey, ancestors, index);
+        } catch (Exception | LinkageError e) {
+            // Unresolvable method (unknown parameter/return type). A
+            // LinkageError (NoClassDefFoundError) surfaces when a classpath
+            // jar references a class that is not on the classpath; it must not
+            // abort the whole analysis.
+            if (endpoint) {
+                index.unresolvedEndpoints.add(buildMethodSignature(cu, md));
+            }
+        }
+    }
+
+    private String registerMethod(CompilationUnit cu, MethodDeclaration md,
+                                  ResolvedMethodDeclaration resolvedM, Index index) {
+        String resolvedKey = toResolvedCanonicalString(resolvedM);
+        index.resolvedToSignature.put(resolvedKey, buildMethodSignature(cu, md));
+        index.resolvedKeyToNode.put(resolvedKey, md);
+        return resolvedKey;
+    }
+
+    /** Maps every ancestor's declaration of this method to the concrete implementation. */
+    private void linkAncestors(ResolvedMethodDeclaration resolvedM, String resolvedKey,
+                               List<ResolvedReferenceType> ancestors, Index index) {
+        String params = getParamTypeString(resolvedM);
+        for (ResolvedReferenceType ancestor : ancestors) {
+            ancestor.getTypeDeclaration().ifPresent(type -> {
+                String ancestorMethodKey = type.getQualifiedName() + "#" + resolvedM.getName() + "(" + params + ")";
+                index.interfaceCallToImplKeys
+                        .computeIfAbsent(ancestorMethodKey, k -> new ArrayList<>())
+                        .add(resolvedKey);
+            });
+        }
+    }
+
+    private void collectMappedSignatures(CompilationUnit cu, ClassOrInterfaceDeclaration decl,
+                                         List<MethodSignature> out) {
+        for (MethodDeclaration md : decl.findAll(MethodDeclaration.class)) {
+            if (hasApiMapping(md)) {
+                out.add(buildMethodSignature(cu, md));
+            }
+        }
+    }
+
+    private void buildEntryGraph(MethodDeclaration controllerMethod, Index index) {
+        try {
+            String entryKey = toResolvedCanonicalString(controllerMethod.resolve());
+            MethodSignature entrySignature = index.resolvedToSignature.get(entryKey);
+            if (entrySignature == null) {
+                return;
+            }
+            Set<String> callGraphKeys = new LinkedHashSet<>();
+            boolean incomplete = traverse(entryKey, index, callGraphKeys, new HashSet<>());
+
+            List<MethodSignature> calledSignatures = new ArrayList<>();
+            for (String key : callGraphKeys) {
+                MethodSignature sig = index.resolvedToSignature.get(key);
+                if (sig != null && !sig.equals(entrySignature)) {
+                    calledSignatures.add(sig);
+                }
+            }
+            index.callGraphs.put(entrySignature, calledSignatures);
+            if (incomplete) {
+                index.incompleteCallGraphs.add(entrySignature);
+            }
+        } catch (Exception | LinkageError e) {
+            index.unresolvedEndpoints.add(buildMethodSignature(
+                    controllerMethod.findCompilationUnit().orElseThrow(), controllerMethod));
+        }
     }
 
     private static List<MethodSignature> distinct(List<MethodSignature> items) {
@@ -197,17 +221,11 @@ public class CallGraphBuilder {
     }
 
     /** @return true when a classpath jar referenced a class that is not loadable */
-    private boolean traverse(String methodKey,
-                          Map<String, MethodDeclaration> resolvedKeyToNode,
-                          Map<String, List<String>> interfaceCallToImplKeys,
-                          Set<String> callGraphKeys,
-                          Set<String> visited) {
-        if (visited.contains(methodKey)) {
+    private boolean traverse(String methodKey, Index index, Set<String> callGraphKeys, Set<String> visited) {
+        if (!visited.add(methodKey)) {
             return false;
         }
-        visited.add(methodKey);
-
-        MethodDeclaration node = resolvedKeyToNode.get(methodKey);
+        MethodDeclaration node = index.resolvedKeyToNode.get(methodKey);
         if (node == null) {
             return false;
         }
@@ -215,26 +233,10 @@ public class CallGraphBuilder {
         boolean linkageFailure = false;
         for (MethodCallExpr mc : node.findAll(MethodCallExpr.class)) {
             try {
-                ResolvedMethodDeclaration resolvedCall = mc.resolve();
-                String resolvedCallKey = toResolvedCanonicalString(resolvedCall);
-
-                boolean inScope = resolvedKeyToNode.containsKey(resolvedCallKey) || interfaceCallToImplKeys.containsKey(resolvedCallKey);
-
-                if (inScope) {
-                    if (interfaceCallToImplKeys.containsKey(resolvedCallKey)) {
-                        for (String implKey : interfaceCallToImplKeys.get(resolvedCallKey)) {
-                            if (!callGraphKeys.contains(implKey)) {
-                                callGraphKeys.add(implKey);
-                                linkageFailure |= traverse(
-                                        implKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
-                            }
-                        }
-                    } else {
-                        if (!callGraphKeys.contains(resolvedCallKey)) {
-                            callGraphKeys.add(resolvedCallKey);
-                            linkageFailure |= traverse(
-                                    resolvedCallKey, resolvedKeyToNode, interfaceCallToImplKeys, callGraphKeys, visited);
-                        }
+                String calleeKey = toResolvedCanonicalString(mc.resolve());
+                for (String next : keysToFollow(calleeKey, index)) {
+                    if (callGraphKeys.add(next)) {
+                        linkageFailure |= traverse(next, index, callGraphKeys, visited);
                     }
                 }
             } catch (LinkageError e) {
@@ -246,6 +248,19 @@ public class CallGraphBuilder {
             }
         }
         return linkageFailure;
+    }
+
+    /**
+     * Where a resolved callee leads: the concrete implementations when the
+     * callee is an interface/ancestor declaration, the callee itself when it
+     * is a project method, nothing when it is outside the analysed sources.
+     */
+    private static List<String> keysToFollow(String calleeKey, Index index) {
+        List<String> implementations = index.interfaceCallToImplKeys.get(calleeKey);
+        if (implementations != null) {
+            return implementations;
+        }
+        return index.resolvedKeyToNode.containsKey(calleeKey) ? List.of(calleeKey) : List.of();
     }
 
     private void setupSymbolSolver(Path repoRoot, List<String> classpathDirectories) {

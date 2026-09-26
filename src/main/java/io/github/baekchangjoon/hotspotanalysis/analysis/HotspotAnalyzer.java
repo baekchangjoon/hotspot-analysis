@@ -115,7 +115,7 @@ public class HotspotAnalyzer {
         if (java.nio.file.Files.isRegularFile(repoRoot.resolve(".git/shallow"))) {
             // actions/checkout defaults to depth=1: every file would report
             // revisions=1 and the ranking silently inverts.
-            System.err.println("WARNING: " + repoRoot + " is a shallow clone — git history is"
+            warn(repoRoot + " is a shallow clone — git history is"
                     + " truncated, so revision counts and recency decay are undercounted."
                     + " Fetch the full history (e.g. 'git fetch --unshallow') for trustworthy scores.");
         }
@@ -156,7 +156,7 @@ public class HotspotAnalyzer {
                 // covered (which would inflate every coverage multiplier to its
                 // 1/0.1 = 10 maximum). Warn and proceed as if no coverage was
                 // supplied, so the scores stay trustworthy.
-                System.err.println("WARNING: analysis.jacocoReportPath is set but no file exists at "
+                warn("analysis.jacocoReportPath is set but no file exists at "
                         + p + " — proceeding WITHOUT coverage (multiplier = 1.0). "
                         + "Generate a JaCoCo XML report (e.g. './gradlew test jacocoTestReport') "
                         + "or remove analysis.jacocoReportPath.");
@@ -167,7 +167,7 @@ public class HotspotAnalyzer {
                     // The report existed but yielded no coverage (corrupt XML, wrong
                     // format, or empty). Treating that as 0% covered would inflate
                     // every multiplier to 1/0.1 = 10. Fall back to no-coverage scoring.
-                    System.err.println("WARNING: JaCoCo report at " + p
+                    warn("JaCoCo report at " + p
                             + " produced no coverage data — proceeding WITHOUT coverage (multiplier = 1.0).");
                     jacocoSupplied = false;
                 } else if (!jacocoParser.hasCoveredLines()) {
@@ -176,7 +176,7 @@ public class HotspotAnalyzer {
                     // .exec, tests skipped/up-to-date). Trusting it would mark
                     // every artifact 0% covered and inflate every multiplier to
                     // 1/0.1 = 10. Fall back to no-coverage scoring.
-                    System.err.println("WARNING: JaCoCo report at " + p
+                    warn("JaCoCo report at " + p
                             + " lists zero covered lines — it was likely generated without test"
                             + " execution data. Regenerate it (e.g. './gradlew test jacocoTestReport')"
                             + " — proceeding WITHOUT coverage (multiplier = 1.0).");
@@ -194,7 +194,7 @@ public class HotspotAnalyzer {
                     .filter(path -> !jacocoParser.hasDataForFile(path))
                     .count();
             if (absentFiles > 0) {
-                System.err.println("WARNING: " + absentFiles + " of " + methodsByFile.size()
+                warn(absentFiles + " of " + methodsByFile.size()
                         + " analyzed files are not present in the JaCoCo report — coverage is"
                         + " treated as unknown for them (multiplier = 1.0). Supply a report"
                         + " covering all modules to score them by coverage.");
@@ -210,7 +210,7 @@ public class HotspotAnalyzer {
                     })
                     .count();
             if (staleFiles > 0) {
-                System.err.println("WARNING: the JaCoCo report references lines beyond the file's"
+                warn("the JaCoCo report references lines beyond the file's"
                         + " length for " + staleFiles + " file(s) — it was likely generated from a"
                         + " different commit than the sources being analyzed. Regenerate the report"
                         + " from the same checkout for trustworthy coverage.");
@@ -283,7 +283,7 @@ public class HotspotAnalyzer {
                 // Legacy repos routinely contain .java files that are not valid
                 // Java (templates, generated fragments). One bad file must not
                 // abort the whole analysis.
-                System.err.println("WARNING: skipping unparseable source file " + relative
+                warn("skipping unparseable source file " + relative
                         + " (" + e.getMessage() + "). Add it to scope.exclude to silence this.");
             }
         }
@@ -610,7 +610,7 @@ public class HotspotAnalyzer {
         if (unresolved.isEmpty()) {
             return;
         }
-        System.err.println("WARNING: " + unresolved.size() + " controller endpoint(s) were skipped"
+        warn(unresolved.size() + " controller endpoint(s) were skipped"
                 + " because their parameter/return types could not be resolved: " + preview(unresolved)
                 + ". Add the project's dependency jars (e.g. the Gradle/Maven cache or a"
                 + " build/install/*/lib dir) to analysis.apiAnalysis.classpathDirectories"
@@ -627,7 +627,7 @@ public class HotspotAnalyzer {
         if (incomplete.isEmpty()) {
             return;
         }
-        System.err.println("WARNING: " + incomplete.size() + " controller endpoint(s) were ranked"
+        warn(incomplete.size() + " controller endpoint(s) were ranked"
                 + " with an incomplete call graph because a classpath jar references a missing"
                 + " class: " + preview(incomplete)
                 + ". Add the full dependency closure to analysis.apiAnalysis.classpathDirectories.");
@@ -646,5 +646,18 @@ public class HotspotAnalyzer {
             names.append(", ... (").append(items.size() - shown).append(" more)");
         }
         return names.toString();
+    }
+
+    private static final String WARNING_PREFIX = "WARNING: ";
+
+    /**
+     * Warnings deliberately go to stderr rather than a logger: stdout carries
+     * the machine-readable summary, Spring Boot logging is silenced for the
+     * CLI (application.yml), and users and the end-to-end tests read these
+     * lines straight from the terminal.
+     */
+    @SuppressWarnings("java:S106")
+    private static void warn(String message) {
+        System.err.println(WARNING_PREFIX + message);
     }
 }

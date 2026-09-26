@@ -42,17 +42,16 @@ class ConsoleEncodingTest {
     @DisplayName("aligned stderr encodes non-ASCII warning text with the resolved charset instead of '?'")
     void alignedStderrKeepsNonAscii() {
         PrintStream original = System.err;
-        try {
+        // The replacement targets the real fd; assert the encoding contract
+        // on an equivalent stream so the test stays hermetic.
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (PrintStream aligned = new PrintStream(bytes, true, ConsoleEncoding.resolveStderr())) {
             ConsoleEncoding.alignStderrWithPicocli();
-            // The replacement targets the real fd; assert the encoding contract
-            // on an equivalent stream so the test stays hermetic.
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            PrintStream aligned = new PrintStream(bytes, true, ConsoleEncoding.resolveStderr());
             aligned.print("shallow clone — truncated");
             assertThat(bytes.toString(ConsoleEncoding.resolveStderr()))
                     .isEqualTo("shallow clone — truncated")
                     .doesNotContain("?");
-            assertThat(System.err).isNotSameAs(original);
+            assertThat(original).isNotSameAs(System.err);
         } finally {
             System.setErr(original);
         }
