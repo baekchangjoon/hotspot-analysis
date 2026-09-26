@@ -1,6 +1,7 @@
 package io.github.baekchangjoon.hotspotanalysis;
 
 import io.github.baekchangjoon.hotspotanalysis.cli.AnalyzeCommand;
+import io.github.baekchangjoon.hotspotanalysis.cli.ConsoleEncoding;
 import io.github.baekchangjoon.hotspotanalysis.cli.HotspotCommand;
 import io.github.baekchangjoon.hotspotanalysis.cli.InitCommand;
 import org.springframework.boot.CommandLineRunner;
@@ -51,6 +52,10 @@ public class HotspotApplication implements CommandLineRunner, ExitCodeGenerator 
     }
 
     public static void main(String[] args) {
+        // Warnings go to System.err directly; make them use the same charset as
+        // the Picocli writers so '—' does not degrade to '?' under a C/POSIX
+        // locale (dogfooding finding on a CI container).
+        ConsoleEncoding.alignStderrWithPicocli();
         System.exit(SpringApplication.exit(SpringApplication.run(HotspotApplication.class, args)));
     }
 }

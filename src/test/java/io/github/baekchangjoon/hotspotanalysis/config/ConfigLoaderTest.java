@@ -330,6 +330,39 @@ class ConfigLoaderTest {
     }
 
     @Test
+    @DisplayName("apiAnalysis.enabled without sharedComponentMode defaults to BOTH instead of failing validation")
+    void shouldDefaultSharedComponentModeWhenOnlyEnabledIsSet(@TempDir Path tempDir) throws IOException {
+        // Dogfooding finding: the README documents BOTH as the default, but a
+        // minimal `apiAnalysis: { enabled: true }` used to be rejected with
+        // "apiAnalysis.sharedComponentMode is required".
+        String yaml = """
+                analysis:
+                  target:
+                    type: local-git
+                    path: ./my-project
+                  window:
+                    days: 30
+                  scope:
+                    granularity: [file]
+                    include: ["**/*.java"]
+                  apiAnalysis:
+                    enabled: true
+                output:
+                  formats: [csv]
+                  path: ./out
+                  topN: 10
+                """;
+        Path file = writeYaml(tempDir, yaml);
+
+        AnalysisConfig config = newLoaderWithEnv(Map.of()).load(file);
+
+        assertThat(config.analysis().apiAnalysis().enabled()).isTrue();
+        assertThat(config.analysis().apiAnalysis().sharedComponentMode())
+                .isEqualTo(ApiAnalysisConfig.SharedComponentMode.BOTH);
+        assertThat(config.analysis().apiAnalysis().classpathDirectories()).isEmpty();
+    }
+
+    @Test
     @DisplayName("loads configuration with explicit apiAnalysis and apiLayout values")
     void shouldLoadApiAnalysisConfigWithExplicitValues(@TempDir Path tempDir) throws IOException {
         String yaml = """

@@ -1,6 +1,8 @@
 package io.github.baekchangjoon.hotspotanalysis;
 
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Config;
+import org.eclipse.jgit.lib.GpgConfig;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
@@ -575,6 +577,9 @@ class HotspotCliE2ETest {
         PersonIdent ident = new PersonIdent(
                 "alice", "alice@example.com",
                 Date.from(ts), TimeZone.getTimeZone("UTC"));
-        git.commit().setAuthor(ident).setCommitter(ident).setMessage("change").call();
+        // Isolate the fixture from the developer's global gpg.* settings: JGit 6.x
+        // rejects gpg.format=ssh (common with SSH commit signing) while building
+        // GpgConfig, even for unsigned commits.
+        git.commit().setGpgConfig(new GpgConfig(new Config())).setAuthor(ident).setCommitter(ident).setMessage("change").call();
     }
 }

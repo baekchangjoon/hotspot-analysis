@@ -58,7 +58,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 - **Java 21 파싱** — JavaParser 3.26이 record, sealed 타입, switch 식, 패턴 매칭을 이해.
 - **YAML 설정** — 강타입, Jakarta Bean Validation 검증, 환경변수 치환.
 - **네 가지 출력 형식** — CSV(엑셀 친화), YAML(기계 판독), Markdown(PR 친화), **HTML(브라우저에서 바로, 정렬·필터 가능, XSS 안전, 다크모드 대응)**.
-- **CI 자체 분석 데모** — 매 CI 실행마다 다운로드해 브라우저로 열 수 있는 `hotspot-demo-report-<N>` 아티팩트 생성.
+- **CI 자체 분석** — 매 CI 실행마다 이 저장소 자체를 전체 히스토리 + JaCoCo로 분석한 `hotspot-self-report-<N>`, 그리고 합성 Spring 샘플로 API 분석을 시연하는 `hotspot-demo-report-<N>` 아티팩트를 생성(다운로드해 브라우저로 열기).
 - **모든 계층의 포괄적 테스트** — 계약 테스트 + 단위 + Spring Boot E2E, 실패 0.
 
 ---
@@ -508,6 +508,13 @@ end-to-end로 연결**되어 있고, GitHub 프로바이더는 WireMock 계약 �
    누락될 수 있습니다.
 4. **소스 파싱 실패**: 파싱에 실패한 `.java` 파일은 경고 후 건너뛰고 나머지로
    분석을 계속합니다. 경고를 없애려면 해당 파일을 `scope.exclude`에 추가하세요.
+5. **API 엔드포인트 심볼 해석**: 컨트롤러 메서드의 매개변수·반환 타입이 해석되지
+   않으면(예: `Model`, `BindingResult`처럼 의존성 jar에만 있는 타입) 그 엔드포인트는
+   `api_report`에서 빠지고 경고로 개수·이름이 출력됩니다. 모든 엔드포인트를 순위화하려면
+   `apiAnalysis.classpathDirectories`에 **의존성 jar 전체**가 있는 디렉터리(예:
+   `~/.m2/repository`, `~/.gradle/caches/modules-2/files-2.1`, 또는
+   `build/install/<app>/lib`)를 추가하세요. jar 일부만 넣으면 그 jar가 참조하는
+   클래스가 없어 해석에 실패할 수 있습니다(치명 오류가 아니라 경고로 처리).
 
 이 결정들과 대안의 태스크별 분석은 `docs/reports/*`를 참고하세요.
 
@@ -530,7 +537,8 @@ CI는 매 푸시마다 그리고 **매일 스케줄**(09:00 KST)로 실행됩니
 | `test-results-<N>` | 모든 테스트 클래스의 JUnit XML |
 | `test-report-<N>` | Gradle의 전체 HTML 테스트 리포트 |
 | `test-summary-<N>` | GitHub Step Summary 패널에 표시되는 Markdown 요약 |
-| `hotspot-demo-report-<N>` | **자체 분석 출력** — `file_hotspots.csv`, `method_hotspots.csv`, `hotspots.yml`, `hotspots.md`, `hotspots.html`, 그리고 이를 만든 `hotspot.yml`. 다운로드해 `hotspots.html`을 브라우저에서 바로 여세요. |
+| `hotspot-self-report-<N>` | **자체 분석 출력(진짜 독 푸딩)** — 이 저장소를 전체 git 히스토리와 방금 생성된 JaCoCo XML로 zero-config 분석한 `file_hotspots.csv`, `method_hotspots.csv`, `hotspots.{yml,md,html}`. `--strict`라 결과가 비면 CI가 실패합니다. |
+| `hotspot-demo-report-<N>` | **API 분석 데모 출력** — 합성 Spring 샘플(컨트롤러 1개, 서비스 1개, 커밋 2개)을 분석한 `hotspots.*` + `api_report.*` + `api_hotspots.csv` + `shared_components.csv`, 그리고 이를 만든 `hotspot.yml`. 엔드포인트·공유 컴포넌트 리포트 형태를 보려면 이 아티팩트의 `api_report.html`을 여세요. |
 
 ---
 

@@ -17,6 +17,8 @@ import io.github.baekchangjoon.hotspotanalysis.output.HtmlOutputWriter;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import org.eclipse.jgit.api.Git;
+import org.eclipse.jgit.lib.Config;
+import org.eclipse.jgit.lib.GpgConfig;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -311,7 +313,10 @@ class AnalyzeCommandTest {
         PersonIdent ident = new PersonIdent(
                 "alice", "alice@example.com",
                 Date.from(ts), TimeZone.getTimeZone("UTC"));
-        git.commit().setAuthor(ident).setCommitter(ident).setMessage("change").call();
+        // Isolate the fixture from the developer's global gpg.* settings: JGit 6.x
+        // rejects gpg.format=ssh (common with SSH commit signing) while building
+        // GpgConfig, even for unsigned commits.
+        git.commit().setGpgConfig(new GpgConfig(new Config())).setAuthor(ident).setCommitter(ident).setMessage("change").call();
     }
 
     @Test
@@ -598,6 +603,11 @@ class AnalyzeCommandTest {
 
         assertThat(exit).isZero();
         assertThat(ew.toString()).contains("Detected (zero-config)");
+        // No JaCoCo XML in the fixture → the summary says how to get one.
+        assertThat(ew.toString())
+                .contains("JaCoCo:         none")
+                .contains("no XML report found")
+                .contains("jacocoTestReport");
         assertThat(Files.exists(Path.of("hotspot-report"))).isTrue();
     }
 

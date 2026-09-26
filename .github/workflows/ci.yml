@@ -171,7 +171,28 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Run hotspot self-analysis (demo report for artifact download)
+      - name: Run hotspot self-analysis (this repository, full history + JaCoCo)
+        # Real dogfooding: zero-config over this very checkout (fetch-depth 0
+        # gives JGit the full history) with the JaCoCo XML the test step just
+        # produced, so the coverage multiplier is exercised on real data.
+        # --strict fails the job if the run ever comes back empty.
+        if: success()
+        run: |
+          JAR=$(ls build/libs/hotspot-*.jar | head -1)
+          java -jar "$JAR" analyze . --strict -o build/hotspot-self
+          echo "--- Self-analysis report directory ---"
+          ls -la build/hotspot-self
+
+      - name: Upload hotspot self-analysis report
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hotspot-self-report-${{ github.run_number }}
+          path: build/hotspot-self
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Run hotspot API demo (synthetic Spring sample for artifact download)
         if: success()
         run: |
           mkdir -p build/hotspot-demo/repo/src/main/java/com/example
@@ -262,7 +283,7 @@ jobs:
           echo "--- Demo report directory ---"
           ls -la ..
 
-      - name: Upload hotspot demo report (hotspot files, API reports, and shared components)
+      - name: Upload hotspot API demo report (synthetic sample: hotspot files, API reports, shared components)
         if: success()
         uses: actions/upload-artifact@v4
         with:

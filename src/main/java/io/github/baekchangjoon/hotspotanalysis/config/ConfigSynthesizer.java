@@ -25,7 +25,9 @@ public class ConfigSynthesizer {
     /** Max directory depth (below base) at which a module root may sit. */
     private static final int MAX_MODULE_DEPTH = 3; // group/module → depth 2
     private static final List<String> SKIP_DIRS =
-            List.of("build", "target", ".git", "node_modules", ".gradle");
+            List.of("build", "target", ".git", "node_modules", ".gradle", "src");
+    private static final String SINGLE_MODULE_GLOB = "src/main/java/**/*.java";
+    private static final String MULTI_MODULE_GLOB = "**/src/main/java/**/*.java";
     private static final List<String> BUILD_FILES =
             List.of("build.gradle", "build.gradle.kts", "pom.xml");
     private static final List<String> SPRING_MARKERS =
@@ -54,7 +56,7 @@ public class ConfigSynthesizer {
         WindowConfig window = new WindowConfig(null, null, 365);
         ScopeConfig scope = new ScopeConfig(
                 List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD),
-                List.of(layout.includeGlob()),
+                layout.includeGlobs(),
                 EXCLUDES);
         ScoringConfig scoring = new ScoringConfig(90, Boolean.FALSE);
         ApiAnalysisConfig api = new ApiAnalysisConfig(
@@ -92,15 +94,30 @@ public class ConfigSynthesizer {
                             + " (looked for src/main/java). Pass a [path], or use"
                             + " --config for a custom scope.");
         }
-        boolean single = roots.size() == 1 && roots.get(0).equals(base);
-        String glob = single ? "src/main/java/**/*.java" : "**/src/main/java/**/*.java";
-        return new ModuleLayout(glob, roots);
+        // Java NIO "**" does not match zero segments, so a repo whose ROOT has
+        // src/main/java next to real submodules (e.g. wiremock) needs both globs:
+        // "**/src/main/java/**" alone would skip the root sources, and the
+        // single-module glob alone would skip every submodule (dogfooding:
+        // 3 of 1,327 files analysed).
+        boolean rootHasSources = roots.contains(base);
+        boolean single = roots.size() == 1 && rootHasSources;
+        List<String> globs;
+        if (single) {
+            globs = List.of(SINGLE_MODULE_GLOB);
+        } else if (rootHasSources) {
+            globs = List.of(SINGLE_MODULE_GLOB, MULTI_MODULE_GLOB);
+        } else {
+            globs = List.of(MULTI_MODULE_GLOB);
+        }
+        return new ModuleLayout(globs, roots);
     }
 
     private void collectModuleRoots(Path dir, int depth, List<Path> roots) {
         if (Files.isDirectory(dir.resolve("src/main/java"))) {
             roots.add(dir);
-            return; // a module root; do not descend further
+            // Keep descending: a module root can itself contain submodules
+            // (wiremock-core/certificate-generator, or a root-level src/ beside
+            // real modules). Nested source dirs are skipped below via SKIP_DIRS.
         }
         if (depth >= MAX_MODULE_DEPTH) {
             return;
@@ -168,6 +185,6 @@ public class ConfigSynthesizer {
         return null;
     }
 
-    private record ModuleLayout(String includeGlob, List<Path> moduleRoots) {
+    private record ModuleLayout(List<String> includeGlobs, List<Path> moduleRoots) {
     }
 }

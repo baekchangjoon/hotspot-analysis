@@ -69,6 +69,37 @@ class ConfigSynthesizerTest {
     }
 
     @Test
+    @DisplayName("root-level sources beside submodules → both globs, so neither root nor modules are skipped")
+    void rootSourcesBesideSubmodules(@TempDir Path repo) throws Exception {
+        // Dogfooding finding (wiremock): a root src/main/java used to stop the
+        // module scan, so only the 3 root files were analysed out of 1,327.
+        initGitDir(repo);
+        Files.createDirectories(repo.resolve("src/main/java"));
+        Files.createDirectories(repo.resolve("core/src/main/java"));
+
+        AnalysisConfig cfg = synth.synthesize(repo);
+
+        assertThat(cfg.analysis().scope().include())
+                .containsExactly("src/main/java/**/*.java", "**/src/main/java/**/*.java");
+    }
+
+    @Test
+    @DisplayName("a module nested inside another module root is still found (core/certificate-generator)")
+    void nestedModuleUnderModuleRoot(@TempDir Path repo) throws Exception {
+        initGitDir(repo);
+        Files.createDirectories(repo.resolve("core/src/main/java"));
+        Files.createDirectories(repo.resolve("core/certificate-generator/src/main/java"));
+        Files.createDirectories(repo.resolve("core/certificate-generator/build/classes/java/main"));
+
+        AnalysisConfig cfg = synth.synthesize(repo);
+
+        assertThat(cfg.analysis().scope().include())
+                .containsExactly("**/src/main/java/**/*.java");
+        assertThat(cfg.analysis().apiAnalysis().classpathDirectories())
+                .containsExactly("core/certificate-generator/build/classes/java/main");
+    }
+
+    @Test
     @DisplayName(".git as a pointer file (worktree) is accepted")
     void gitAsPointerFile(@TempDir Path repo) throws Exception {
         Files.writeString(repo.resolve(".git"), "gitdir: /somewhere/.git/worktrees/x\n");
