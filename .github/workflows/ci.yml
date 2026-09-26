@@ -291,7 +291,7 @@ jobs:
           echo "--- Demo report directory ---"
           ls -la ..
 
-      - name: Upload hotspot API demo report (synthetic sample: hotspot files, API reports, shared components)
+      - name: "Upload hotspot API demo report (synthetic sample: hotspot files, API reports, shared components)"
         if: success()
         uses: actions/upload-artifact@v7
         with:
