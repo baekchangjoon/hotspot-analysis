@@ -251,7 +251,7 @@ hotspot-report/
 ├── method_hotspots.csv
 ├── hotspots.yml           ← YAML/MD/HTML bundle both granularities in one document
 ├── hotspots.md
-└── hotspots.html          ← open in any browser — sortable columns + filter box
+└── hotspots.html          ← open in any browser — hotspot map + sortable, filterable tables
 #   When apiAnalysis.enabled=true and apiLayout is STANDALONE | BOTH, these are added:
 #   api_hotspots.csv, shared_components.csv, api_report.{yml,md,html}
 #   When output.coverageBreakdown=true, coverage_breakdown.yml is emitted too.
@@ -284,6 +284,115 @@ hotspot-report/
 > of that file's per-method contributions (Share%). Light/dark mode follows
 > your browser's preference. Every user-controlled value is HTML-escaped, so
 > a malicious file path can't inject script tags.
+
+---
+
+## Using the HTML report
+
+> The Hotspot Map tab ships in release jars **from the release after v0.1.6**.
+> Until then, build the jar from source (`./gradlew bootJar`).
+
+### Generate
+
+```bash
+hotspot analyze                      # from the repository root; writes hotspot-report/hotspots.html
+hotspot analyze -o build/hotspot     # choose the output directory
+```
+
+- **To include coverage**, produce the tests' JaCoCo XML report before analysing
+  (e.g. `./gradlew test jacocoTestReport`). Zero-config runs detect a root-level
+  report automatically. Without one the coverage factor is left out and the
+  "Test gap" views are disabled.
+- **To put the whole repository on the map**, run with `output.topN: 0`.
+  Zero-config runs keep only the top 50 files and top 50 methods by score (the
+  map legend says so).
+
+  ```bash
+  hotspot analyze --print-config | sed 's/^\( *topN:\).*/\1 0/' > hotspot.ci.yml
+  hotspot analyze --config hotspot.ci.yml
+  ```
+
+### Read
+
+Open `hotspots.html` in a browser. It is one self-contained file; no server needed.
+
+| On screen | Meaning |
+|---|---|
+| Dashed circle | Package (directory) |
+| Filled circle | File. Inside a file: classes (dashed) and methods (filled) |
+| Circle size | Complexity by default; switchable to composite score or lines of code |
+| Circle colour | Risk score by default (log scale); switchable to recent change pressure or test gap |
+| Right panel | Verdict, score breakdown and source link for the selection |
+
+- **Start with the large red circles**: code that is complex and still changing.
+- Each click goes one level deeper, package › file › class › method. Use the
+  breadcrumb at the top left to go back up.
+- Hover a box under "Why the score is high" to see how that number was computed.
+- When origin is on GitHub/GitLab, files and methods link to the exact lines at
+  the analysed commit.
+- The UI follows the browser language (English/Korean); the button at the top
+  right switches it. The "Drift" button stops the circles' motion.
+
+The verdict on a file is a fixed rule, separate from the score (it never changes the ranking).
+
+| Verdict | Rule |
+|---|---|
+| Add tests first | Line coverage below 60% and complexity above 0 |
+| Fix first | Complexity and change pressure both in the top 20% of files |
+| Change magnet | Only change pressure in the top 20% |
+| Sleeping complexity | Only complexity in the top 20% |
+| Low risk | Everything else |
+
+### Use in CI (GitHub Actions)
+
+This example builds the report on every push and uploads it as an artifact.
+Each command was run against this repository, and this repository's `ci.yml`
+performs its self-analysis in the same order. Adjust the test command and the
+JaCoCo path to your project.
+
+```yaml
+name: hotspot-report
+on:
+  push:
+    branches: [main]
+
+jobs:
+  hotspot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0            # full history; a shallow clone reports every revision count as 1
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Test with coverage     # skip if you do not use coverage
+        run: ./gradlew test jacocoTestReport
+      - name: Analyse hotspots
+        run: |
+          curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
+          java -jar hotspot.jar analyze --print-config | sed 's/^\( *topN:\).*/\1 0/' > hotspot.ci.yml
+          java -jar hotspot.jar analyze --config hotspot.ci.yml --strict -o hotspot-report
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hotspot-report
+          path: hotspot-report/hotspots.html
+```
+
+- `--strict` writes no report and exits with code 3 when the result is empty
+  (no commits, no matching files), so a misconfigured job cannot quietly
+  publish an empty report.
+- **Publishing:** `hotspots.html` is a single file, so any static host (GitHub
+  Pages, S3, …) serves it as is. Before publishing publicly, note that the
+  table at the top shows the analysed path (`LOCAL_GIT:/…`) and that file,
+  class and method names are in the report.
+- **Dashboards over many reports:** read each report's `hotspot-map-data` JSON
+  block instead of scraping tables ([schema](docs/html-report-data.en.md)).
+- **Reproducibility:** the same analysis result always yields the same HTML.
+  Change pressure, however, is measured from "now", so the same commit analysed
+  on another day scores slightly differently. Pin `window.until` when you need
+  identical numbers across days.
 
 ---
 

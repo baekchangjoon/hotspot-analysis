@@ -242,7 +242,7 @@ hotspot-report/
 ├── method_hotspots.csv
 ├── hotspots.yml           ← YAML/MD/HTML은 두 단위를 한 문서에 묶음
 ├── hotspots.md
-└── hotspots.html          ← 아무 브라우저에서나 열기 — 정렬 가능 열 + 필터 박스
+└── hotspots.html          ← 아무 브라우저에서나 열기 — 핫스팟 지도 + 정렬·필터 가능한 표
 #   apiAnalysis.enabled=true 이고 apiLayout이 STANDALONE | BOTH면 다음이 추가됩니다:
 #   api_hotspots.csv, shared_components.csv, api_report.{yml,md,html}
 #   output.coverageBreakdown=true 이면 coverage_breakdown.yml 도 함께 출력됩니다.
@@ -272,6 +272,108 @@ hotspot-report/
 > 클릭하면 X-Ray 드릴다운**으로 그 파일의 메서드별 기여(Share%)가 펼쳐집니다.
 > 라이트/다크 모드는 브라우저 설정을 따릅니다. 사용자 제어 값은 모두 HTML
 > 이스케이프되어, 악의적인 파일 경로가 스크립트 태그를 주입할 수 없습니다.
+
+---
+
+## HTML 리포트 사용법
+
+> Hotspot Map 탭은 **v0.1.6 다음 릴리스부터** 릴리스 jar에 들어갑니다. 그 전에는
+> 소스에서 빌드(`./gradlew bootJar`)한 jar를 쓰세요.
+
+### 만들기
+
+```bash
+hotspot analyze                      # 저장소 루트에서. hotspot-report/hotspots.html 생성
+hotspot analyze -o build/hotspot     # 출력 위치 지정
+```
+
+- **커버리지를 반영하려면** 분석 전에 테스트와 JaCoCo XML 리포트를 먼저 만드세요
+  (예: `./gradlew test jacocoTestReport`). 설정 없이 실행하면 루트의 리포트를 자동
+  감지합니다. 리포트가 없으면 커버리지 요인은 빠지고 "테스트 공백" 보기는 꺼집니다.
+- **저장소 전체를 지도에 담으려면** `output.topN: 0`으로 실행하세요. 설정 없이
+  실행하면 점수 상위 50개 파일·50개 메서드만 들어갑니다(지도 범례에 표시됨).
+
+  ```bash
+  hotspot analyze --print-config | sed 's/^\( *topN:\).*/\1 0/' > hotspot.ci.yml
+  hotspot analyze --config hotspot.ci.yml
+  ```
+
+### 보기
+
+`hotspots.html`을 브라우저로 엽니다. 파일 하나로 완결되어 서버가 필요 없습니다.
+
+| 화면 요소 | 의미 |
+|---|---|
+| 점선 원 | 패키지(디렉터리) |
+| 색이 칠해진 원 | 파일. 파일 안으로 들어가면 클래스(점선)와 메서드(색) |
+| 원 크기 | 복잡도(기본). Composite Score나 줄 수로 바꿀 수 있음 |
+| 원 색 | 위험 점수(기본, 로그 스케일). 최근 변경 압력이나 테스트 공백으로 바꿀 수 있음 |
+| 오른쪽 패널 | 선택한 대상의 판정, 점수 분해, 소스 링크 |
+
+- **크고 붉은 원부터 보면 됩니다.** 복잡하면서 최근에도 계속 바뀌는 코드입니다.
+- 원을 누르면 패키지 › 파일 › 클래스 › 메서드로 한 단계씩 들어갑니다. 왼쪽 위
+  경로를 눌러 올라옵니다.
+- "점수가 높은 이유"의 각 칸에 마우스를 올리면 그 값이 어떻게 계산됐는지 나옵니다.
+- origin이 GitHub/GitLab이면 파일·메서드가 분석한 커밋의 해당 줄로 연결됩니다.
+- 화면 언어는 브라우저 언어를 따르며(한국어/영어) 오른쪽 위 버튼으로 바꿉니다.
+  "두둥실" 버튼은 원의 움직임을 끕니다.
+
+파일에 붙는 판정은 점수와 별개인 고정 규칙입니다(점수 순위를 바꾸지 않습니다).
+
+| 판정 | 기준 |
+|---|---|
+| 테스트부터 채우기 | 라인 커버리지 60% 미만이고 복잡도가 0보다 큼 |
+| 먼저 손볼 곳 | 복잡도와 변경 압력이 모두 파일 상위 20% |
+| 변경이 몰리는 곳 | 변경 압력만 상위 20% |
+| 잠든 복잡도 | 복잡도만 상위 20% |
+| 저위험 | 그 외 |
+
+### CI에 적용하기 (GitHub Actions)
+
+아래는 푸시마다 리포트를 만들어 아티팩트로 올리는 예시입니다. 각 명령은 이
+저장소에서 직접 실행해 확인했고, 이 저장소의 `ci.yml`도 같은 순서로 자체 분석을
+합니다. 테스트 명령과 JaCoCo 경로는 프로젝트에 맞게 바꾸세요.
+
+```yaml
+name: hotspot-report
+on:
+  push:
+    branches: [main]
+
+jobs:
+  hotspot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0            # 전체 히스토리. 얕은 클론이면 변경 횟수가 전부 1로 나옵니다
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Test with coverage     # 커버리지를 쓰지 않으면 이 단계는 생략
+        run: ./gradlew test jacocoTestReport
+      - name: Analyse hotspots
+        run: |
+          curl -fsSL https://github.com/baekchangjoon/hotspot-analysis/releases/latest/download/hotspot.jar -o hotspot.jar
+          java -jar hotspot.jar analyze --print-config | sed 's/^\( *topN:\).*/\1 0/' > hotspot.ci.yml
+          java -jar hotspot.jar analyze --config hotspot.ci.yml --strict -o hotspot-report
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hotspot-report
+          path: hotspot-report/hotspots.html
+```
+
+- `--strict`는 결과가 비면(커밋 0건, 매칭 파일 0건) 리포트를 쓰지 않고 종료 코드
+  3으로 끝나, 잘못 설정된 작업이 빈 리포트를 조용히 올리는 일을 막습니다.
+- **게시:** `hotspots.html`은 단일 파일이라 GitHub Pages, S3 같은 정적 호스팅에
+  그대로 올리면 됩니다. 공개 사이트에 올린다면 리포트 상단 표에 분석 경로
+  (`LOCAL_GIT:/…`)와 파일·클래스·메서드 이름이 들어 있다는 점을 확인하세요.
+- **여러 리포트를 모아 대시보드로:** 각 리포트의 `hotspot-map-data` JSON 블록을
+  읽으세요. 표를 긁을 필요가 없습니다([스키마](docs/html-report-data.md)).
+- **재현성:** 같은 분석 결과는 항상 같은 HTML이 됩니다. 다만 변경 압력은 "지금"
+  기준으로 계산되므로, 같은 커밋도 다른 날 분석하면 점수가 조금 달라집니다. 날짜가
+  달라도 같은 값이 필요하면 `window.until`을 고정하세요.
 
 ---
 
