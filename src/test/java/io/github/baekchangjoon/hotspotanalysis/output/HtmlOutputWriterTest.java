@@ -342,14 +342,15 @@ class HtmlOutputWriterTest {
         String html = Files.readString(tempDir.resolve("hotspots.html"));
 
         // raw script tags from input must never appear unescaped in output
-        assertThat(html).doesNotContain("<script>alert(1)");
-        assertThat(html).doesNotContain("<img src=x onerror=");
-        assertThat(html).contains("&lt;script&gt;alert(1)&lt;/script&gt;");
-        assertThat(html).contains("&lt;img src=x onerror=alert(2)&gt;");
-        // injected ampersand and quote must be escaped
-        assertThat(html).contains("boom&quot;&amp;&lt;&gt;");
-        // The map's JSON block carries the same values; there they are unicode-escaped.
-        assertThat(html).contains("src/\\u003cscript\\u003ealert(1)\\u003c/script\\u003e/Evil.java");
+        assertThat(html)
+                .doesNotContain("<script>alert(1)")
+                .doesNotContain("<img src=x onerror=")
+                .contains("&lt;script&gt;alert(1)&lt;/script&gt;")
+                .contains("&lt;img src=x onerror=alert(2)&gt;")
+                // injected ampersand and quote must be escaped
+                .contains("boom&quot;&amp;&lt;&gt;")
+                // The map's JSON block carries the same values; there they are unicode-escaped.
+                .contains("src/\\u003cscript\\u003ealert(1)\\u003c/script\\u003e/Evil.java");
     }
 
     @Test
@@ -358,17 +359,18 @@ class HtmlOutputWriterTest {
         writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
         String html = Files.readString(tempDir.resolve("hotspots.html"));
 
-        assertThat(html).contains("<button class=\"tab-button active\" onclick=\"switchTab(event, 'map-tab')\">Hotspot Map</button>");
-        assertThat(html).contains("<div id=\"map-tab\" class=\"tab-content active\">");
-        assertThat(html).contains("<div id=\"files-tab\" class=\"tab-content\">");
-        assertThat(html).contains("<div id=\"methods-tab\" class=\"tab-content\">");
         assertThat(html.indexOf("'map-tab'")).isLessThan(html.indexOf("'files-tab'"));
-        assertThat(html).contains("<script type=\"application/json\" id=\"hotspot-map-data\">{\"schemaVersion\":1,");
-        // Layout library and map script are inlined — nothing is fetched at view time.
-        assertThat(html).contains("d3-hierarchy").contains("data-hm-ready");
-        assertThat(html).doesNotContain("<script src=");
-        // Without JavaScript every table is shown instead of an empty map.
-        assertThat(html).contains("<noscript><style>.tab-content { display: block; }");
+        assertThat(html)
+                .contains("<button class=\"tab-button active\" onclick=\"switchTab(event, 'map-tab')\">Hotspot Map</button>")
+                .contains("<div id=\"map-tab\" class=\"tab-content active\">")
+                .contains("<div id=\"files-tab\" class=\"tab-content\">")
+                .contains("<div id=\"methods-tab\" class=\"tab-content\">")
+                .contains("<script type=\"application/json\" id=\"hotspot-map-data\">{\"schemaVersion\":1,")
+                // Layout library and map script are inlined — nothing is fetched at view time.
+                .contains("d3-hierarchy").contains("data-hm-ready")
+                .doesNotContain("<script src=")
+                // Without JavaScript every table is shown instead of an empty map.
+                .contains("<noscript><style>.tab-content { display: block; }");
     }
 
     @Test

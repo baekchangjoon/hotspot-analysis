@@ -21,8 +21,9 @@ public final class SourceLinks {
     /** {@code scheme://[user[:pass]@]host[:port]/owner/repo.git}. */
     private static final Pattern URL_LIKE =
             Pattern.compile("^(?:https?|ssh|git)://(?:[^@/\\s]+@)?([^:/\\s]+)(?::\\d+)?/(.+)$");
-    private static final Pattern SAFE_REPO_PATH =
-            Pattern.compile("^[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)+$");
+    /** One path segment of {@code owner/repo}; segments are checked one by one, never as a nested repetition. */
+    private static final Pattern SAFE_PATH_SEGMENT = Pattern.compile("^[A-Za-z0-9._~-]+$");
+    private static final int MAX_REMOTE_LENGTH = 2048;
     private static final Pattern SAFE_HOST = Pattern.compile("^[A-Za-z0-9.-]+$");
     private static final Pattern SAFE_REVISION = Pattern.compile("^[0-9a-fA-F]{7,64}$");
 
@@ -35,7 +36,8 @@ public final class SourceLinks {
      *         unrecognised host
      */
     public static Optional<String> blobBase(String remoteUrl, String revision) {
-        if (remoteUrl == null || revision == null || !SAFE_REVISION.matcher(revision).matches()) {
+        if (remoteUrl == null || revision == null || remoteUrl.length() > MAX_REMOTE_LENGTH
+                || !SAFE_REVISION.matcher(revision).matches()) {
             return Optional.empty();
         }
         String trimmed = remoteUrl.trim();
@@ -48,7 +50,7 @@ public final class SourceLinks {
         }
         String host = matcher.group(1).toLowerCase(java.util.Locale.ROOT);
         String repoPath = stripSuffix(stripSuffix(matcher.group(2), "/"), ".git");
-        if (!isRecognisedHost(host) || !SAFE_REPO_PATH.matcher(repoPath).matches()) {
+        if (!isRecognisedHost(host) || !isSafeRepoPath(repoPath)) {
             return Optional.empty();
         }
         return Optional.of("https://" + host + "/" + repoPath + "/blob/" + revision + "/");
@@ -60,6 +62,20 @@ public final class SourceLinks {
         }
         return host.equals("github.com") || host.equals("gitlab.com")
                 || host.startsWith("github.") || host.startsWith("gitlab.");
+    }
+
+    /** At least {@code owner/repo}, every segment made only of URL-safe characters. */
+    private static boolean isSafeRepoPath(String repoPath) {
+        String[] segments = repoPath.split("/", -1);
+        if (segments.length < 2) {
+            return false;
+        }
+        for (String segment : segments) {
+            if (!SAFE_PATH_SEGMENT.matcher(segment).matches()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static String stripSuffix(String value, String suffix) {

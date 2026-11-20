@@ -12,6 +12,7 @@ import io.github.baekchangjoon.hotspotanalysis.config.AnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.TargetConfig;
 import io.github.baekchangjoon.hotspotanalysis.config.ApiAnalysisConfig;
 import io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser;
+import io.github.baekchangjoon.hotspotanalysis.output.SourceLinks;
 import io.github.baekchangjoon.hotspotanalysis.parser.JavaSourceParser;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodInfo;
 import io.github.baekchangjoon.hotspotanalysis.parser.model.MethodSignature;
@@ -19,6 +20,7 @@ import io.github.baekchangjoon.hotspotanalysis.parser.model.ApiMappingInfo;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProvider;
 import io.github.baekchangjoon.hotspotanalysis.vcs.VcsProviderFactory;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.CommitRecord;
+import io.github.baekchangjoon.hotspotanalysis.vcs.model.SourceLocation;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -144,78 +146,10 @@ public class HotspotAnalyzer {
         Map<MethodSignature, Double> methodDecayed =
                 revisionsCalculator.calculateMethodDecayedRevisions(commits, methodsByFile, halfLifeDays, untilInstant);
 
-        boolean jacocoSupplied =
-                config.analysis().jacocoReportPath() != null
-                        && !config.analysis().jacocoReportPath().isEmpty();
-        io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser jacocoParser =
-                new io.github.baekchangjoon.hotspotanalysis.coverage.JacocoReportParser();
+        JacocoReportParser jacocoParser = new JacocoReportParser();
+        boolean jacocoSupplied = loadCoverage(config, repoRoot, jacocoParser);
         if (jacocoSupplied) {
-            Path p = Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion.expand(config.analysis().jacocoReportPath()));
-            if (!p.isAbsolute()) p = repoRoot.resolve(p);
-            if (!java.nio.file.Files.isRegularFile(p)) {
-                // A missing report must not silently mark every artifact as 0%
-                // covered (which would inflate every coverage multiplier to its
-                // 1/0.1 = 10 maximum). Warn and proceed as if no coverage was
-                // supplied, so the scores stay trustworthy.
-                warn("analysis.jacocoReportPath is set but no file exists at "
-                        + p + " — proceeding WITHOUT coverage (multiplier = 1.0). "
-                        + "Generate a JaCoCo XML report (e.g. './gradlew test jacocoTestReport') "
-                        + "or remove analysis.jacocoReportPath.");
-                jacocoSupplied = false;
-            } else {
-                jacocoParser.parse(p);
-                if (!jacocoParser.hasData()) {
-                    // The report existed but yielded no coverage (corrupt XML, wrong
-                    // format, or empty). Treating that as 0% covered would inflate
-                    // every multiplier to 1/0.1 = 10. Fall back to no-coverage scoring.
-                    warn("JaCoCo report at " + p
-                            + " produced no coverage data — proceeding WITHOUT coverage (multiplier = 1.0).");
-                    jacocoSupplied = false;
-                } else if (!jacocoParser.hasCoveredLines()) {
-                    // Every line in the report is ci="0" — JaCoCo emits this when
-                    // the report task runs without test execution data (stale
-                    // .exec, tests skipped/up-to-date). Trusting it would mark
-                    // every artifact 0% covered and inflate every multiplier to
-                    // 1/0.1 = 10. Fall back to no-coverage scoring.
-                    warn("JaCoCo report at " + p
-                            + " lists zero covered lines — it was likely generated without test"
-                            + " execution data. Regenerate it (e.g. './gradlew test jacocoTestReport')"
-                            + " — proceeding WITHOUT coverage (multiplier = 1.0).");
-                    jacocoSupplied = false;
-                }
-            }
-        }
-
-        if (jacocoSupplied) {
-            // A partial report (e.g. one module of a multi-module build) says
-            // nothing about files it does not mention. Treating them as 0%
-            // covered would inflate their multiplier to 1/0.1 = 10 — the same
-            // silent distortion the three guards above exist to prevent.
-            long absentFiles = methodsByFile.keySet().stream()
-                    .filter(path -> !jacocoParser.hasDataForFile(path))
-                    .count();
-            if (absentFiles > 0) {
-                warn(absentFiles + " of " + methodsByFile.size()
-                        + " analyzed files are not present in the JaCoCo report — coverage is"
-                        + " treated as unknown for them (multiplier = 1.0). Supply a report"
-                        + " covering all modules to score them by coverage.");
-            }
-            // Line numbers beyond a file's actual length mean the report was
-            // generated against a different version of the source: coverage
-            // would silently mis-align. Warn, do not fail (line counts drift
-            // legitimately by small amounts during refactors).
-            long staleFiles = methodsByFile.keySet().stream()
-                    .filter(path -> {
-                        int loc = fileLoc.getOrDefault(path, 0);
-                        return loc > 0 && jacocoParser.getMaxLineNumber(path) > loc;
-                    })
-                    .count();
-            if (staleFiles > 0) {
-                warn("the JaCoCo report references lines beyond the file's"
-                        + " length for " + staleFiles + " file(s) — it was likely generated from a"
-                        + " different commit than the sources being analyzed. Regenerate the report"
-                        + " from the same checkout for trustworthy coverage.");
-            }
+            warnAboutPartialOrStaleCoverage(methodsByFile, fileLoc, jacocoParser);
         }
 
         boolean excludeCoverage = Boolean.TRUE.equals(config.analysis().scoring().excludeCoverage());
@@ -236,42 +170,18 @@ public class HotspotAnalyzer {
 
         // Audit trail behind every reported coverage number. Built over the FULL
         // result (before topN truncation) so each value stays verifiable.
-        CoverageBreakdown breakdown = null;
-        if (jacocoSupplied) {
-            List<CoverageBreakdown.FileCoverage> fileCoverages = methodsByFile.keySet().stream()
-                    .sorted()
-                    .map(path -> {
-                        JacocoReportParser.LineCounts c = jacocoParser.getFileLineCounts(path);
-                        Double cov = c.executable() == 0 ? null : (double) c.covered() / c.executable();
-                        return new CoverageBreakdown.FileCoverage(path, c.covered(), c.executable(), cov);
-                    })
-                    .toList();
-            apiCoverageBreakdown.sort(
-                    Comparator.comparing(CoverageBreakdown.ApiCoverage::route)
-                            .thenComparing(CoverageBreakdown.ApiCoverage::httpMethod));
-            breakdown = new CoverageBreakdown(
-                    config.analysis().jacocoReportPath(), fileCoverages, apiCoverageBreakdown);
-        }
-
-        // Totalled over every analysed file, before topN cuts the list.
-        double totalFileComposite = files.stream().mapToDouble(FileHotspot::compositeScore).sum();
-        String sourceBlobBase = null;
-        String revision = null;
-        var sourceLocation = provider.sourceLocation();
-        if (sourceLocation.isPresent()) {
-            revision = sourceLocation.get().revision();
-            sourceBlobBase = io.github.baekchangjoon.hotspotanalysis.output.SourceLinks
-                    .blobBase(sourceLocation.get().remoteUrl(), revision).orElse(null);
-        }
-        ReportContext reportContext =
-                new ReportContext(sourceBlobBase, revision, halfLifeDays, totalFileComposite);
+        CoverageBreakdown breakdown = jacocoSupplied
+                ? buildCoverageBreakdown(config, methodsByFile, jacocoParser, apiCoverageBreakdown)
+                : null;
+        // Likewise totalled over every analysed file, before topN cuts the list.
+        ReportContext reportContext = buildReportContext(provider, halfLifeDays, files);
 
         int topN = config.output().topN();
         if (topN > 0) {
             files = takeTop(files, topN);
             methods = takeTop(methods, topN);
-            if (!apiHotspots.isEmpty()) apiHotspots = takeTop(apiHotspots, topN);
-            if (!sharedComponents.isEmpty()) sharedComponents = takeTop(sharedComponents, topN);
+            apiHotspots = takeTop(apiHotspots, topN);
+            sharedComponents = takeTop(sharedComponents, topN);
         }
 
         AnalysisMeta meta = new AnalysisMeta(
@@ -281,6 +191,119 @@ public class HotspotAnalyzer {
                 methodsByFile.size(),
                 countMethods(methodsByFile));
         return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta, breakdown, reportContext);
+    }
+
+    /**
+     * Parses the configured JaCoCo report into {@code jacocoParser}.
+     *
+     * @return {@code true} only when the report exists and carries usable
+     *         coverage; every other case warns and falls back to no-coverage
+     *         scoring (multiplier = 1.0) rather than scoring everything as 0%
+     */
+    private boolean loadCoverage(AnalysisConfig config, Path repoRoot, JacocoReportParser jacocoParser) {
+        String configured = config.analysis().jacocoReportPath();
+        if (configured == null || configured.isEmpty()) {
+            return false;
+        }
+        Path p = Path.of(io.github.baekchangjoon.hotspotanalysis.config.TildeExpansion.expand(configured));
+        if (!p.isAbsolute()) p = repoRoot.resolve(p);
+        if (!java.nio.file.Files.isRegularFile(p)) {
+            // A missing report must not silently mark every artifact as 0%
+            // covered (which would inflate every coverage multiplier to its
+            // 1/0.1 = 10 maximum). Warn and proceed as if no coverage was
+            // supplied, so the scores stay trustworthy.
+            warn("analysis.jacocoReportPath is set but no file exists at "
+                    + p + " — proceeding WITHOUT coverage (multiplier = 1.0). "
+                    + "Generate a JaCoCo XML report (e.g. './gradlew test jacocoTestReport') "
+                    + "or remove analysis.jacocoReportPath.");
+            return false;
+        }
+        jacocoParser.parse(p);
+        if (!jacocoParser.hasData()) {
+            // The report existed but yielded no coverage (corrupt XML, wrong
+            // format, or empty). Treating that as 0% covered would inflate
+            // every multiplier to 1/0.1 = 10. Fall back to no-coverage scoring.
+            warn("JaCoCo report at " + p
+                    + " produced no coverage data — proceeding WITHOUT coverage (multiplier = 1.0).");
+            return false;
+        }
+        if (!jacocoParser.hasCoveredLines()) {
+            // Every line in the report is ci="0" — JaCoCo emits this when
+            // the report task runs without test execution data (stale
+            // .exec, tests skipped/up-to-date). Trusting it would mark
+            // every artifact 0% covered and inflate every multiplier to
+            // 1/0.1 = 10. Fall back to no-coverage scoring.
+            warn("JaCoCo report at " + p
+                    + " lists zero covered lines — it was likely generated without test"
+                    + " execution data. Regenerate it (e.g. './gradlew test jacocoTestReport')"
+                    + " — proceeding WITHOUT coverage (multiplier = 1.0).");
+            return false;
+        }
+        return true;
+    }
+
+    private void warnAboutPartialOrStaleCoverage(Map<String, List<MethodInfo>> methodsByFile,
+                                                 Map<String, Integer> fileLoc,
+                                                 JacocoReportParser jacocoParser) {
+        // A partial report (e.g. one module of a multi-module build) says
+        // nothing about files it does not mention. Treating them as 0%
+        // covered would inflate their multiplier to 1/0.1 = 10 — the same
+        // silent distortion the guards in loadCoverage exist to prevent.
+        long absentFiles = methodsByFile.keySet().stream()
+                .filter(path -> !jacocoParser.hasDataForFile(path))
+                .count();
+        if (absentFiles > 0) {
+            warn(absentFiles + " of " + methodsByFile.size()
+                    + " analyzed files are not present in the JaCoCo report — coverage is"
+                    + " treated as unknown for them (multiplier = 1.0). Supply a report"
+                    + " covering all modules to score them by coverage.");
+        }
+        // Line numbers beyond a file's actual length mean the report was
+        // generated against a different version of the source: coverage
+        // would silently mis-align. Warn, do not fail (line counts drift
+        // legitimately by small amounts during refactors).
+        long staleFiles = methodsByFile.keySet().stream()
+                .filter(path -> {
+                    int loc = fileLoc.getOrDefault(path, 0);
+                    return loc > 0 && jacocoParser.getMaxLineNumber(path) > loc;
+                })
+                .count();
+        if (staleFiles > 0) {
+            warn("the JaCoCo report references lines beyond the file's"
+                    + " length for " + staleFiles + " file(s) — it was likely generated from a"
+                    + " different commit than the sources being analyzed. Regenerate the report"
+                    + " from the same checkout for trustworthy coverage.");
+        }
+    }
+
+    private static CoverageBreakdown buildCoverageBreakdown(
+            AnalysisConfig config,
+            Map<String, List<MethodInfo>> methodsByFile,
+            JacocoReportParser jacocoParser,
+            List<CoverageBreakdown.ApiCoverage> apiCoverageBreakdown) {
+        List<CoverageBreakdown.FileCoverage> fileCoverages = methodsByFile.keySet().stream()
+                .sorted()
+                .map(path -> {
+                    JacocoReportParser.LineCounts c = jacocoParser.getFileLineCounts(path);
+                    Double cov = c.executable() == 0 ? null : (double) c.covered() / c.executable();
+                    return new CoverageBreakdown.FileCoverage(path, c.covered(), c.executable(), cov);
+                })
+                .toList();
+        apiCoverageBreakdown.sort(
+                Comparator.comparing(CoverageBreakdown.ApiCoverage::route)
+                        .thenComparing(CoverageBreakdown.ApiCoverage::httpMethod));
+        return new CoverageBreakdown(
+                config.analysis().jacocoReportPath(), fileCoverages, apiCoverageBreakdown);
+    }
+
+    /** Run-level facts for the HTML map; {@code allFiles} must be the list before topN truncation. */
+    private static ReportContext buildReportContext(VcsProvider provider, int halfLifeDays, List<FileHotspot> allFiles) {
+        double totalFileComposite = allFiles.stream().mapToDouble(FileHotspot::compositeScore).sum();
+        String revision = provider.sourceLocation().map(SourceLocation::revision).orElse(null);
+        String sourceBlobBase = provider.sourceLocation()
+                .flatMap(location -> SourceLinks.blobBase(location.remoteUrl(), location.revision()))
+                .orElse(null);
+        return new ReportContext(sourceBlobBase, revision, halfLifeDays, totalFileComposite);
     }
 
     private Map<String, List<MethodInfo>> parseAll(Path repoRoot, List<Path> javaFiles) {

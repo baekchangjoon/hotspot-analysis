@@ -21,6 +21,8 @@ import java.util.List;
 @Component
 public class HtmlOutputWriter implements OutputWriter {
 
+    private static final String TAB_CONTENT_END = "  </div>\n";
+
     @Override
     public OutputConfig.OutputFormat format() {
         return OutputConfig.OutputFormat.HTML;
@@ -95,24 +97,24 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  <div id=\"map-tab\" class=\"tab-content active\">\n");
         html.append(HotspotMapSection.markup());
         html.append(HotspotMapSection.dataElement(result, excludeCoverage));
-        html.append("  </div>\n");
+        html.append(TAB_CONTENT_END);
 
         html.append("  <div id=\"files-tab\" class=\"tab-content\">\n");
         appendFileSection(html, result.fileHotspots(), result.methodHotspots(), excludeCoverage);
-        html.append("  </div>\n");
+        html.append(TAB_CONTENT_END);
 
         html.append("  <div id=\"methods-tab\" class=\"tab-content\">\n");
         appendMethodSection(html, result.methodHotspots(), excludeCoverage);
-        html.append("  </div>\n");
+        html.append(TAB_CONTENT_END);
 
         if (includeApi) {
             html.append("  <div id=\"apis-tab\" class=\"tab-content\">\n");
             appendApiSection(html, result.apiHotspots(), excludeCoverage);
-            html.append("  </div>\n");
+            html.append(TAB_CONTENT_END);
 
             html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
             appendSharedSection(html, result.sharedComponents(), excludeCoverage);
-            html.append("  </div>\n");
+            html.append(TAB_CONTENT_END);
         }
 
         appendScript(html);
@@ -138,11 +140,11 @@ public class HtmlOutputWriter implements OutputWriter {
         // Tab Content
         html.append("  <div id=\"apis-tab\" class=\"tab-content active\">\n");
         appendApiSection(html, result.apiHotspots(), excludeCoverage);
-        html.append("  </div>\n");
+        html.append(TAB_CONTENT_END);
 
         html.append("  <div id=\"shared-tab\" class=\"tab-content\">\n");
         appendSharedSection(html, result.sharedComponents(), excludeCoverage);
-        html.append("  </div>\n");
+        html.append(TAB_CONTENT_END);
 
         appendScript(html);
         html.append("</body>\n</html>\n");
