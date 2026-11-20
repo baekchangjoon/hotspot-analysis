@@ -5,6 +5,7 @@ import io.github.baekchangjoon.hotspotanalysis.vcs.model.ChangeType;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.CommitRecord;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.DiffHunk;
 import io.github.baekchangjoon.hotspotanalysis.vcs.model.FileChange;
+import io.github.baekchangjoon.hotspotanalysis.vcs.model.SourceLocation;
 import org.eclipse.jgit.diff.DiffEntry;
 import org.eclipse.jgit.diff.DiffFormatter;
 import org.eclipse.jgit.diff.Edit;
@@ -31,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Reads commit history from a local git working tree via JGit.
@@ -83,6 +85,28 @@ public class LocalGitProvider implements VcsProvider {
             }
         } catch (IOException e) {
             throw new VcsException("Failed to read repository at " + repositoryPath, e);
+        }
+    }
+
+    /**
+     * The {@code origin} remote and the checked-out commit, for report source
+     * links. Best-effort: any failure (no remote, unborn HEAD, unreadable
+     * repository) yields empty instead of failing the analysis.
+     */
+    @Override
+    public Optional<SourceLocation> sourceLocation() {
+        try {
+            File gitDir = resolveGitDir();
+            try (Repository repo = openRepository(gitDir)) {
+                ObjectId headId = resolveHead(repo, gitDir);
+                String remoteUrl = repo.getConfig().getString("remote", "origin", "url");
+                if (headId == null || remoteUrl == null || remoteUrl.isBlank()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new SourceLocation(remoteUrl, headId.name()));
+            }
+        } catch (IOException | RuntimeException e) {
+            return Optional.empty();
         }
     }
 

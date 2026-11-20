@@ -103,6 +103,70 @@ class HtmlReportJsSmokeTest {
         }
     }
 
+    @Test
+    @DisplayName("the hotspot map draws one circle per package, file, class and method, and drills down on click")
+    void mapDrawsAndDrillsDown(@TempDir Path tempDir) throws Exception {
+        Path htmlFile = writeReport(tempDir);
+
+        try (WebClient client = newClient()) {
+            HtmlPage page = client.getPage(htmlFile.toUri().toURL());
+            HtmlElement map = page.querySelector("#hm");
+
+            // The script wraps its boot in try/catch, so a silent failure would
+            // leave this marker unset: root + 3 files + 1 class + 1 method each (the
+            // shared "src/" prefix is dropped, so there is no package circle).
+            assertThat(map.getAttribute("data-hm-ready")).isEqualTo("10");
+            assertThat(page.querySelectorAll("#hm-map circle")).hasSize(10);
+            assertThat(page.querySelectorAll(".hm-error")).isEmpty();
+
+            HtmlElement side = page.querySelector("#hm-side");
+            // Composite scores 90 / 40 / 10 of a 140 total: all three files are the top 3.
+            assertThat(side.getTextContent()).contains("100%");
+            List<HtmlElement> rows = side.getByXPath(".//ol[contains(@class,'hm-list')]//button");
+            assertThat(rows).hasSize(3);
+            assertThat(rows.get(0).getTextContent()).contains("Alpha.java").contains("90.0");
+
+            // File > (single class, so straight into it) > method.
+            rows.get(0).click();
+            assertThat(side.getTextContent()).contains("Alpha.java").contains("src/Alpha.java");
+            assertThat(page.querySelector("#hm-crumbs").getTextContent()).contains("Alpha.java").contains("C");
+            List<HtmlElement> methodRows = side.getByXPath(".//ol[contains(@class,'hm-list')]//button");
+            assertThat(methodRows).hasSize(1);
+            methodRows.get(0).click();
+            assertThat(side.getTextContent()).contains("a()").contains("L1");
+            // No remote was known for this result, so no source link is offered.
+            assertThat(side.getByXPath(".//a")).isEmpty();
+        }
+    }
+
+    @Test
+    @DisplayName("with a known remote, files and methods link to the exact revision and line range")
+    void mapLinksToSource(@TempDir Path tempDir) throws Exception {
+        new HtmlOutputWriter().write(HotspotMapSectionTest.sample(), tempDir);
+
+        try (WebClient client = newClient()) {
+            HtmlPage page = client.getPage(tempDir.resolve("hotspots.html").toUri().toURL());
+            HtmlElement side = page.querySelector("#hm-side");
+            // 2 of 9 files are shown; the headline uses the repository-wide total (125 + 1 of 250).
+            assertThat(side.getTextContent()).contains("50%");
+
+            List<HtmlElement> rows = side.getByXPath(".//ol[contains(@class,'hm-list')]//button");
+            rows.get(0).click();
+            HtmlElement fileLink = side.getFirstByXPath(".//a");
+            assertThat(fileLink.getAttribute("href"))
+                    .isEqualTo("https://github.com/acme/app/blob/abc1234/src/main/java/com/example/Hot.java");
+            assertThat(fileLink.getAttribute("rel")).contains("noopener");
+            // The coverage box explains itself from the real line counts.
+            assertThat(side.getTextContent()).contains("70").contains("100").contains("70.0%");
+
+            List<HtmlElement> methodRows = side.getByXPath(".//ol[contains(@class,'hm-list')]//button");
+            methodRows.get(0).click();
+            HtmlElement methodLink = side.getFirstByXPath(".//a");
+            assertThat(methodLink.getAttribute("href"))
+                    .isEqualTo("https://github.com/acme/app/blob/abc1234/src/main/java/com/example/Hot.java#L10-L20");
+        }
+    }
+
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------

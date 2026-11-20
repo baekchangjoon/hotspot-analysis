@@ -348,6 +348,48 @@ class HtmlOutputWriterTest {
         assertThat(html).contains("&lt;img src=x onerror=alert(2)&gt;");
         // injected ampersand and quote must be escaped
         assertThat(html).contains("boom&quot;&amp;&lt;&gt;");
+        // The map's JSON block carries the same values; there they are unicode-escaped.
+        assertThat(html).contains("src/\\u003cscript\\u003ealert(1)\\u003c/script\\u003e/Evil.java");
+    }
+
+    @Test
+    @DisplayName("the combined report opens on the Hotspot Map tab and keeps every table as a tab")
+    void shouldRenderMapTabFirst(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir);
+        String html = Files.readString(tempDir.resolve("hotspots.html"));
+
+        assertThat(html).contains("<button class=\"tab-button active\" onclick=\"switchTab(event, 'map-tab')\">Hotspot Map</button>");
+        assertThat(html).contains("<div id=\"map-tab\" class=\"tab-content active\">");
+        assertThat(html).contains("<div id=\"files-tab\" class=\"tab-content\">");
+        assertThat(html).contains("<div id=\"methods-tab\" class=\"tab-content\">");
+        assertThat(html.indexOf("'map-tab'")).isLessThan(html.indexOf("'files-tab'"));
+        assertThat(html).contains("<script type=\"application/json\" id=\"hotspot-map-data\">{\"schemaVersion\":1,");
+        // Layout library and map script are inlined — nothing is fetched at view time.
+        assertThat(html).contains("d3-hierarchy").contains("data-hm-ready");
+        assertThat(html).doesNotContain("<script src=");
+        // Without JavaScript every table is shown instead of an empty map.
+        assertThat(html).contains("<noscript><style>.tab-content { display: block; }");
+    }
+
+    @Test
+    @DisplayName("writing the same result twice produces byte-identical HTML")
+    void shouldBeDeterministic(@TempDir Path tempDir) throws Exception {
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir.resolve("a"));
+        writer.write(OutputWriterTestFixtures.sampleResult(), tempDir.resolve("b"));
+
+        assertThat(Files.readString(tempDir.resolve("a/hotspots.html")))
+                .isEqualTo(Files.readString(tempDir.resolve("b/hotspots.html")));
+    }
+
+    @Test
+    @DisplayName("the standalone API report has no map tab")
+    void standaloneReportHasNoMap(@TempDir Path tempDir) throws Exception {
+        OutputConfig config = new OutputConfig(
+                List.of(OutputConfig.OutputFormat.HTML), tempDir.toString(), 0, OutputConfig.ApiLayout.STANDALONE);
+        writer.write(OutputWriterTestFixtures.sampleApiResult(), tempDir, config, true);
+
+        assertThat(Files.readString(tempDir.resolve("api_report.html")))
+                .doesNotContain("map-tab").doesNotContain("hotspot-map-data");
     }
 
     @Test

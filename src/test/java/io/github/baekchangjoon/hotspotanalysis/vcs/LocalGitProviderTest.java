@@ -83,6 +83,33 @@ class LocalGitProviderTest extends VcsProviderContract {
     // ---------------------------------------------------------------
 
     @Test
+    @DisplayName("reports the origin remote and the checked-out commit for source links")
+    void shouldReportSourceLocation() throws Exception {
+        String head;
+        try (Git git = Git.open(repoPath.toFile())) {
+            git.getRepository().getConfig().setString("remote", "origin", "url", "git@github.com:acme/app.git");
+            git.getRepository().getConfig().save();
+            head = git.getRepository().resolve("HEAD").name();
+        }
+
+        var location = new LocalGitProvider(repoPath).sourceLocation();
+
+        assertThat(location).isPresent();
+        assertThat(location.get().remoteUrl()).isEqualTo("git@github.com:acme/app.git");
+        assertThat(location.get().revision()).isEqualTo(head).hasSize(40);
+    }
+
+    @Test
+    @DisplayName("has no source location without an origin remote, and never throws for a non-repository")
+    void shouldHaveNoSourceLocationWithoutRemote(@TempDir Path other) throws Exception {
+        assertThat(new LocalGitProvider(repoPath).sourceLocation()).isEmpty();
+
+        Path plain = other.resolve("plain");
+        Files.createDirectories(plain);
+        assertThat(new LocalGitProvider(plain).sourceLocation()).isEmpty();
+    }
+
+    @Test
     @DisplayName("rejects a path that is not a directory")
     void shouldRejectNonDirectoryPath(@TempDir Path other) {
         Path missing = other.resolve("does-not-exist");
