@@ -4,6 +4,7 @@ import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisMeta;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.AnalysisResult;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.FileHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.MethodHotspot;
+import io.github.baekchangjoon.hotspotanalysis.analysis.model.ReportContext;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.ApiHotspot;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.CoverageBreakdown;
 import io.github.baekchangjoon.hotspotanalysis.analysis.model.SharedComponentHotspot;
@@ -252,6 +253,19 @@ public class HotspotAnalyzer {
                     config.analysis().jacocoReportPath(), fileCoverages, apiCoverageBreakdown);
         }
 
+        // Totalled over every analysed file, before topN cuts the list.
+        double totalFileComposite = files.stream().mapToDouble(FileHotspot::compositeScore).sum();
+        String sourceBlobBase = null;
+        String revision = null;
+        var sourceLocation = provider.sourceLocation();
+        if (sourceLocation.isPresent()) {
+            revision = sourceLocation.get().revision();
+            sourceBlobBase = io.github.baekchangjoon.hotspotanalysis.output.SourceLinks
+                    .blobBase(sourceLocation.get().remoteUrl(), revision).orElse(null);
+        }
+        ReportContext reportContext =
+                new ReportContext(sourceBlobBase, revision, halfLifeDays, totalFileComposite);
+
         int topN = config.output().topN();
         if (topN > 0) {
             files = takeTop(files, topN);
@@ -266,7 +280,7 @@ public class HotspotAnalyzer {
                 commits.size(),
                 methodsByFile.size(),
                 countMethods(methodsByFile));
-        return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta, breakdown);
+        return new AnalysisResult(files, methods, apiHotspots, sharedComponents, meta, breakdown, reportContext);
     }
 
     private Map<String, List<MethodInfo>> parseAll(Path repoRoot, List<Path> javaFiles) {

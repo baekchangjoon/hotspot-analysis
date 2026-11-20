@@ -10,6 +10,10 @@ import java.util.Objects;
  * <p>{@code coverageBreakdown} carries the calculation trace behind every
  * coverage number (per-file and per-endpoint line counts); it is {@code null}
  * when no JaCoCo report was supplied.</p>
+ *
+ * <p>{@code reportContext} carries the run-level facts the interactive HTML
+ * map needs (source link base, decay half-life, pre-truncation score total);
+ * it is {@code null} for results assembled without an analyzer run.</p>
  */
 public record AnalysisResult(
         List<FileHotspot> fileHotspots,
@@ -17,7 +21,8 @@ public record AnalysisResult(
         List<ApiHotspot> apiHotspots,
         List<SharedComponentHotspot> sharedComponents,
         AnalysisMeta meta,
-        CoverageBreakdown coverageBreakdown
+        CoverageBreakdown coverageBreakdown,
+        ReportContext reportContext
 ) {
 
     public AnalysisResult {
@@ -43,9 +48,20 @@ public record AnalysisResult(
             List<MethodHotspot> methodHotspots,
             List<ApiHotspot> apiHotspots,
             List<SharedComponentHotspot> sharedComponents,
+            AnalysisMeta meta,
+            CoverageBreakdown coverageBreakdown
+    ) {
+        this(fileHotspots, methodHotspots, apiHotspots, sharedComponents, meta, coverageBreakdown, null);
+    }
+
+    public AnalysisResult(
+            List<FileHotspot> fileHotspots,
+            List<MethodHotspot> methodHotspots,
+            List<ApiHotspot> apiHotspots,
+            List<SharedComponentHotspot> sharedComponents,
             AnalysisMeta meta
     ) {
-        this(fileHotspots, methodHotspots, apiHotspots, sharedComponents, meta, null);
+        this(fileHotspots, methodHotspots, apiHotspots, sharedComponents, meta, null, null);
     }
 
     public AnalysisResult(
@@ -53,6 +69,6 @@ public record AnalysisResult(
             List<MethodHotspot> methodHotspots,
             AnalysisMeta meta
     ) {
-        this(fileHotspots, methodHotspots, List.of(), List.of(), meta, null);
+        this(fileHotspots, methodHotspots, List.of(), List.of(), meta, null, null);
     }
 }

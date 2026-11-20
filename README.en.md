@@ -58,7 +58,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 - **Two VCS sources** — local git working tree (JGit) or remote GitHub (kohsuke `github-api`, hermetic-tested with WireMock).
 - **Java 21 parsing** — JavaParser 3.26 understands records, sealed types, switch expressions, pattern matching.
 - **YAML configuration** — strongly typed, validated via Jakarta Bean Validation, env-var substitution.
-- **Four output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly), **HTML (browser-ready, sortable, filterable, XSS-safe, dark-mode aware)**.
+- **Four output formats** — CSV (Excel-friendly), YAML (machine-readable), Markdown (PR-friendly), **HTML (browser-ready, interactive hotspot map + sortable, filterable tables, XSS-safe)**.
 - **Self-analysis in CI** — every CI run analyses this very repository (full history + JaCoCo) into a `hotspot-self-report-<N>` artifact, plus a `hotspot-demo-report-<N>` API-analysis demo over a synthetic Spring sample; download and open either in a browser.
 - **Comprehensive tests across every layer** — contract tests + unit + Spring Boot E2E, 0 failures.
 
@@ -269,7 +269,16 @@ hotspot-report/
 > as a self-contained evidence page (`.html`).
 
 > **HTML report features.** `hotspots.html` is a single self-contained file
-> (no remote CSS/JS, no CDN). Click any column header to sort
+> (no remote CSS/JS, no CDN). The first tab, **Hotspot Map**, draws package ›
+> file › class › method as nested circles — size is complexity, colour is the
+> risk score — and each click goes one level deeper and shows how the score was
+> computed (complexity × change pressure × coverage multiplier). When origin is
+> on GitHub/GitLab, files and methods link to the exact lines at the analysed
+> commit. The data behind the map sits in a `<script type="application/json"
+> id="hotspot-map-data">` block that other tools can read
+> ([schema](docs/html-report-data.en.md)). The map draws the lists as cut by
+> `output.topN`; run with `topN: 0` to see the whole repository.
+> The other tabs are the tables: click any column header to sort
 > ascending/descending; type into the search box to filter rows by path,
 > class, method, or parameters; **click a file row for an X-Ray drill-down**
 > of that file's per-method contributions (Share%). Light/dark mode follows

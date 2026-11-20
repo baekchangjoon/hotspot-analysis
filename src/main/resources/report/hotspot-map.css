@@ -1,0 +1,95 @@
+/* Hotspot map tab. Deliberately light in both themes: a heat map on pale paper,
+   where cold files recede into the page and hot files burn red. Every rule is
+   scoped under .hm so it cannot disturb the report's tables. */
+.hm {
+  --hm-bg: #f3f5f9; --hm-surface: #ffffff; --hm-fg: #1c2433; --hm-muted: #627084;
+  --hm-line: #dce2ec; --hm-accent: #2b50c8; --hm-accent-soft: #e6ecff;
+  --hm-hot: #ee6a3b; --hm-burn: #b0132f; --hm-ok: #1f8a63;
+  --hm-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  position: relative; color: var(--hm-fg); background: var(--hm-bg); color-scheme: light;
+  border: 1px solid var(--hm-line); border-radius: 12px; overflow: hidden; margin-top: 16px;
+  font-size: 14px; line-height: 1.6;
+}
+.hm * { box-sizing: border-box; }
+.hm h2, .hm p, .hm li { word-break: keep-all; overflow-wrap: anywhere; }
+.hm-head { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; justify-content: space-between;
+  padding: 12px 16px; background: var(--hm-surface); border-bottom: 1px solid var(--hm-line); }
+.hm-stats { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: var(--hm-muted); }
+.hm-stats b { display: block; font-size: 16px; line-height: 1.2; color: var(--hm-fg); font-variant-numeric: tabular-nums; }
+.hm-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.hm-ctl label { font-size: 12px; color: var(--hm-muted); display: grid; gap: 2px; }
+.hm select, .hm-btn { font: inherit; font-size: 13px; color: var(--hm-fg); background: var(--hm-surface);
+  border: 1px solid var(--hm-line); border-radius: 8px; padding: 6px 10px; }
+.hm-btn { cursor: pointer; text-decoration: none; display: inline-flex; gap: 6px; align-items: center; }
+.hm-btn:hover, .hm select:hover { border-color: var(--hm-accent); }
+.hm-btn.hm-primary { background: var(--hm-accent); border-color: var(--hm-accent); color: #ffffff; font-weight: 700; }
+.hm :focus-visible { outline: 2px solid var(--hm-accent); outline-offset: 2px; }
+.hm-body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; }
+.hm-stage { position: relative; min-width: 0; }
+.hm-stage svg { display: block; width: 100%; height: clamp(480px, 74vh, 860px); }
+.hm-stage svg circle { cursor: pointer; }
+.hm-stage svg text { pointer-events: none; font-family: var(--hm-mono); font-weight: 600; text-anchor: middle; }
+.hm-crumbs { position: absolute; top: 12px; left: 16px; right: 16px; font: 12px var(--hm-mono); color: var(--hm-muted);
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.hm-crumbs .hm-btn { padding: 3px 9px; font: 12px var(--hm-mono); }
+.hm-legend { position: absolute; bottom: 14px; left: 16px; font-size: 12px; color: var(--hm-muted); display: grid; gap: 5px;
+  background: rgba(255, 255, 255, .86); border: 1px solid var(--hm-line); border-radius: 10px; padding: 10px 12px; max-width: 290px; }
+.hm-legend b { color: var(--hm-fg); }
+.hm-bar { width: 190px; height: 9px; border-radius: 5px; border: 1px solid var(--hm-line); }
+.hm-ends { display: flex; justify-content: space-between; width: 190px; font: 11px var(--hm-mono); }
+.hm-side { background: var(--hm-surface); border-left: 1px solid var(--hm-line); padding: 22px 20px; display: grid; gap: 18px;
+  align-content: start; overflow: auto; max-height: clamp(480px, 74vh, 860px); }
+.hm-eyebrow { font: 600 11px var(--hm-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--hm-accent); }
+.hm-side h2 { font-size: 22px; line-height: 1.25; margin: 4px 0 0; letter-spacing: -.01em; }
+.hm-side h2 em { font-style: normal; color: var(--hm-burn); }
+.hm-path { font: 12px var(--hm-mono); color: var(--hm-muted); overflow-wrap: anywhere; margin-top: 4px; }
+.hm-note { font-size: 13px; color: var(--hm-muted); margin: 0; }
+.hm-verdict { border-radius: 12px; padding: 12px 14px; display: grid; gap: 2px; border: 1px solid var(--hm-line); border-left: 4px solid var(--v); background: var(--hm-bg); }
+.hm-verdict b { color: var(--v); font-size: 15px; }
+.hm-verdict span { font-size: 13px; }
+.hm-formula { position: relative; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr auto 1.25fr; align-items: stretch; gap: 6px; font-family: var(--hm-mono); }
+.hm-formula.hm-three { grid-template-columns: repeat(3, 1fr); }
+.hm-f { background: var(--hm-bg); border-radius: 10px; padding: 8px 4px; text-align: center; display: grid; align-content: center; }
+.hm-f > b { display: block; font-size: 16px; font-variant-numeric: tabular-nums; }
+.hm-f > span { font: 11px/1.4 system-ui, sans-serif; color: var(--hm-muted); word-break: keep-all; }
+.hm-f[tabindex] { cursor: help; }
+.hm-f[tabindex] > span { text-decoration: underline dotted; text-underline-offset: 3px; }
+.hm-op { color: var(--hm-muted); align-self: center; }
+.hm-f.hm-total { background: var(--hm-burn); }
+.hm-f.hm-total > b, .hm-f.hm-total > span { color: #ffffff; }
+.hm-pop { display: none; position: absolute; left: 0; right: 0; top: calc(100% + 8px); z-index: 6; text-align: left;
+  background: var(--hm-surface); color: var(--hm-fg); border: 1px solid var(--hm-line); border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(28, 36, 51, .18); padding: 12px 14px; font: 13px/1.6 system-ui, sans-serif; }
+.hm-f:hover .hm-pop, .hm-f:focus .hm-pop { display: grid; gap: 6px; }
+.hm-pop strong { color: var(--hm-accent); }
+.hm-pop code { font: 12px/1.6 var(--hm-mono); background: var(--hm-bg); border-radius: 6px; padding: 2px 6px; overflow-wrap: anywhere; }
+.hm-pop > div > code:only-child { display: block; padding: 6px 8px; }
+.hm-meter { display: grid; gap: 4px; }
+.hm-meter-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.hm-meter-row span:last-child { font: 12px var(--hm-mono); color: var(--hm-muted); }
+.hm-track { height: 7px; background: var(--hm-bg); border-radius: 4px; overflow: hidden; }
+.hm-fill { height: 100%; border-radius: 4px; background: var(--hm-hot); }
+.hm-tabs { display: inline-flex; border: 1px solid var(--hm-line); border-radius: 9px; overflow: hidden; justify-self: start; }
+.hm-tabs button { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 14px; border: 0; background: var(--hm-surface); color: var(--hm-muted); cursor: pointer; }
+.hm-tabs button[aria-selected="true"] { background: var(--hm-accent-soft); color: var(--hm-accent); }
+.hm-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.hm-list button { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: center; width: 100%;
+  font: inherit; font-size: 13px; color: var(--hm-fg); text-align: left; padding: 8px 10px; border-radius: 9px;
+  background: var(--hm-bg); border: 1px solid transparent; cursor: pointer; }
+.hm-list button:hover { border-color: var(--hm-accent); background: var(--hm-accent-soft); }
+.hm-n { font: 600 12px var(--hm-mono); color: var(--hm-muted); }
+.hm-nm { font: 12px var(--hm-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-nm small { color: var(--hm-muted); font-size: 11px; }
+.hm-s { font: 600 12px var(--hm-mono); color: var(--hm-burn); font-variant-numeric: tabular-nums; }
+.hm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.hm-tip { position: fixed; pointer-events: none; background: var(--hm-surface); border: 1px solid var(--hm-line);
+  box-shadow: 0 8px 28px rgba(28, 36, 51, .16); padding: 8px 11px; border-radius: 9px; font: 12px var(--hm-mono);
+  max-width: 330px; z-index: 20; color: var(--hm-fg); }
+.hm-error { padding: 24px; color: var(--hm-burn); }
+@media (max-width: 900px) {
+  .hm-body { grid-template-columns: minmax(0, 1fr); }
+  .hm-stage svg { height: 62vh; }
+  .hm-legend { position: static; margin: 0 16px 14px; max-width: none; }
+  .hm-bar, .hm-ends { width: 100%; }
+  .hm-side { border-left: 0; border-top: 1px solid var(--hm-line); max-height: none; }
+}

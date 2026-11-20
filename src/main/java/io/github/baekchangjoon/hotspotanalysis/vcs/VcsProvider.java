@@ -35,4 +35,13 @@ public interface VcsProvider {
      * @throws VcsException if the repository cannot be accessed
      */
     List<CommitRecord> loadCommits(WindowConfig window);
+
+    /**
+     * Remote URL and commit id of the analysed revision, used only to build
+     * "open source" links in reports. Providers that cannot tell return empty;
+     * this must never throw.
+     */
+    default java.util.Optional<io.github.baekchangjoon.hotspotanalysis.vcs.model.SourceLocation> sourceLocation() {
+        return java.util.Optional.empty();
+    }
 }

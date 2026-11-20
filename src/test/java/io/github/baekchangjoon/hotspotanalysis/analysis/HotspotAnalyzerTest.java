@@ -197,6 +197,45 @@ class HotspotAnalyzerTest {
     }
 
     @Test
+    @DisplayName("report context keeps the score total of ALL files and the source link base, even when topN cuts the list")
+    void shouldCarryReportContextAcrossTopN() throws Exception {
+        String head;
+        try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {
+            writeJava("src/main/java/com/example/A.java",
+                    "package com.example;\npublic class A {\n  int m(int x){ if (x>0) { if (x>1) return 2; } return 0; }\n}\n",
+                    git, Instant.now().minusSeconds(3600), "c1");
+            writeJava("src/main/java/com/example/B.java",
+                    "package com.example;\npublic class B {\n  int n(int x){ if (x>0) return x; return 0; }\n}\n",
+                    git, Instant.now().minusSeconds(1800), "c2");
+            git.getRepository().getConfig().setString("remote", "origin", "url", "https://token@github.com/acme/app.git");
+            git.getRepository().getConfig().save();
+            head = git.getRepository().resolve("HEAD").name();
+        }
+        TargetConfig target = new TargetConfig(TargetConfig.TargetType.LOCAL_GIT, repoRoot.toString(), null);
+        WindowConfig window = new WindowConfig(null, null, 30);
+        ScopeConfig scope = new ScopeConfig(
+                List.of(ScopeConfig.Granularity.FILE, ScopeConfig.Granularity.METHOD), List.of("**/*.java"), List.of());
+        AnalysisSection section = new AnalysisSection(target, window, scope, new ScoringConfig(45), null, null);
+
+        AnalysisResult all = analyzer.analyze(new AnalysisConfig(section,
+                new OutputConfig(List.of(OutputConfig.OutputFormat.HTML), "./out", 0)));
+        AnalysisResult top1 = analyzer.analyze(new AnalysisConfig(section,
+                new OutputConfig(List.of(OutputConfig.OutputFormat.HTML), "./out", 1)));
+
+        assertThat(all.fileHotspots()).hasSize(2).allSatisfy(f -> assertThat(f.compositeScore()).isPositive());
+        assertThat(top1.fileHotspots()).hasSize(1);
+        double fullTotal = all.fileHotspots().stream().mapToDouble(FileHotspot::compositeScore).sum();
+        assertThat(top1.reportContext().totalFileCompositeScore())
+                .isCloseTo(fullTotal, org.assertj.core.data.Offset.offset(1e-3))
+                .isGreaterThan(top1.fileHotspots().get(0).compositeScore());
+        assertThat(top1.reportContext().decayHalfLifeDays()).isEqualTo(45);
+        assertThat(top1.reportContext().revision()).isEqualTo(head);
+        assertThat(top1.reportContext().sourceBlobBase())
+                .isEqualTo("https://github.com/acme/app/blob/" + head + "/")
+                .doesNotContain("token");
+    }
+
+    @Test
     @DisplayName("missing jacocoReportPath → coverage disabled (multiplier 1.0), not a 10x penalty")
     void shouldNotPenalizeWhenJacocoReportMissing() throws Exception {
         try (Git git = Git.init().setDirectory(repoRoot.toFile()).call()) {

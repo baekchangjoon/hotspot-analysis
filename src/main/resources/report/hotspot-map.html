@@ -1,0 +1,38 @@
+    <div class="hm" id="hm">
+      <div class="hm-head">
+        <div class="hm-stats" id="hm-stats"></div>
+        <div class="hm-ctl">
+          <label for="hm-size"><span data-hm-i18n="sizeBy"></span>
+            <select id="hm-size">
+              <option value="cc" data-hm-i18n="optCc"></option>
+              <option value="score" data-hm-i18n="optScore"></option>
+              <option value="loc" data-hm-i18n="optLoc"></option>
+            </select></label>
+          <label for="hm-color"><span data-hm-i18n="colorBy"></span>
+            <select id="hm-color">
+              <option value="score" data-hm-i18n="optRisk"></option>
+              <option value="decay" data-hm-i18n="optDecay"></option>
+              <option value="gap" data-hm-i18n="optGap"></option>
+            </select></label>
+          <button class="hm-btn" id="hm-float" type="button" aria-pressed="true"></button>
+          <button class="hm-btn" id="hm-lang" type="button"></button>
+        </div>
+      </div>
+      <div class="hm-body">
+        <div class="hm-stage" id="hm-stage">
+          <svg id="hm-map" role="img" aria-label="Hotspot map"></svg>
+          <div class="hm-crumbs" id="hm-crumbs"></div>
+          <div class="hm-legend">
+            <span><span data-hm-i18n="legendColor"></span> = <b id="hm-legend-label"></b></span>
+            <div class="hm-bar" id="hm-legend-bar"></div>
+            <div class="hm-ends"><span id="hm-lo"></span><span id="hm-hi"></span></div>
+            <span><span data-hm-i18n="legendSize"></span> = <b id="hm-size-label"></b></span>
+            <span data-hm-i18n="legendHint"></span>
+            <span id="hm-trunc"></span>
+          </div>
+        </div>
+        <div class="hm-side" id="hm-side" aria-live="polite"></div>
+      </div>
+      <div class="hm-tip" id="hm-tip" hidden></div>
+      <noscript><p>The hotspot map needs JavaScript. The tables in the other tabs carry the same data.</p></noscript>
+    </div>

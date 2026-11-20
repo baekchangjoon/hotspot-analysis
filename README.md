@@ -57,7 +57,7 @@ cp -r hotspot-analysis/skills/hotspot-analysis ~/.claude/skills/
 - **두 가지 VCS 소스** — 로컬 git 작업 트리(JGit) 또는 원격 GitHub(kohsuke `github-api`, WireMock으로 hermetic 테스트).
 - **Java 21 파싱** — JavaParser 3.26이 record, sealed 타입, switch 식, 패턴 매칭을 이해.
 - **YAML 설정** — 강타입, Jakarta Bean Validation 검증, 환경변수 치환.
-- **네 가지 출력 형식** — CSV(엑셀 친화), YAML(기계 판독), Markdown(PR 친화), **HTML(브라우저에서 바로, 정렬·필터 가능, XSS 안전, 다크모드 대응)**.
+- **네 가지 출력 형식** — CSV(엑셀 친화), YAML(기계 판독), Markdown(PR 친화), **HTML(브라우저에서 바로, 인터랙티브 핫스팟 지도 + 정렬·필터 가능한 표, XSS 안전)**.
 - **CI 자체 분석** — 매 CI 실행마다 이 저장소 자체를 전체 히스토리 + JaCoCo로 분석한 `hotspot-self-report-<N>`, 그리고 합성 Spring 샘플로 API 분석을 시연하는 `hotspot-demo-report-<N>` 아티팩트를 생성(다운로드해 브라우저로 열기).
 - **모든 계층의 포괄적 테스트** — 계약 테스트 + 단위 + Spring Boot E2E, 실패 0.
 
@@ -259,7 +259,15 @@ hotspot-report/
 > 열기(`.html`)가 더 쉽습니다.
 
 > **HTML 리포트 기능.** `hotspots.html`은 단일 자체 완결형 파일입니다
-> (원격 CSS/JS 없음, CDN 없음). 아무 열 헤더나 클릭해 오름/내림차순 정렬;
+> (원격 CSS/JS 없음, CDN 없음). 첫 탭 **Hotspot Map**은 패키지 › 파일 › 클래스 ›
+> 메서드를 중첩된 원으로 그립니다 — 원 크기는 복잡도, 색은 위험 점수이고, 원을
+> 누르면 한 단계씩 들어가며 점수가 어떻게 계산됐는지(복잡도 × 변경 압력 × 커버리지
+> 배수)를 보여 줍니다. origin이 GitHub/GitLab이면 파일·메서드가 분석한 커밋의
+> 해당 줄로 연결됩니다. 지도에 쓰인 데이터는 `<script type="application/json"
+> id="hotspot-map-data">` 블록에 그대로 들어 있어 다른 도구가 읽을 수 있습니다
+> ([스키마](docs/html-report-data.md)). 지도는 `output.topN`으로 잘린 목록을
+> 그리므로, 저장소 전체를 보려면 `topN: 0`으로 실행하세요.
+> 나머지 탭은 기존 표입니다: 아무 열 헤더나 클릭해 오름/내림차순 정렬;
 > 검색 박스에 입력해 경로·클래스·메서드·매개변수로 행 필터링; **파일 행을
 > 클릭하면 X-Ray 드릴다운**으로 그 파일의 메서드별 기여(Share%)가 펼쳐집니다.
 > 라이트/다크 모드는 브라우저 설정을 따릅니다. 사용자 제어 값은 모두 HTML

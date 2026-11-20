@@ -71,13 +71,19 @@ public class HtmlOutputWriter implements OutputWriter {
         StringBuilder html = new StringBuilder(32_768);
         html.append("<!DOCTYPE html>\n<html lang=\"en\">\n");
         appendHead(html);
+        // The map's stylesheet belongs in the head; without JavaScript the map
+        // cannot draw, so fall back to showing every table at once.
+        html.insert(html.lastIndexOf("</head>"),
+                "  <style>\n" + HotspotMapSection.stylesheet() + "  </style>\n"
+                        + "  <noscript><style>.tab-content { display: block; } .hm { display: none; }</style></noscript>\n");
         html.append("<body>\n");
         appendHeader(html, result.meta());
         appendMetadata(html, result.meta());
 
         // Tab Navigation
         html.append("  <div class=\"tab-container\">\n");
-        html.append("    <button class=\"tab-button active\" onclick=\"switchTab(event, 'files-tab')\">File Hotspots</button>\n");
+        html.append("    <button class=\"tab-button active\" onclick=\"switchTab(event, 'map-tab')\">Hotspot Map</button>\n");
+        html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'files-tab')\">File Hotspots</button>\n");
         html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'methods-tab')\">Method Hotspots</button>\n");
         if (includeApi) {
             html.append("    <button class=\"tab-button\" onclick=\"switchTab(event, 'apis-tab')\">REST API Hotspots</button>\n");
@@ -86,7 +92,12 @@ public class HtmlOutputWriter implements OutputWriter {
         html.append("  </div>\n\n");
 
         // Tab Content
-        html.append("  <div id=\"files-tab\" class=\"tab-content active\">\n");
+        html.append("  <div id=\"map-tab\" class=\"tab-content active\">\n");
+        html.append(HotspotMapSection.markup());
+        html.append(HotspotMapSection.dataElement(result, excludeCoverage));
+        html.append("  </div>\n");
+
+        html.append("  <div id=\"files-tab\" class=\"tab-content\">\n");
         appendFileSection(html, result.fileHotspots(), result.methodHotspots(), excludeCoverage);
         html.append("  </div>\n");
 
@@ -105,6 +116,7 @@ public class HtmlOutputWriter implements OutputWriter {
         }
 
         appendScript(html);
+        html.append(HotspotMapSection.scripts());
         html.append("</body>\n</html>\n");
         return html.toString();
     }

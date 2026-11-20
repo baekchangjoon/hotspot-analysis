@@ -123,10 +123,18 @@ M = 1 / (coverage + 0.1)                                          # coverage mul
   zones not protected by tests).
 - **JaCoCo not provided**: M = 1.0 (no coverage penalty), and `lineCoverage` is
   `null`.
-- **JaCoCo provided but no data for that file/method**: coverage is treated as
-  0.0 → M = `1/0.1 = 10` (maximum penalty). This means that if the measured
-  target has no test report, it is treated as "unprotected," so make sure the
-  JaCoCo path points to a report from the same build as the analysis target.
+- **JaCoCo provided but no instrumented lines for that file/method** (a file
+  absent from the report, or a method with no executable lines such as an
+  interface or abstract declaration): coverage is **unknown** — M = 1.0 and
+  `lineCoverage` is `null`. It is not treated as 0% (that would inflate M to
+  `1/0.1 = 10` and distort the ranking). A warning is printed when analysed
+  files are missing from the report, so make sure the JaCoCo path points to a
+  report from the same build as the analysis target.
+- **Instrumented lines exist but none was executed**: coverage = 0.0 → M = 10
+  (maximum penalty). This is a different case from "unknown" above. Because
+  `coverage = 0.9` also yields M = 1.0, tell the two apart by `lineCoverage`,
+  not by the multiplier (the HTML report's data block carries it as `null` vs.
+  a number).
 
 ### The `excludeCoverage` switch
 
