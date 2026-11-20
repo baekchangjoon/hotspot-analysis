@@ -33,8 +33,7 @@ class SourceLinksTest {
         String base = SourceLinks.blobBase("https://x-access-token:ghp_SECRET@github.com/acme/app.git", SHA)
                 .orElseThrow();
 
-        assertThat(base).isEqualTo(EXPECTED);
-        assertThat(base).doesNotContain("SECRET").doesNotContain("@");
+        assertThat(base).isEqualTo(EXPECTED).doesNotContain("SECRET").doesNotContain("@");
     }
 
     @Test

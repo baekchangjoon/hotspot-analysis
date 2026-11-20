@@ -40,6 +40,10 @@ final class HotspotMapSection {
     /** Half-life assumed when a result carries no {@link ReportContext}; the scoring default. */
     private static final int DEFAULT_HALF_LIFE_DAYS = 90;
 
+    /** U+2028 / U+2029: legal in JSON, but line terminators to older JavaScript parsers. */
+    private static final String LINE_SEPARATOR = Character.toString(0x2028);
+    private static final String PARAGRAPH_SEPARATOR = Character.toString(0x2029);
+
     private static final ObjectMapper JSON = new ObjectMapper();
 
     private HotspotMapSection() {
@@ -192,8 +196,8 @@ final class HotspotMapSection {
                     .replace("<", "\\u003c")
                     .replace(">", "\\u003e")
                     .replace("&", "\\u0026")
-                    .replace(" ", "\\u2028")
-                    .replace(" ", "\\u2029");
+                    .replace(LINE_SEPARATOR, "\\u2028")
+                    .replace(PARAGRAPH_SEPARATOR, "\\u2029");
         } catch (JsonProcessingException e) {
             throw new OutputException("Failed to serialise the hotspot map data", e);
         }
